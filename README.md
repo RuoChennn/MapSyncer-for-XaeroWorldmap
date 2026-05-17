@@ -182,7 +182,7 @@
   │  直接写入服务端数据                      │
   │  (仅覆盖过时文件)                        │
   │                                        │
-  │  累积更新的region列表               │
+  │  累积更新的region列表                     │
   │                                        │
   │  清除视距范围内缓存                     │
   │  detectRegions 扫描新文件               │
@@ -645,5 +645,3 @@ MIT License
 
 - [Xaero's World Map](https://www.curseforge.com/minecraft/mc-mods/xaeros-world-map) - 原版地图模组
 - [Xaero's Minimap](https://www.curseforge.com/minecraft/mc-mods/xaeros-minimap) - 小地图模组
-#   M a p S y n c e r - f o r - X a e r o W o r l d m a p  
- 
