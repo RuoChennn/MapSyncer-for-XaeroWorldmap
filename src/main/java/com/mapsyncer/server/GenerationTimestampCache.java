@@ -56,8 +56,9 @@ public class GenerationTimestampCache {
 
             for (String key : props.stringPropertyNames()) {
                 try {
-                    long ts = Long.parseLong(props.getProperty(key));
-                    timestamps.put(key, ts);
+                    // 时间戳以秒为单位存储，读取后转换为毫秒
+                    long timestampSeconds = Long.parseLong(props.getProperty(key));
+                    timestamps.put(key, timestampSeconds * 1000);
                 } catch (NumberFormatException e) {
                     LOGGER.warn("Invalid timestamp for {}: {}", key, props.getProperty(key));
                 }
@@ -79,14 +80,13 @@ public class GenerationTimestampCache {
 
             Properties props = new Properties();
             for (Map.Entry<String, Long> entry : timestamps.entrySet()) {
-                props.setProperty(entry.getKey(), String.valueOf(entry.getValue()));
+                // 存储时转换为秒，更易读
+                long timestampSeconds = entry.getValue() / 1000;
+                props.setProperty(entry.getKey(), String.valueOf(timestampSeconds));
             }
 
             try (OutputStream os = Files.newOutputStream(cacheFile)) {
-                // 使用人类可读的注释格式
-                props.store(os, "Generation timestamps for map regions (milliseconds since epoch)\n" +
-                    "Format: dimension/region_x_z = timestamp\n" +
-                    "Example: overworld/-1_-1 = 1745123456789");
+                props.store(os, "Generation timestamps for map regions (seconds since epoch)\nFormat: dimension/region_x_z = timestamp");
             }
 
             LOGGER.info("Saved {} generation timestamps to cache", timestamps.size());

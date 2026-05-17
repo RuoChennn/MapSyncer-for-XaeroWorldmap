@@ -62,14 +62,16 @@ public class McaTimestampCache {
 
             for (String key : props.stringPropertyNames()) {
                 try {
-                    long timestamp = Long.parseLong(props.getProperty(key));
+                    // 时间戳以秒为单位存储，读取后转换为毫秒
+                    long timestampSeconds = Long.parseLong(props.getProperty(key));
+                    long timestampMillis = timestampSeconds * 1000;
                     // 解析键：格式为 "dimension/region_x_z"
                     String[] parts = key.split("/");
                     if (parts.length == 2) {
                         String dimension = parts[0];
                         String regionKey = parts[1];
                         timestampCache.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>())
-                                     .put(regionKey, timestamp);
+                                     .put(regionKey, timestampMillis);
                     }
                 } catch (NumberFormatException e) {
                     LOGGER.warn("Invalid timestamp for {}: {}", key, props.getProperty(key));
@@ -96,16 +98,18 @@ public class McaTimestampCache {
             for (Map.Entry<String, Map<String, Long>> dimEntry : timestampCache.entrySet()) {
                 String dimension = dimEntry.getKey();
                 for (Map.Entry<String, Long> regionEntry : dimEntry.getValue().entrySet()) {
-                    // 格式：dimension/region_x_z = timestamp
+                    // 格式：dimension/region_x_z = timestamp (秒)
                     String key = dimension + "/" + regionEntry.getKey();
-                    props.setProperty(key, String.valueOf(regionEntry.getValue()));
+                    // 存储时转换为秒，更易读
+                    long timestampSeconds = regionEntry.getValue() / 1000;
+                    props.setProperty(key, String.valueOf(timestampSeconds));
                 }
             }
 
             // 先写入临时文件，再原子替换
             Path tempFile = cacheFilePath.resolveSibling(CACHE_FILE_NAME + ".temp");
             try (OutputStream os = Files.newOutputStream(tempFile)) {
-                props.store(os, "MCA file modification timestamps for incremental update detection");
+                props.store(os, "MCA file modification timestamps (seconds since epoch)\nFormat: dimension/region_x_z = timestamp");
             }
             Files.move(tempFile, cacheFilePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
