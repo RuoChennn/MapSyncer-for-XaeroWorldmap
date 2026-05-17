@@ -49,18 +49,31 @@ public class ServerSyncHandler {
 
     /**
      * Tracks a player's sync progress for resume capability.
+     * NOTE: We only store metadata (total count, start index) to minimize memory usage.
+     * The actual chunk data is computed on-demand rather than cached.
+     * This prevents memory leaks when sync is interrupted.
      */
     public static class SyncProgress {
-        public final List<ChunkMapData> allChunks;
-        public final int totalChunks;
+        public final int totalChunks;      // Total chunks to sync
+        public final int startIndex;       // Where to resume from
         public final int worldId;
         public final long startTime;
+        public final long lastActivityTime; // Last successful packet sent time
 
-        public SyncProgress(List<ChunkMapData> allChunks, int totalChunks, int worldId) {
-            this.allChunks = allChunks;
+        public SyncProgress(int totalChunks, int startIndex, int worldId) {
             this.totalChunks = totalChunks;
+            this.startIndex = startIndex;
             this.worldId = worldId;
             this.startTime = System.currentTimeMillis();
+            this.lastActivityTime = System.currentTimeMillis();
+        }
+
+        /**
+         * Check if this sync progress is stale (no activity for too long).
+         * Stale progress will be cleared to prevent memory leaks.
+         */
+        public boolean isStale(long timeoutMs) {
+            return System.currentTimeMillis() - lastActivityTime > timeoutMs;
         }
     }
 
@@ -307,8 +320,8 @@ public class ServerSyncHandler {
             }
         }
 
-        // Store progress for potential resume
-        playerSyncProgress.put(playerId, new SyncProgress(diffs, total, worldId));
+        // Store progress for potential resume (only metadata, not chunk data)
+        playerSyncProgress.put(playerId, new SyncProgress(total, startIndex, worldId));
 
         // Send progress updates and data in batches with speed limiting
         int processed = startIndex;
@@ -402,11 +415,33 @@ public class ServerSyncHandler {
 
     /**
      * Clear all tracking data. Called when server stops to prevent memory leaks.
+     * Also clears stale progress entries that may have accumulated.
      */
     public static void cleanup() {
         syncingPlayers.clear();
         playerSyncDimensions.clear();
         playerSyncProgress.clear();
         LOGGER.info("ServerSyncHandler tracking data cleared");
+    }
+
+    /**
+     * Clear stale sync progress entries (those with no activity for >5 minutes).
+     * This prevents memory leaks from abandoned sync sessions.
+     */
+    public static void clearStaleProgress() {
+        final long STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+        int cleared = 0;
+        for (Map.Entry<UUID, SyncProgress> entry : playerSyncProgress.entrySet()) {
+            if (entry.getValue().isStale(STALE_TIMEOUT_MS)) {
+                playerSyncProgress.remove(entry.getKey());
+                syncingPlayers.remove(entry.getKey());
+                playerSyncDimensions.remove(entry.getKey());
+                cleared++;
+                LOGGER.info("Cleared stale sync progress for player {}", entry.getKey());
+            }
+        }
+        if (cleared > 0) {
+            LOGGER.info("Cleared {} stale sync progress entries", cleared);
+        }
     }
 }

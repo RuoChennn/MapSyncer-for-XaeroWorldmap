@@ -27,8 +27,56 @@ public class MapPacketReceiver {
     // Store the last written mw directory for cache clearing
     private static volatile Path lastMwDir = null;
 
+    // Track sync start time to detect stale syncs (prevent memory leak)
+    private static volatile long syncStartTime = 0;
+    private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
     // Accumulate all chunks received during sync for selective reset
+    // IMPORTANT: This is cleared on sync start, completion, and stale detection
+    // to prevent memory leaks. Each chunk is ~10-50KB, so we must ensure cleanup.
     private static volatile List<ChunkMapData> allReceivedChunks = new ArrayList<>();
+
+    /**
+     * Check if current sync is stale (running too long).
+     * Stale syncs may indicate interrupted connection, so we clear data.
+     */
+    public static boolean isSyncStale() {
+        if (!syncInProgress || syncStartTime == 0) {
+            return false;
+        }
+        return System.currentTimeMillis() - syncStartTime > STALE_SYNC_TIMEOUT_MS;
+    }
+
+    /**
+     * Clear all accumulated sync data to prevent memory leaks.
+     * Called when sync is interrupted or becomes stale.
+     */
+    public static void clearSyncData() {
+        syncInProgress = false;
+        lastMwDir = null;
+        syncStartTime = 0;
+        if (allReceivedChunks != null) {
+            allReceivedChunks.clear();
+        }
+        LOGGER.info("Cleared sync data to prevent memory leak");
+    }
+
+    /**
+     * Get estimated memory usage of accumulated chunks.
+     * Used for monitoring potential memory issues.
+     */
+    public static long getEstimatedMemoryUsage() {
+        if (allReceivedChunks == null || allReceivedChunks.isEmpty()) {
+            return 0;
+        }
+        long total = 0;
+        for (ChunkMapData chunk : allReceivedChunks) {
+            if (chunk.data != null) {
+                total += chunk.data.length;
+            }
+        }
+        return total;
+    }
 
     public static void register(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar("1").optional();
@@ -38,8 +86,14 @@ public class MapPacketReceiver {
                 PacketHandler.SyncRequestPayload.TYPE,
                 PacketHandler.SyncRequestPayload.STREAM_CODEC,
                 (payload, ctx) -> {
+                    // Clear any stale sync data before starting new sync
+                    if (isSyncStale()) {
+                        clearSyncData();
+                        LOGGER.warn("Cleared stale sync data before starting new sync");
+                    }
                     // Disable chunk updates when sync request is sent
                     syncInProgress = true;
+                    syncStartTime = System.currentTimeMillis(); // Track start time
                     // Clear accumulated chunks for new sync session
                     allReceivedChunks.clear();
                     XaeroMapIntegrator.disableChunkUpdates();
@@ -63,6 +117,17 @@ public class MapPacketReceiver {
 
     private static void handleSyncResponse(PacketHandler.SyncResponsePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            // Check for stale sync (running too long) and clear if needed
+            if (isSyncStale()) {
+                clearSyncData();
+                LOGGER.warn("Sync was stale, cleared accumulated data");
+                if (Minecraft.getInstance().player != null) {
+                    Minecraft.getInstance().player.displayClientMessage(
+                        Component.literal("§e[MapSyncer] §cSync timed out, please try again"), false);
+                }
+                return;
+            }
+
             List<ChunkMapData> chunks = payload.chunks();
             int serverWorldId = payload.worldId();
 
@@ -72,6 +137,12 @@ public class MapPacketReceiver {
 
             // Accumulate chunks for selective reset tracking
             allReceivedChunks.addAll(chunks);
+
+            // Log memory usage warning if accumulating too much data
+            long memoryUsage = getEstimatedMemoryUsage();
+            if (memoryUsage > 50_000_000) { // 50MB threshold
+                LOGGER.warn("High memory usage during sync: {}MB accumulated", memoryUsage / 1_000_000);
+            }
 
             // Write map data directly from server (no completeness check)
             lastMwDir = XaeroMapIntegrator.writeMapDataAndReturnDir(chunks, serverWorldId);
@@ -87,6 +158,7 @@ public class MapPacketReceiver {
 
                 // Clear accumulated chunks after sync complete
                 allReceivedChunks.clear();
+                syncStartTime = 0; // Reset start time
             }
         });
     }
