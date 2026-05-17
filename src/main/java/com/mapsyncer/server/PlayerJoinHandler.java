@@ -44,7 +44,7 @@ public class PlayerJoinHandler {
         LOGGER.info("Server stopped, cleaning up singleton cache instances");
 
         // Reset singleton instances to release memory
-        GenerationTimestampCache.resetInstance();
+        GenerationCache.resetInstance();
         McaTimestampCache.resetInstance();
         IncrementalUpdateHandler.resetInstance();
 

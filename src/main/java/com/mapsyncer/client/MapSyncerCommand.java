@@ -3,6 +3,7 @@ package com.mapsyncer.client;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mapsyncer.client.ClientHashManager.ClientMeta;
 import com.mapsyncer.network.PacketHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
@@ -111,34 +112,34 @@ public class MapSyncerCommand {
         // 根据维度获取目标目录
         Path targetDir = getDimensionDir(baseDir, dimension);
 
-        // 计算本地文件的修改时间戳
-        Map<String, Long> timestamps;
+        // 计算本地文件的元数据（时间戳+哈希）
+        Map<String, ClientMeta> metaMap;
         if (dimension.equals("all")) {
             // 同步所有维度
-            timestamps = ClientHashManager.computeTimestampsForSync(baseDir);
+            metaMap = ClientHashManager.computeMetaForSync(baseDir);
         } else {
             Path mwDir = targetDir != null ? findMwDir(targetDir) : null;
             if (mwDir != null) {
-                timestamps = ClientHashManager.computeTimestampsForSync(mwDir);
+                metaMap = ClientHashManager.computeMetaForSync(mwDir);
             } else {
-                timestamps = ClientHashManager.computeTimestampsForSync(baseDir);
+                metaMap = ClientHashManager.computeMetaForSync(baseDir);
             }
         }
 
-        LOGGER.info("Sending sync request with {} region timestamps", timestamps.size());
+        LOGGER.info("Sending sync request with {} region metadata", metaMap.size());
 
-        if (timestamps.isEmpty()) {
+        if (metaMap.isEmpty()) {
             mc.player.displayClientMessage(
                     Component.literal("No existing regions found, requesting all from server..."),
                     false);
         } else {
             mc.player.displayClientMessage(
-                    Component.literal(String.format("Checking %d regions for updates...", timestamps.size())),
+                    Component.literal(String.format("Checking %d regions for updates (hash + timestamp)...", metaMap.size())),
                     false);
         }
 
-        // 发送同步请求（时间戳而非哈希）
-        PacketDistributor.sendToServer(new PacketHandler.SyncRequestPayload(timestamps));
+        // 发送同步请求（包含时间戳和哈希）
+        PacketDistributor.sendToServer(new PacketHandler.SyncRequestPayload(metaMap));
 
         // 开始进度追踪
         SyncProgressTracker.startTracking();

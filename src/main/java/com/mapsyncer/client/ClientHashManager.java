@@ -13,36 +13,44 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
+import java.util.zip.CRC32;
 
 public class ClientHashManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientHashManager.class);
 
     /**
-     * Collect modification timestamps for all regions.
-     * Used to compare with server generation timestamps.
-     * If client timestamp >= server timestamp, skip sync (client has newer data).
+     * Region客户端元数据：时间戳(秒) + CRC32哈希
+     */
+    public record ClientMeta(long timestampSeconds, String hash) {}
+
+    /**
+     * Collect modification timestamps and hashes for all regions.
+     * Used to compare with server generation cache.
+     * Sync logic:
+     * - Hash match → skip sync (file content identical)
+     * - Hash mismatch + client timestamp older → sync
      *
      * @param mapDir the mw$worldId directory
-     * @return map of relative path -> modification timestamp (milliseconds, comparison uses seconds)
+     * @return map of relative path -> ClientMeta (timestamp in seconds + hash)
      */
-    public static Map<String, Long> computeTimestampsForSync(Path mapDir) {
-        Map<String, Long> timestamps = new HashMap<>();
+    public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
+        Map<String, ClientMeta> metaMap = new HashMap<>();
 
         if (mapDir == null || !Files.exists(mapDir)) {
             LOGGER.info("Map directory does not exist or is null, will request all regions from server");
-            return timestamps;
+            return metaMap;
         }
 
         // Get the dimension directory (null, DIM-1, etc.)
         Path dimDir = mapDir.getParent(); // mw$worldId -> null/DIM-1/etc
         if (dimDir == null) {
-            return timestamps;
+            return metaMap;
         }
 
         Path serverDir = dimDir.getParent(); // null -> Multiplayer_<server>
         if (serverDir == null) {
-            return timestamps;
+            return metaMap;
         }
 
         try (Stream<Path> walk = Files.walk(dimDir)) {
@@ -57,27 +65,33 @@ public class ClientHashManager {
                             String[] parts = coords.split("_");
                             if (parts.length != 2) return;
 
-                            // Get file modification time
-                            long timestamp = getFileModificationTime(zipPath);
+                            // Get file modification time (seconds)
+                            long timestampMillis = getFileModificationTime(zipPath);
+                            long timestampSeconds = timestampMillis / 1000;
+
+                            // Compute CRC32 hash
+                            String hash = computeFileHash(zipPath);
+
                             String relativePath = serverDir.relativize(zipPath).toString();
                             relativePath = relativePath.replace("\\", "/");
                             // Remove .zip extension for comparison with server format
                             relativePath = relativePath.substring(0, relativePath.length() - 4);
-                            timestamps.put(relativePath, timestamp);
 
-                            LOGGER.debug("Region {}: client timestamp {}", relativePath, timestamp);
+                            metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
+
+                            LOGGER.debug("Region {}: ts={}s, hash={}", relativePath, timestampSeconds, hash);
 
                         } catch (NumberFormatException e) {
                             LOGGER.warn("Invalid region filename: {}", zipPath);
                         }
                     });
         } catch (IOException e) {
-            LOGGER.error("Failed to compute map timestamps", e);
+            LOGGER.error("Failed to compute map metadata", e);
         }
 
-        LOGGER.info("Found {} regions with timestamps", timestamps.size());
+        LOGGER.info("Found {} regions with metadata", metaMap.size());
 
-        return timestamps;
+        return metaMap;
     }
 
     /**
@@ -91,6 +105,27 @@ public class ClientHashManager {
         } catch (IOException e) {
             LOGGER.error("Failed to get modification time for {}", path, e);
             return 0;
+        }
+    }
+
+    /**
+     * Compute CRC32 hash of file content.
+     * @param filePath file path
+     * @return CRC32 hash (8 hex digits)
+     */
+    private static String computeFileHash(Path filePath) {
+        if (!Files.exists(filePath)) {
+            return "00000000";
+        }
+
+        try {
+            CRC32 crc32 = new CRC32();
+            byte[] data = Files.readAllBytes(filePath);
+            crc32.update(data);
+            return String.format("%08x", crc32.getValue());
+        } catch (IOException e) {
+            LOGGER.warn("Failed to compute hash for {}", filePath, e);
+            return "00000000";
         }
     }
 

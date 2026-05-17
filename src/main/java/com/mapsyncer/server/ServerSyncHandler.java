@@ -1,8 +1,10 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.client.ClientHashManager.ClientMeta;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.ChunkMapData;
 import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.server.GenerationCache.RegionMeta;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
@@ -182,16 +184,16 @@ public class ServerSyncHandler {
         syncingPlayers.add(playerId);
         playerSyncDimensions.put(playerId, startDimension);
 
-        // Client timestamps (modification time of local files)
-        Map<String, Long> clientTimestamps = payload.clientTimestamps();
+        // Client metadata (timestamp + hash)
+        Map<String, ClientMeta> clientMeta = payload.clientMeta();
 
         // Read worldId from xaeromap.txt (Xaero's official method)
         int worldId = readWorldIdFromXaeroMap(serverPlayer);
         LOGGER.info("Server worldId from xaeromap.txt: {}", worldId);
 
-        // Get server generation timestamps
-        GenerationTimestampCache genCache = GenerationTimestampCache.getInstance(ConversionOrchestrator.CACHE_DIR);
-        Map<String, Long> serverTimestamps = genCache.getAllTimestamps();
+        // Get server generation cache (timestamp + hash)
+        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR);
+        Map<String, RegionMeta> serverCache = genCache.getAll();
 
         List<ChunkMapData> diffs = new ArrayList<>();
         Path cacheDir = ConversionOrchestrator.CACHE_DIR;
@@ -206,7 +208,13 @@ public class ServerSyncHandler {
             return;
         }
 
-        // Compare timestamps: sync if client is older than server
+        // Sync logic:
+        // 1. Hash match → skip (file content identical)
+        // 2. Hash mismatch + client timestamp older → sync
+        // 3. Hash mismatch + client timestamp newer → skip (client has newer data)
+        int hashMatchCount = 0;
+        int timestampSkipCount = 0;
+
         try {
             Files.walk(cacheDir)
                     .filter(p -> p.toString().endsWith(".zip"))
@@ -216,49 +224,63 @@ public class ServerSyncHandler {
                         // Remove .zip extension and normalize path separator
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
 
-                        long clientTs = clientTimestamps.getOrDefault(normalizedPath, 0L);
-                        long serverTs = serverTimestamps.getOrDefault(normalizedPath, 0L);
+                        RegionMeta serverMeta = serverCache.get(normalizedPath);
+                        ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
 
-                        // 比较时都转换为秒级，避免缓存存储时的精度损失
-                        long clientSeconds = clientTs / 1000;
-                        long serverSeconds = serverTs / 1000;
-
-                        // Skip if client has newer or same-age data (client explored after server generated)
-                        if (clientSeconds >= serverSeconds && clientTs > 0) {
-                            LOGGER.debug("Skipping {}: client {}s >= server {}s",
-                                    normalizedPath, clientSeconds, serverSeconds);
+                        // Server has no record → skip (shouldn't happen if generate ran)
+                        if (serverMeta == null) {
+                            LOGGER.debug("Skipping {}: no server cache entry", normalizedPath);
                             return;
                         }
 
-                        // Need to sync: client doesn't have it or client is older
-                        try {
-                            byte[] data = Files.readAllBytes(zipPath);
-                            // Parse dimension and coordinates from path
-                            String[] parts = normalizedPath.split("[/\\\\]");
-                            String fileName = parts[parts.length - 1];
-                            String[] coords = fileName.split("_");
-                            int regionX = Integer.parseInt(coords[0]);
-                            int regionZ = Integer.parseInt(coords[1]);
-                            String dimension = parts.length > 1 ? parts[parts.length - 2] : "null";
-                            diffs.add(new ChunkMapData(regionX, regionZ, dimension, data));
-                            LOGGER.debug("Will sync {}: server {}s, client {}s",
-                                    normalizedPath, serverSeconds, clientSeconds);
-                        } catch (IOException e) {
-                            LOGGER.error("Failed to read zip file: {}", zipPath, e);
+                        // Client has no metadata → sync (new region for client)
+                        if (clientMetaEntry == null) {
+                            LOGGER.debug("Will sync {}: client has no metadata (new region)", normalizedPath);
+                            addChunkData(diffs, zipPath, normalizedPath);
+                            return;
+                        }
+
+                        // Hash match → skip sync (file content identical)
+                        if (serverMeta.hash().equals(clientMetaEntry.hash())) {
+                            LOGGER.debug("Skipping {}: hash match (server={}, client={})",
+                                    normalizedPath, serverMeta.hash(), clientMetaEntry.hash());
+                            return;  // hashMatchCount incremented outside lambda
+                        }
+
+                        // Hash mismatch → check timestamps
+                        // Client timestamp older than server → sync
+                        if (clientMetaEntry.timestampSeconds() < serverMeta.timestampSeconds()) {
+                            LOGGER.debug("Will sync {}: hash mismatch, client ts={}s < server ts={}s",
+                                    normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
+                            addChunkData(diffs, zipPath, normalizedPath);
+                        } else {
+                            // Client timestamp newer → skip (client explored newer content)
+                            LOGGER.debug("Skipping {}: hash mismatch but client ts={}s >= server ts={}s",
+                                    normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
                         }
                     });
         } catch (IOException e) {
             LOGGER.error("Failed to walk cache directory", e);
         }
 
-        int total = diffs.size();
-        int skipped = serverTimestamps.size() - total;
+        // Count hash matches and timestamp skips
+        for (Map.Entry<String, RegionMeta> entry : serverCache.entrySet()) {
+            ClientMeta cm = clientMeta.get(entry.getKey());
+            if (cm != null && entry.getValue().hash().equals(cm.hash())) {
+                hashMatchCount++;
+            } else if (cm != null && cm.timestampSeconds() >= entry.getValue().timestampSeconds()) {
+                timestampSkipCount++;
+            }
+        }
 
-        LOGGER.info("Sync request from {}: {} regions to sync, {} skipped (client has newer data)",
-                serverPlayer.getName().getString(), total, skipped);
+        int total = diffs.size();
+
+        LOGGER.info("Sync request from {}: {} regions to sync, {} hash match (identical), {} timestamp skip (client newer)",
+                serverPlayer.getName().getString(), total, hashMatchCount, timestampSkipCount);
 
         if (total == 0) {
-            serverPlayer.sendSystemMessage(Component.literal("Map is already up-to-date. No sync needed."));
+            serverPlayer.sendSystemMessage(Component.literal(
+                    String.format("Map is up-to-date. %d hash match, %d timestamp skip.", hashMatchCount, timestampSkipCount)));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -267,18 +289,19 @@ public class ServerSyncHandler {
             return;
         }
 
+        serverPlayer.sendSystemMessage(Component.literal(
+                String.format("Starting map sync: %d regions to download (%d identical, %d newer on client skipped)",
+                        total, hashMatchCount, timestampSkipCount)));
+
         // Check if this is a resumed sync
         SyncProgress existingProgress = playerSyncProgress.get(playerId);
         int startIndex = 0;
         if (existingProgress != null && ModConfig.COMMON.enableResumeSync.get()) {
             // Resume from last progress if same total count
             if (existingProgress.totalChunks == total) {
-                // Find how many chunks were already sent (by comparing worldId and checking progress)
                 startIndex = Math.min(existingProgress.totalChunks - 1, total - 1);
-                // Actually we need to track the exact index, let's store it
                 LOGGER.info("Resuming sync for player {} from index {}", playerId, startIndex);
             } else {
-                // Different total, start fresh
                 LOGGER.info("Sync total changed for player {}, starting fresh", playerId);
                 playerSyncProgress.remove(playerId);
             }
@@ -286,9 +309,6 @@ public class ServerSyncHandler {
 
         // Store progress for potential resume
         playerSyncProgress.put(playerId, new SyncProgress(diffs, total, worldId));
-
-        serverPlayer.sendSystemMessage(
-                Component.literal(String.format("Starting map sync: %d regions to download", total)));
 
         // Send progress updates and data in batches with speed limiting
         int processed = startIndex;
@@ -359,6 +379,25 @@ public class ServerSyncHandler {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
         playerSyncProgress.remove(playerId);
+    }
+
+    /**
+     * Helper to add chunk data from zip file.
+     */
+    private static void addChunkData(List<ChunkMapData> diffs, Path zipPath, String normalizedPath) {
+        try {
+            byte[] data = Files.readAllBytes(zipPath);
+            // Parse dimension and coordinates from path
+            String[] parts = normalizedPath.split("[/\\\\]");
+            String fileName = parts[parts.length - 1];
+            String[] coords = fileName.split("_");
+            int regionX = Integer.parseInt(coords[0]);
+            int regionZ = Integer.parseInt(coords[1]);
+            String dimension = parts.length > 1 ? parts[parts.length - 2] : "null";
+            diffs.add(new ChunkMapData(regionX, regionZ, dimension, data));
+        } catch (IOException e) {
+            LOGGER.error("Failed to read zip file: {}", zipPath, e);
+        }
     }
 
     /**

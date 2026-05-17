@@ -1,6 +1,7 @@
 package com.mapsyncer.network;
 
 import com.mapsyncer.MapSyncer;
+import com.mapsyncer.client.ClientHashManager.ClientMeta;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -24,27 +25,34 @@ public class PacketHandler {
     public static void init() {
     }
 
-    public record SyncRequestPayload(Map<String, Long> clientTimestamps) implements CustomPacketPayload {
+    /**
+     * 同步请求：客户端发送各region的元数据（时间戳+哈希）
+     */
+    public record SyncRequestPayload(Map<String, ClientMeta> clientMeta) implements CustomPacketPayload {
         public static final Type<SyncRequestPayload> TYPE = new Type<>(SYNC_REQUEST_ID);
         public static final StreamCodec<RegistryFriendlyByteBuf, SyncRequestPayload> STREAM_CODEC = StreamCodec.of(
                 SyncRequestPayload::encode, SyncRequestPayload::decode
         );
 
         public static void encode(RegistryFriendlyByteBuf buf, SyncRequestPayload payload) {
-            buf.writeInt(payload.clientTimestamps.size());
-            for (var entry : payload.clientTimestamps.entrySet()) {
+            buf.writeInt(payload.clientMeta.size());
+            for (var entry : payload.clientMeta.entrySet()) {
                 buf.writeUtf(entry.getKey());
-                buf.writeLong(entry.getValue());
+                buf.writeLong(entry.getValue().timestampSeconds());
+                buf.writeUtf(entry.getValue().hash());
             }
         }
 
         public static SyncRequestPayload decode(RegistryFriendlyByteBuf buf) {
             int size = buf.readInt();
-            Map<String, Long> timestamps = new HashMap<>();
+            Map<String, ClientMeta> metaMap = new HashMap<>();
             for (int i = 0; i < size; i++) {
-                timestamps.put(buf.readUtf(), buf.readLong());
+                String path = buf.readUtf();
+                long timestampSeconds = buf.readLong();
+                String hash = buf.readUtf();
+                metaMap.put(path, new ClientMeta(timestampSeconds, hash));
             }
-            return new SyncRequestPayload(timestamps);
+            return new SyncRequestPayload(metaMap);
         }
 
         @Override

@@ -194,7 +194,7 @@ public class ConversionOrchestrator {
 
         // 使用时间戳缓存检测需要更新的区域
         McaTimestampCache mcaCache = getTimestampCache();
-        GenerationTimestampCache genCache = GenerationTimestampCache.getInstance(CACHE_DIR);
+        GenerationCache genCache = GenerationCache.getInstance(CACHE_DIR);
         List<RegionCoords> needsUpdate = mcaCache.scanAndUpdate(dimPath, regionDir);
 
         List<RegionCoords> regions = dimRegions.regions();
@@ -202,7 +202,7 @@ public class ConversionOrchestrator {
 
         List<RegionCoords> failedRegions = new ArrayList<>();
         int skippedCount = 0;
-        long generationTime = System.currentTimeMillis();  // Unified generation timestamp for this run
+        long generationTimeSeconds = System.currentTimeMillis() / 1000;  // Unified generation timestamp (seconds)
 
         // 使用独立 MCA 解析器转换需要更新的区域（更快，不加载 chunks）
         for (RegionCoords coords : needsUpdate) {
@@ -220,10 +220,11 @@ public class ConversionOrchestrator {
 
             if (converted != null) {
                 try {
-                    XaeroWriter.writeRegionFile(outputDir, converted);
+                    Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                     mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                    // Update generation timestamp for sync comparison
-                    genCache.updateTimestamp(dimPath + "/" + coords.x() + "_" + coords.z(), generationTime);
+                    // Update generation cache with timestamp and hash
+                    String relativePath = dimPath + "/" + coords.x() + "_" + coords.z();
+                    genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
                 } catch (IOException e) {
                     LOGGER.error("Failed to write region file", e);
                     failedRegions.add(coords);
@@ -258,10 +259,11 @@ public class ConversionOrchestrator {
 
             if (converted != null) {
                 try {
-                    XaeroWriter.writeRegionFile(outputDir, converted);
+                    Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                     mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                    // Update generation timestamp for sync comparison
-                    genCache.updateTimestamp(dimPath + "/" + coords.x() + "_" + coords.z(), generationTime);
+                    // Update generation cache with timestamp and hash
+                    String relativePath = dimPath + "/" + coords.x() + "_" + coords.z();
+                    genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
                 } catch (IOException e) {
                     LOGGER.error("Failed to write region file", e);
                     failedRegions.add(coords);
