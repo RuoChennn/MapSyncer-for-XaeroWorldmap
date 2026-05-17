@@ -39,6 +39,11 @@ public class XaeroMapIntegrator {
      * This prevents Xaero from writing new chunk data while we're replacing files.
      */
     public static void disableChunkUpdates() {
+        // Skip if already disabled (avoid duplicate messages)
+        if (chunkUpdatesDisabled) {
+            return;
+        }
+
         chunkUpdatesDisabled = true;
         LOGGER.info("Chunk updates disabled for sync");
 
