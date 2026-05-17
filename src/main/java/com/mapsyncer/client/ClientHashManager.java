@@ -8,10 +8,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
 
@@ -31,11 +32,14 @@ public class ClientHashManager {
      * - Hash match → skip sync (file content identical)
      * - Hash mismatch + client timestamp older → sync
      *
+     * Uses parallel processing with limited concurrency (2 threads) to avoid
+     * blocking the game while computing hashes for many regions.
+     *
      * @param mapDir the base directory (Multiplayer_<server>/null) or mw$worldId directory
      * @return map of relative path -> ClientMeta (timestamp in seconds + hash)
      */
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
-        Map<String, ClientMeta> metaMap = new HashMap<>();
+        Map<String, ClientMeta> metaMap = new ConcurrentHashMap<>();
 
         if (mapDir == null || !Files.exists(mapDir)) {
             LOGGER.info("Map directory does not exist or is null, will request all regions from server");
@@ -49,35 +53,52 @@ public class ClientHashManager {
             return metaMap;
         }
 
-        // Walk all dimension directories under server directory
+        // Collect all zip files first
+        java.util.List<Path> zipFiles;
         try (Stream<Path> walk = Files.walk(serverDir)) {
-            walk.filter(p -> p.toString().endsWith(".zip"))
-                    .forEach(zipPath -> {
-                        try {
-                            // Extract region coordinates from filename
-                            String fileName = zipPath.getFileName().toString();
-                            if (!fileName.endsWith(".zip")) return;
-
-                            // Get file modification time (seconds)
-                            long timestampMillis = getFileModificationTime(zipPath);
-                            long timestampSeconds = timestampMillis / 1000;
-
-                            // Compute CRC32 hash
-                            String hash = computeFileHash(zipPath);
-
-                            // Build relative path in server format
-                            String relativePath = buildRelativePath(zipPath, serverDir);
-
-                            metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
-
-                            LOGGER.debug("Region {}: ts={}s, hash={}", relativePath, timestampSeconds, hash);
-
-                        } catch (Exception e) {
-                            LOGGER.warn("Invalid region filename: {}", zipPath, e);
-                        }
-                    });
+            zipFiles = walk.filter(p -> p.toString().endsWith(".zip"))
+                    .toList();
         } catch (IOException e) {
-            LOGGER.error("Failed to compute map metadata", e);
+            LOGGER.error("Failed to walk map directory", e);
+            return metaMap;
+        }
+
+        LOGGER.info("Computing hashes for {} region files (parallel=2)", zipFiles.size());
+
+        // Process with limited parallelism (2 threads) to avoid blocking game
+        ForkJoinPool limitedPool = new ForkJoinPool(2);
+        try {
+            limitedPool.submit(() ->
+                    zipFiles.parallelStream()
+                            .forEach(zipPath -> {
+                                try {
+                                    // Extract region coordinates from filename
+                                    String fileName = zipPath.getFileName().toString();
+                                    if (!fileName.endsWith(".zip")) return;
+
+                                    // Get file modification time (seconds)
+                                    long timestampMillis = getFileModificationTime(zipPath);
+                                    long timestampSeconds = timestampMillis / 1000;
+
+                                    // Compute CRC32 hash
+                                    String hash = computeFileHash(zipPath);
+
+                                    // Build relative path in server format
+                                    String relativePath = buildRelativePath(zipPath, serverDir);
+
+                                    metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
+
+                                    LOGGER.debug("Region {}: ts={}s, hash={}", relativePath, timestampSeconds, hash);
+
+                                } catch (Exception e) {
+                                    LOGGER.warn("Invalid region filename: {}", zipPath, e);
+                                }
+                            })
+            ).get();  // Wait for completion
+        } catch (Exception e) {
+            LOGGER.error("Failed to compute hashes in parallel", e);
+        } finally {
+            limitedPool.shutdown();
         }
 
         LOGGER.info("Found {} regions with metadata", metaMap.size());
