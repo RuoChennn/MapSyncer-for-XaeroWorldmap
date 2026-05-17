@@ -1,0 +1,496 @@
+package com.mapsyncer.mca;
+
+import com.mapsyncer.nbt.Tag;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Chunk数据解析器
+ * 解析完整的chunk NBT数据，包括高度图和sections
+ */
+public class ChunkDataParser {
+
+    /**
+     * 判断区块状态是否应该跳过
+     * 只处理状态为 "minecraft:full" 的区块
+     * @param status 区块状态字符串
+     * @return true 表示跳过该区块
+     */
+    private static boolean shouldSkipChunk(String status) {
+        if (status == null || status.isEmpty()) {
+            return true;  // 无状态的区块跳过
+        }
+
+        // 处理带命名空间和不带命名空间的状态
+        String normalizedStatus = status.contains(":") ? status : "minecraft:" + status;
+
+        // 只接受 "minecraft:full" 状态
+        return !normalizedStatus.equals("minecraft:full");
+    }
+
+    /**
+     * Chunk数据
+     */
+    public record ChunkInfo(
+        int chunkX,                 // Chunk的局部坐标 (0-31)
+        int chunkZ,
+        int yPos,                   // Chunk底部Y坐标 (yPos * 16)
+        int chunkBottomY,           // Chunk底部世界Y坐标
+        String status,              // Chunk状态 ("minecraft:full", ...)
+        int[][] heightmap,          // 高度图 (16x16, 世界绝对Y坐标)
+        List<ChunkSectionParser.SectionData> sections
+    ) {}
+
+    /**
+     * 解析chunk NBT数据
+     * 支持1.18+格式（flat root）和旧格式（nested under "Level"）
+     *
+     * @param localX chunk本地X坐标
+     * @param localZ chunk本地Z坐标
+     * @param chunkNbt chunk NBT数据
+     * @param worldHeightRange 维度高度范围（worldTopY - minBuildHeight）
+     */
+    public static ChunkInfo parseChunk(int localX, int localZ, Tag.Compound chunkNbt, int worldHeightRange) {
+        // 检查chunk状态 - 只处理已生成地形的区块
+        // 区块生成顺序：empty -> structure_starts -> structure_references -> biomes -> noise -> surface -> ...
+        // 只有 surface 及之后的状态才有实际地形数据
+        String status = chunkNbt.getString("Status");
+
+        // 跳过未生成地形的早期状态
+        if (shouldSkipChunk(status)) {
+            return null;
+        }
+
+        // 1.18+格式检查：sections在根层级
+        Tag.Compound rootTag;
+        if (chunkNbt.contains("sections", Tag.TAG_LIST)) {
+            rootTag = chunkNbt;
+        } else if (chunkNbt.contains("Level", Tag.TAG_COMPOUND)) {
+            // 旧格式：数据嵌套在Level下
+            rootTag = chunkNbt.getCompound("Level");
+        } else {
+            return null;  // 无法识别的格式
+        }
+
+        // 解析yPos (1.18+)
+        int yPos = chunkNbt.getInt("yPos");
+        int chunkBottomY = yPos * 16;
+
+        // 解析高度图（传入维度高度范围）
+        int[][] heightmap = parseHeightmap(rootTag, chunkBottomY, worldHeightRange);
+
+        // 解析sections
+        List<ChunkSectionParser.SectionData> sections = new ArrayList<>();
+        if (rootTag.contains("sections", Tag.TAG_LIST)) {
+            Tag.ListTag sectionsList = rootTag.getList("sections", Tag.TAG_COMPOUND);
+            for (int i = 0; i < sectionsList.items().size(); i++) {
+                Tag.Compound sectionTag = (Tag.Compound) sectionsList.items().get(i);
+                ChunkSectionParser.SectionData section = ChunkSectionParser.parseSection(sectionTag);
+                sections.add(section);
+            }
+        }
+
+        // 按Y坐标从高到低排序（用于从上到下扫描）
+        sections.sort((a, b) -> Integer.compare(b.sectionY(), a.sectionY()));
+
+        return new ChunkInfo(localX, localZ, yPos, chunkBottomY, status, heightmap, sections);
+    }
+
+    /**
+     * 解析chunk NBT数据（默认维度高度范围384，适用于主世界）
+     */
+    public static ChunkInfo parseChunk(int localX, int localZ, Tag.Compound chunkNbt) {
+        return parseChunk(localX, localZ, chunkNbt, 384); // 默认主世界高度范围（-64到320）
+    }
+
+    /**
+     * 解析高度图
+     * 支持1.18+ WORLD_SURFACE (LongArray) 和旧版 HeightMap (IntArray)
+     *
+     * @param rootTag chunk根NBT
+     * @param chunkBottomY chunk最低Y坐标
+     * @param worldHeightRange 维度高度范围（用于计算bitsPerHeight）
+     */
+    private static int[][] parseHeightmap(Tag.Compound rootTag, int chunkBottomY, int worldHeightRange) {
+        int[][] heightmap = new int[16][16];
+
+        // 尝试新格式 Heightmaps
+        if (rootTag.contains("Heightmaps", Tag.TAG_COMPOUND)) {
+            Tag.Compound heightmaps = rootTag.getCompound("Heightmaps");
+
+            // 优先使用 MOTION_BLOCKING_NO_LEAVES（包括水方块）
+            // 这样能正确检测上方的水方块
+            if (heightmaps.contains("MOTION_BLOCKING_NO_LEAVES", Tag.TAG_LONG_ARRAY)) {
+                long[] data = heightmaps.getLongArray("MOTION_BLOCKING_NO_LEAVES");
+                int bitsPerHeight = calculateBitsPerHeight(data.length, worldHeightRange);
+                if (bitsPerHeight > 0 && bitsPerHeight <= 10) {
+                    decodeHeightmapLongArray(data, bitsPerHeight, chunkBottomY, heightmap);
+                    return heightmap;
+                }
+            }
+
+            // 备用 WORLD_SURFACE（不包括水方块）
+            if (heightmaps.contains("WORLD_SURFACE", Tag.TAG_LONG_ARRAY)) {
+                long[] data = heightmaps.getLongArray("WORLD_SURFACE");
+                int bitsPerHeight = calculateBitsPerHeight(data.length, worldHeightRange);
+                if (bitsPerHeight > 0 && bitsPerHeight <= 10) {
+                    decodeHeightmapLongArray(data, bitsPerHeight, chunkBottomY, heightmap);
+                    return heightmap;
+                }
+            }
+        }
+
+        // 旧格式 HeightMap (IntArray)
+        if (rootTag.contains("HeightMap", Tag.TAG_INT_ARRAY)) {
+            int[] data = rootTag.getIntArray("HeightMap");
+            if (data.length == 256) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        heightmap[x][z] = data[z * 16 + x];  // 直接是世界绝对Y坐标
+                    }
+                }
+                return heightmap;
+            }
+        }
+
+        // 无高度图数据，返回默认值
+        return heightmap;
+    }
+
+    /**
+     * 计算高度图的bitsPerEntry
+     * 根据Wiki：数组长度 l = ceil(256/u)，其中 u = floor(64/b)
+     * 反推：从数组长度计算 b
+     *
+     * Wiki公式：
+     * - h = 最高高度 - 最低建筑高度（维度高度范围）
+     * - b = ceil(log2(h))
+     * - u = floor(64/b)
+     * - l = ceil(256/u)
+     *
+     * 反推公式：
+     * - u = ceil(256/l)（近似）
+     * - b = floor(64/u)（近似）
+     */
+    private static int calculateBitsPerHeight(int longArrayLength, int worldHeightRange) {
+        // 优先使用维度高度范围计算（更准确）
+        if (worldHeightRange > 0) {
+            // b = ceil(log2(h))
+            return 32 - Integer.numberOfLeadingZeros(worldHeightRange - 1);
+        }
+
+        // 备用：从数组长度反推
+        // l = ceil(256/u) => u ≈ ceil(256/l)
+        // b = floor(64/u)
+        if (longArrayLength <= 0) return 0;
+        int u = (256 + longArrayLength - 1) / longArrayLength; // ceil(256/l)
+        return 64 / u;
+    }
+
+    /**
+     * 解码LongArray高度图（Wiki规范）
+     * 存储的是相对于维度最低建筑高度的偏移量
+     *
+     * Wiki公式：
+     * - 编码序号 i = x + 16*z
+     * - 值 = (data[i/u] >> ((i%u)*b)) & ((1L<<b)-1L) + low
+     *
+     * @param data long数组
+     * @param bitsPerHeight 每个高度值的位数b
+     * @param chunkBottomY chunk的最低Y（作为基线）
+     * @param heightmap 输出高度图数组
+     */
+    private static void decodeHeightmapLongArray(long[] data, int bitsPerHeight, int chunkBottomY, int[][] heightmap) {
+        if (data == null || data.length == 0 || bitsPerHeight <= 0) {
+            return;
+        }
+
+        // u = floor(64/b)
+        int u = 64 / bitsPerHeight;
+
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                // Wiki: i = x + 16*z
+                int i = x + 16 * z;
+
+                // Wiki公式：值 = (data[i/u] >> ((i%u)*b)) & ((1L<<b)-1L)
+                int longIndex = i / u;
+                int bitOffset = (i % u) * bitsPerHeight;
+
+                if (longIndex >= data.length) {
+                    heightmap[x][z] = chunkBottomY;
+                    continue;
+                }
+
+                long rawValue = (data[longIndex] >>> bitOffset) & ((1L << bitsPerHeight) - 1L);
+
+                // 世界绝对Y = chunkBottomY + 偏移量（chunkBottomY作为基线）
+                heightmap[x][z] = chunkBottomY + (int) rawValue;
+            }
+        }
+    }
+
+    /**
+     * 从chunk sections中获取指定位置的方块状态（完整信息）
+     * @param chunk Chunk数据
+     * @param x 局部X (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z (0-15)
+     */
+    public static ChunkSectionParser.BlockState getBlockStateAt(ChunkInfo chunk, int x, int worldY, int z) {
+        int sectionY = worldY >> 4;
+        int localY = worldY & 0xF;
+
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.sectionY() == sectionY) {
+                return ChunkSectionParser.getBlockStateAt(section, x, localY, z);
+            }
+        }
+
+        return new ChunkSectionParser.BlockState("minecraft:air", Map.of());
+    }
+
+    /**
+     * 从chunk sections中获取指定位置的方块名称
+     * @param chunk Chunk数据
+     * @param x 局部X (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z (0-15)
+     */
+    public static String getBlockAt(ChunkInfo chunk, int x, int worldY, int z) {
+        return getBlockStateAt(chunk, x, worldY, z).name();
+    }
+
+    /**
+     * 从chunk sections中获取指定位置的生物群系（默认启用边界平滑）
+     */
+    public static String getBiomeAt(ChunkInfo chunk, int x, int worldY, int z) {
+        return getBiomeAt(chunk, x, worldY, z, true);
+    }
+
+    /**
+     * 从chunk sections中获取指定位置的生物群系
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z (0-15)
+     * @param smoothBoundary 是否启用voxel边界平滑
+     */
+    public static String getBiomeAt(ChunkInfo chunk, int x, int worldY, int z, boolean smoothBoundary) {
+        int sectionY = worldY >> 4;
+        int localY = worldY & 0xF;
+
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.sectionY() == sectionY) {
+                return ChunkSectionParser.getBiomeAt(section, x, localY, z, smoothBoundary);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取chunk中指定位置的方块光照
+     */
+    public static byte getBlockLightAt(ChunkInfo chunk, int x, int worldY, int z) {
+        int sectionY = worldY >> 4;
+        int localY = worldY & 0xF;
+
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.sectionY() == sectionY) {
+                return ChunkSectionParser.getBlockLight(section, x, localY, z);
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * 获取chunk中指定位置的天空光照
+     */
+    public static byte getSkyLightAt(ChunkInfo chunk, int x, int worldY, int z) {
+        int sectionY = worldY >> 4;
+        int localY = worldY & 0xF;
+
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.sectionY() == sectionY) {
+                return ChunkSectionParser.getSkyLight(section, x, localY, z);
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * 判断指定位置是否有天空访问（用于光照计算）
+     * 基于高度图判断：如果worldY >= heightmap[x][z]，则有天空访问
+     */
+    public static boolean hasSkyAccess(ChunkInfo chunk, int x, int worldY, int z) {
+        int surfaceY = chunk.heightmap()[x][z];
+        return worldY >= surfaceY;
+    }
+
+    /**
+     * 获取有效光照值
+     * 有天空访问时使用天空光照(默认15)，否则使用方块光照
+     */
+    public static byte getEffectiveLight(ChunkInfo chunk, int x, int worldY, int z) {
+        if (hasSkyAccess(chunk, x, worldY, z)) {
+            byte skyLight = getSkyLightAt(chunk, x, worldY, z);
+            return skyLight > 0 ? skyLight : 15;  // 有天空访问时默认日光15
+        } else {
+            return getBlockLightAt(chunk, x, worldY, z);
+        }
+    }
+
+    /**
+     * 获取有效光照值（支持光照模式）
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z (0-15)
+     * @param lightMode 光照模式（SURFACE 或 CAVE）
+     * @param hasOverlay 是否有覆盖层（水、玻璃等透明方块）
+     */
+    public static byte getEffectiveLight(ChunkInfo chunk, int x, int worldY, int z,
+                                          LightMode lightMode, boolean hasOverlay) {
+        byte blockLight = getBlockLightAt(chunk, x, worldY, z);
+        byte skyLight = getSkyLightAt(chunk, x, worldY, z);
+        boolean hasSkyAccess = hasSkyAccess(chunk, x, worldY, z);
+
+        return lightMode.calculateEffectiveLight(blockLight, skyLight, hasSkyAccess, hasOverlay, false);
+    }
+
+    /**
+     * 获取地表模式有效光照
+     * 只使用 BlockLight，忽略 SkyLight
+     */
+    public static byte getEffectiveLightSurface(ChunkInfo chunk, int x, int worldY, int z) {
+        return getBlockLightAt(chunk, x, worldY, z);
+    }
+
+    /**
+     * 获取洞穴模式有效光照
+     * 参考 Xaero WorldDataReader 的洞穴模式光照逻辑：
+     * - BlockLight >= 15 时直接返回
+     * - 有天空访问且无 overlay 时返回 15（直接日照）
+     * - 无 overlay 时取 max(BlockLight, SkyLight)
+     * - 有 overlay 时使用 BlockLight（水下场景）
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z (0-15)
+     * @param hasOverlay 是否有覆盖层
+     */
+    public static byte getEffectiveLightCave(ChunkInfo chunk, int x, int worldY, int z,
+                                              boolean hasOverlay) {
+        byte blockLight = getBlockLightAt(chunk, x, worldY, z);
+
+        // BlockLight >= 15 时直接返回（发光方块）
+        if (blockLight >= 15) {
+            return blockLight;
+        }
+
+        boolean hasSkyAccess = hasSkyAccess(chunk, x, worldY, z);
+
+        // 有天空访问且无 overlay 时返回 15
+        if (hasSkyAccess && !hasOverlay) {
+            return 15;
+        }
+
+        // 无 overlay 时取 max(BlockLight, SkyLight)
+        if (!hasOverlay) {
+            byte skyLight = getSkyLightAt(chunk, x, worldY, z);
+            return (byte) Math.max(blockLight, skyLight);
+        }
+
+        // 有 overlay 时使用 BlockLight
+        return blockLight;
+    }
+
+    /**
+     * 解析chunk中所有section的光照数据
+     * 返回按sectionY排序的光照数据列表
+     */
+    public static List<ChunkSectionParser.LightData> parseAllLightData(ChunkInfo chunk) {
+        List<ChunkSectionParser.LightData> lightDataList = new ArrayList<>();
+
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            ChunkSectionParser.LightData lightData = ChunkSectionParser.parseLightData(section);
+            if (lightData.hasLightData()) {
+                lightDataList.add(lightData);
+            }
+        }
+
+        return lightDataList;
+    }
+
+    /**
+     * Chunk光照统计信息
+     */
+    public record LightStats(
+        int sectionsWithLight,      // 有光照数据的section数量
+        int totalBlockLightSum,     // 方块光照总和
+        int totalSkyLightSum,       // 天空光照总和
+        float avgBlockLight,        // 平均方块光照
+        float avgSkyLight           // 平均天空光照
+    ) {}
+
+    /**
+     * 计算chunk的光照统计信息
+     */
+    public static LightStats calculateLightStats(ChunkInfo chunk) {
+        int sectionsWithLight = 0;
+        int blockLightSum = 0;
+        int skyLightSum = 0;
+        int blockLightCount = 0;
+        int skyLightCount = 0;
+
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.blockLight() != null && section.blockLight().length == 2048) {
+                sectionsWithLight++;
+                // 解析所有光照值
+                ChunkSectionParser.LightData lightData = ChunkSectionParser.parseLightData(section);
+                for (byte b : lightData.blockLight()) {
+                    blockLightSum += b;
+                    blockLightCount++;
+                }
+                if (section.skyLight() != null && section.skyLight().length == 2048) {
+                    for (byte b : lightData.skyLight()) {
+                        skyLightSum += b;
+                        skyLightCount++;
+                    }
+                }
+            }
+        }
+
+        return new LightStats(
+            sectionsWithLight,
+            blockLightSum,
+            skyLightSum,
+            blockLightCount > 0 ? (float) blockLightSum / blockLightCount : 0,
+            skyLightCount > 0 ? (float) skyLightSum / skyLightCount : 0
+        );
+    }
+
+    /**
+     * 获取高度图值（带+3容差）
+     * @param chunk Chunk数据
+     * @param x 局部X (0-15)
+     * @param z 局部Z (0-15)
+     * @param worldTopY 世界顶部Y坐标限制
+     */
+    public static int getHeightmapStartY(ChunkInfo chunk, int x, int z, int worldTopY) {
+        int heightMapValue = chunk.heightmap()[x][z];
+        // +3容差（覆盖草方块上的草/花/雪层）
+        int startY = heightMapValue + 3;
+        // 不能超过世界顶部
+        return Math.min(startY, worldTopY - 1);
+    }
+}

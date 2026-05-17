@@ -1,0 +1,52 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+
+# Eclipse
+bin/
+.run/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Minecraft
+run/
+logs/
+
+# Claude Code
+.claude/
+
+# Decompiler output
+.decompiled/
+
+# Eclipse metadata
+.eclipse/
+
+# Planning files
+.plan/
+
+# Tools (CFR decompiler jar etc)
+.tool/
+
+# Downloaded/pulled JAR files (not build outputs)
+xaeroworldmap-neoforge-*.jar
+
+# Extracted JAR contents
+xaeroworldmap-neoforge-*/
+
+# Downloaded Gradle (should not be committed)
+gradle-8.9/
+gradle-8.9-bin.zip
+.fake

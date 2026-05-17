@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.61-beta'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+// Configure repositories with mirrors for better access in China
+repositories {
+    mavenCentral()
+    // NeoForge Maven - primary
+    maven { url = 'https://maven.neoforged.net/releases' }
+    // Backup mirrors (may help with network issues)
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+neoForge {
+    version = neo_version
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            systemProperty 'mixin.env.remapRefMap', 'true'
+            systemProperty 'mixin.env.refMapRemapping', 'true'
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+sourceSets.main.resources.srcDir 'src/generated/resources'
+
+// No compile-time dependency on Xaero's World Map
+// All Xaero integration is done via reflection at runtime
+// - Server: Independent, reads xaeromap.txt file and writes Xaero-compatible format
+// - Client: Requires Xaero's World Map to be installed for map display integration
+
+dependencies {
+    // No dependencies required - Xaero integration uses reflection
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

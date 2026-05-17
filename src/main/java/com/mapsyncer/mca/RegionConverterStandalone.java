@@ -1,0 +1,644 @@
+package com.mapsyncer.mca;
+
+import com.mapsyncer.server.BlockPropertyResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+
+/**
+ * 独立的区域转换器 - 不依赖 Minecraft 库
+ * 使用自研 MCA 解析器读取 .mca 文件，转换为 Xaero 格式
+ */
+public class RegionConverterStandalone {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RegionConverterStandalone.class);
+
+    public static final int REGION_SIZE_BLOCKS = 512;
+    public static final int CHUNKS_PER_REGION = 32;
+    public static final int BLOCKS_PER_TILE_CHUNK = 64;
+    public static final int BLOCKS_PER_TILE = 16;
+    public static final int TILES_PER_TILE_CHUNK = 4;
+    public static final int TILE_CHUNKS_PER_REGION = 8;
+    public static final int MAJOR_VERSION = 6;
+    public static final int MINOR_VERSION = 8;
+
+    public record ConvertedRegion(int regionX, int regionZ, byte[] xaeroData) {}
+
+    /**
+     * 洞穴模式参数
+     * 用于洞穴模式下的深度检测和光照计算
+     */
+    public record CaveModeParams(
+        int caveStart,      // 洞穴开始高度（世界Y坐标）
+        int caveDepth       // 洞穴深度（从 caveStart 向下的范围）
+    ) {
+        /**
+         * 默认洞穴参数（无洞穴模式）
+         */
+        public static final CaveModeParams NONE = new CaveModeParams(Integer.MAX_VALUE, 0);
+
+        /**
+         * 创建默认洞穴参数
+         * @param worldTopY 世界顶部高度
+         * @param defaultDepth 默认深度（通常为63，用于下界等）
+         */
+        public static CaveModeParams createDefault(int worldTopY, int defaultDepth) {
+            return new CaveModeParams(worldTopY, defaultDepth);
+        }
+    }
+
+    /**
+     * 转换单个区域文件（默认地表模式）
+     */
+    public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
+                                                  int minBuildHeight, int worldTopY) {
+        return convertRegion(mcaPath, regionX, regionZ, minBuildHeight, worldTopY,
+                             LightMode.SURFACE, CaveModeParams.NONE);
+    }
+
+    /**
+     * 转换单个区域文件（支持光照模式）
+     * @param mcaPath .mca 文件路径
+     * @param regionX 区域 X 坐标
+     * @param regionZ 区域 Z 坐标
+     * @param minBuildHeight 世界最低建筑高度 (通常是 -64)
+     * @param worldTopY 世界最高高度 (通常是 320)
+     * @param lightMode 光照模式（SURFACE 或 CAVE）
+     * @param caveParams 洞穴模式参数（仅洞穴模式使用）
+     */
+    public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
+                                                  int minBuildHeight, int worldTopY,
+                                                  LightMode lightMode,
+                                                  CaveModeParams caveParams) {
+        if (!Files.exists(mcaPath)) {
+            return null;
+        }
+
+        try {
+            MapRegionData regionData = readMcaFile(mcaPath, minBuildHeight, worldTopY, lightMode, caveParams);
+            if (regionData == null) return null;
+
+            byte[] xaeroData = serializeToXaeroFormat(regionData, minBuildHeight);
+            return new ConvertedRegion(regionX, regionZ, xaeroData);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to convert region ({}, {}): {}", regionX, regionZ, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 使用独立 MCA 解析器读取区域文件（默认地表模式）
+     */
+    static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY) throws IOException {
+        return readMcaFile(mcaPath, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE);
+    }
+
+    /**
+     * 使用独立 MCA 解析器读取区域文件（支持光照模式）
+     */
+    static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY,
+                                       LightMode lightMode, CaveModeParams caveParams) throws IOException {
+        MapRegionData data = new MapRegionData(minBuildHeight, lightMode);
+
+        try (McaReader reader = new McaReader(mcaPath.toString())) {
+            int worldHeightRange = worldTopY - minBuildHeight;
+            for (McaReader.ChunkData chunkData : reader.readAllChunks()) {
+                ChunkDataParser.ChunkInfo chunkInfo = ChunkDataParser.parseChunk(
+                    chunkData.chunkX(), chunkData.chunkZ(), chunkData.nbt(), worldHeightRange
+                );
+
+                if (chunkInfo == null) continue;
+
+                processChunk(data, chunkInfo, minBuildHeight, worldTopY, lightMode, caveParams);
+            }
+        }
+
+        return data;
+    }
+
+    /**
+     * 处理单个 Chunk 的数据（默认地表模式）
+     */
+    private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
+                                       int minBuildHeight, int worldTopY) {
+        processChunk(data, chunk, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE);
+    }
+
+    /**
+     * 处理单个 Chunk 的数据（支持光照模式）
+     *
+     * 光照计算逻辑：
+     *
+     * 地表模式 (SURFACE):
+     * - 只使用 BlockLight
+     * - SkyLight 完全忽略
+     * - 所有区域使用方块光照值
+     *
+     * 洞穴模式 (CAVE):
+     * - 同时使用 BlockLight 和 SkyLight
+     * - 露天区域（高于高度图）：SkyLight = 15
+     * - 水下区域：使用 BlockLight
+     * - 其他地下区域：取 max(BlockLight, SkyLight)
+     * - 检测洞穴开始位置和深度
+     */
+    private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
+                                       int minBuildHeight, int worldTopY,
+                                       LightMode lightMode, CaveModeParams caveParams) {
+        int chunkX = chunk.chunkX();
+        int chunkZ = chunk.chunkZ();
+
+        // 洞穴模式参数
+        int caveStart = caveParams.caveStart();
+        int caveDepth = caveParams.caveDepth();
+
+        for (int lx = 0; lx < 16; lx++) {
+            for (int lz = 0; lz < 16; lz++) {
+                int relX = chunkX * 16 + lx;
+                int relZ = chunkZ * 16 + lz;
+
+                // 边界检查
+                if (relX >= REGION_SIZE_BLOCKS || relZ >= REGION_SIZE_BLOCKS) {
+                    continue;  // 越界跳过
+                }
+
+                // 获取扫描起始高度（高度图值 + 3）
+                int startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
+                int heightMapValue = chunk.heightmap()[lx][lz];
+                int chunkBottomY = chunk.chunkBottomY();
+
+                ChunkSectionParser.BlockState topState = null;
+                int topY = -1;
+                int highestBlockY = -1;
+                String biomeName = null;
+                List<OverlayData> overlayList = new ArrayList<>();
+                byte surfaceLight = 0;
+
+                // 从最高 section 向下扫描
+                // 参考 Xaero WorldDataReader: 按 sectionY 从高到低排序
+                int sectionIndex = 0;  // 用于追踪当前 section 位置
+                for (ChunkSectionParser.SectionData section : chunk.sections()) {
+                    if (section.blockPalette().isEmpty()) continue;
+
+                    int sectionY = section.sectionY();
+                    int sectionBaseY = sectionY * 16;
+                    int sectionTopY = sectionBaseY + 15;
+
+                    if (sectionTopY < chunkBottomY) continue;
+
+                    // 计算扫描起始高度
+                    // 参考 Xaero WorldDataReader.java:425
+                    // startHeight = heightMapValue + 3 (或 sectionBasedHeight)
+                    // 如果不是第一个 section，额外 +1 (i > 0 && ++startHeight)
+                    int effectiveStartY = startY;
+                    if (sectionIndex > 0) {
+                        effectiveStartY = Math.min(startY + 1, worldTopY - 1);
+                    }
+
+                    // 如果高度图值低于 chunkBottomY，使用 section 顶部
+                    if (heightMapValue < chunkBottomY) {
+                        effectiveStartY = sectionTopY;
+                    }
+
+                    sectionIndex++;
+
+                    // 单方块 palette section - 需要逐层扫描确定实际高度
+                    if (section.blockPalette().size() == 1 && section.blockData() == null) {
+                        ChunkSectionParser.BlockState singleState = section.blockPalette().get(0);
+                        if (singleState.isAir()) continue;
+
+                        // 从该 section 的最高层向下扫描
+                        int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
+                        if (scanStartY < 0) scanStartY = 15;
+
+                        for (int ly = scanStartY; ly >= 0; ly--) {
+                            int worldY = sectionBaseY + ly;
+
+                            // 检查含水方块（方块本身作为表面 + 同层水overlay）
+                            // 含水方块需要添加水 overlay 来表示水覆盖效果
+                            // opacity 使用水的 lightBlock 值，与 Xaero 一致
+                            if (BlockPropertyResolver.isWaterloggedSurface(singleState.name(), singleState.properties())) {
+                                topState = singleState;
+                                topY = worldY;
+                                data.heightMap[relX][relZ] = topY;
+
+                                // 含水方块添加同层水 overlay（使用水的 lightBlock）
+                                int opacity = BlockPropertyResolver.getLightBlock("minecraft:water");
+                                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight);
+                                if (highestBlockY < 0) highestBlockY = worldY;
+
+                                surfaceLight = overlayLight;
+                                biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                                break;
+                            }
+
+                            boolean shouldOverlay = BlockPropertyResolver.shouldOverlay(singleState.name());
+
+                            if (shouldOverlay) {
+                                // 使用 lightBlock 作为 opacity（Xaero 方式）
+                                int opacity = BlockPropertyResolver.getLightBlock(singleState.name());
+                                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                                addOverlay(overlayList, singleState.name(), worldY, opacity, overlayLight);
+                                if (highestBlockY < 0) highestBlockY = worldY;
+                                continue;  // 继续向下找表面
+                            }
+
+                            // 非透明方块 = 表面
+                            topState = singleState;
+                            topY = worldY;
+                            if (highestBlockY < 0) highestBlockY = worldY;
+                            data.heightMap[relX][relZ] = topY;
+
+                            // 计算光照（使用光照模式）
+                            surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
+                                heightMapValue, overlayList, lightMode);
+
+                            biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                            break;
+                        }
+
+                        if (topState != null) break;  // 找到表面后跳出 section 循环
+                        continue;  // 继续下一个 section
+                    }
+
+                    // 多方块 palette - 需要从位数组读取
+                    // 确定在 section 内的起始局部 Y
+                    int localStartY = 15;
+                    if (effectiveStartY >= sectionBaseY && effectiveStartY <= sectionTopY) {
+                        localStartY = effectiveStartY - sectionBaseY;
+                    }
+
+                    // 从 localStartY 向下扫描
+                    for (int ly = localStartY; ly >= 0; ly--) {
+                        int worldY = sectionBaseY + ly;
+                        if (worldY < chunkBottomY) break;
+
+                        ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
+                        if (state.isAir()) continue;
+
+                        // Step 1: 检查含水方块（方块本身作为表面 + 同层水overlay）
+                        // 含水方块需要添加水 overlay 来表示水覆盖效果
+                        // opacity 使用水的 lightBlock 值，与 Xaero 一致
+                        if (BlockPropertyResolver.isWaterloggedSurface(state.name(), state.properties())) {
+                            topState = state;
+                            topY = worldY;
+                            data.heightMap[relX][relZ] = topY;
+
+                            // 含水方块添加同层水 overlay（使用水的 lightBlock）
+                            int opacity = BlockPropertyResolver.getLightBlock("minecraft:water");
+                            byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                            addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight);
+                            if (highestBlockY < 0) highestBlockY = worldY;
+
+                            surfaceLight = overlayLight;
+                            biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                            break;
+                        }
+
+                        // Step 2: 检查流体（纯水作为 overlay，继续向下找表面）
+                        // opacity 使用 lightBlock 值，与 Xaero 一致
+                        if (BlockPropertyResolver.isTranslucentFluid(state.name())) {
+                            int opacity = BlockPropertyResolver.getLightBlock(state.name());
+                            byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                            addOverlay(overlayList, state.name(), worldY, opacity, overlayLight);
+                            if (highestBlockY < 0) highestBlockY = worldY;
+                            continue;  // 继续向下扫描找表面
+                        }
+
+                        // Step 3: 检查隐形方块（跳过）
+                        if (BlockPropertyResolver.isInvisible(state.name())) {
+                            continue;
+                        }
+
+                        // Step 4: 检查透明方块（作为 overlay）
+                        // 参考 Xaero: overlayBuilder.build(state, state.getLightBlock(...), light, ...)
+                        if (BlockPropertyResolver.isTransparent(state.name())) {
+                            int opacity = BlockPropertyResolver.getLightBlock(state.name());
+                            byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                            addOverlay(overlayList, state.name(), worldY, opacity, overlayLight);
+                            if (highestBlockY < 0) highestBlockY = worldY;
+                            continue;
+                        }
+
+                        // Step 5: 检查是否有地图颜色
+                        if (!BlockPropertyResolver.hasVanillaColor(state.name())) {
+                            continue;
+                        }
+
+                        // 找到可见的实体方块 = 表面
+                        topState = state;
+                        topY = worldY;
+                        data.heightMap[relX][relZ] = topY;
+
+                        // 计算光照（使用光照模式）
+                        surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
+                            heightMapValue, overlayList, lightMode);
+
+                        biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                        break;
+                    }
+
+                    if (topState != null) break;
+                }
+
+                // 记录像素数据
+                if (topState != null || !overlayList.isEmpty()) {
+                    data.hasData[relX][relZ] = true;
+                    data.blockNames[relX][relZ] = topState != null ? topState.name() : "minecraft:air";
+                    int topBlockYValue = (highestBlockY >= 0) ? highestBlockY : topY;
+                    data.topBlockY[relX][relZ] = topBlockYValue;
+                    data.biomeNames[relX][relZ] = biomeName;
+                    data.lightMap[relX][relZ] = surfaceLight;
+                    if (!overlayList.isEmpty()) {
+                        data.overlays[relX][relZ] = overlayList;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 计算表面有效光照值
+     *
+     * @param section Section 数据
+     * @param lx 局部 X
+     * @param ly 局部 Y
+     * @param lz 局部 Z
+     * @param worldY 世界 Y 坐标
+     * @param heightMapValue 高度图值
+     * @param overlayList overlay 列表
+     * @param lightMode 光照模式
+     * @return 有效光照值 (0-15)
+     */
+    private static byte calculateSurfaceLight(ChunkSectionParser.SectionData section,
+                                                int lx, int ly, int lz, int worldY,
+                                                int heightMapValue,
+                                                List<OverlayData> overlayList,
+                                                LightMode lightMode) {
+        byte blockLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+        byte skyLight = ChunkSectionParser.getSkyLight(section, lx, ly, lz);
+
+        // 检查是否有流体 overlay（水/熔岩）
+        boolean hasFluidOverlay = overlayList.stream()
+            .anyMatch(o -> BlockPropertyResolver.isWater(o.blockName));
+
+        // 检查是否有天空访问（位置高于高度图）
+        boolean hasSkyAccess = worldY >= heightMapValue;
+
+        // 发光方块检测
+        boolean isGlowing = BlockPropertyResolver.isGlowing(
+            ChunkSectionParser.getBlockStateAt(section, lx, ly, lz).name());
+
+        return lightMode.calculateEffectiveLight(
+            blockLight, skyLight, hasSkyAccess, hasFluidOverlay, isGlowing);
+    }
+
+    /**
+     * 序列化为 Xaero 格式
+     */
+    static byte[] serializeToXaeroFormat(MapRegionData data, int minBuildHeight) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (DataOutputStream dos = new DataOutputStream(baos)) {
+            // Version header
+            dos.writeByte(0xFF);
+            dos.writeInt((MAJOR_VERSION << 16) | MINOR_VERSION);
+
+            Map<String, Integer> blockPalette = new LinkedHashMap<>();
+            Map<String, Integer> biomePalette = new LinkedHashMap<>();
+
+            // 8x8 TileChunks
+            for (int tileChunkO = 0; tileChunkO < TILE_CHUNKS_PER_REGION; tileChunkO++) {
+                for (int tileChunkP = 0; tileChunkP < TILE_CHUNKS_PER_REGION; tileChunkP++) {
+                    dos.writeByte((tileChunkO << 4) | tileChunkP);
+
+                    // 4x4 Tiles
+                    for (int tileI = 0; tileI < TILES_PER_TILE_CHUNK; tileI++) {
+                        for (int tileJ = 0; tileJ < TILES_PER_TILE_CHUNK; tileJ++) {
+                            int baseX = tileChunkO * BLOCKS_PER_TILE_CHUNK + tileI * BLOCKS_PER_TILE;
+                            int baseZ = tileChunkP * BLOCKS_PER_TILE_CHUNK + tileJ * BLOCKS_PER_TILE;
+
+                            // 检查 tile 是否有数据
+                            boolean hasTile = false;
+                            for (int bx = 0; bx < BLOCKS_PER_TILE && !hasTile; bx++) {
+                                for (int bz = 0; bz < BLOCKS_PER_TILE && !hasTile; bz++) {
+                                    if (data.hasData[baseX + bx][baseZ + bz]) hasTile = true;
+                                }
+                            }
+
+                            if (!hasTile) {
+                                dos.writeInt(-1);
+                                continue;
+                            }
+
+                            // 16x16 pixels
+                            for (int bx = 0; bx < BLOCKS_PER_TILE; bx++) {
+                                for (int bz = 0; bz < BLOCKS_PER_TILE; bz++) {
+                                    int rx = baseX + bx;
+                                    int rz = baseZ + bz;
+
+                                    if (!data.hasData[rx][rz]) {
+                                        int emptyHeight = minBuildHeight;
+                                        int emptyParams = encodeHeightToParams(emptyHeight);
+                                        dos.writeInt(emptyParams);
+                                        continue;
+                                    }
+
+                                    String blockName = data.blockNames[rx][rz];
+                                    if (blockName == null) blockName = "minecraft:grass_block";
+                                    int height = data.heightMap[rx][rz];
+                                    int topY = data.topBlockY[rx][rz];
+                                    int topHeight = (topY >= 0) ? topY : height;
+                                    String biomeName = data.biomeNames[rx][rz];
+                                    int light = data.lightMap[rx][rz];
+                                    List<OverlayData> overlays = data.overlays[rx][rz];
+                                    boolean hasOverlays = overlays != null && !overlays.isEmpty();
+                                    boolean isGrass = BlockPropertyResolver.isGrassBlock(blockName);
+                                    boolean topHeightDifferent = (height != topHeight);
+
+                                    // Build params
+                                    int params = 0;
+                                    if (!isGrass) params |= 1;
+                                    if (hasOverlays) params |= 2;
+                                    params |= light << 8;
+                                    params |= encodeHeightToParams(height);
+                                    if (biomeName != null) params |= 0x100000;
+                                    if (topHeightDifferent) params |= 0x1000000;
+
+                                    // Mark new palette entries
+                                    if (!isGrass && !blockPalette.containsKey(blockName)) params |= 0x200000;
+                                    if (biomeName != null && !biomePalette.containsKey(biomeName)) params |= 0x400000;
+
+                                    dos.writeInt(params);
+
+                                    // BlockState data
+                                    if (!isGrass) {
+                                        if (blockPalette.containsKey(blockName)) {
+                                            dos.writeInt(blockPalette.get(blockName));
+                                        } else {
+                                            writeBlockStateNbt(blockName, dos);
+                                            blockPalette.put(blockName, blockPalette.size());
+                                        }
+                                    }
+
+                                    // TopHeight
+                                    if (topHeightDifferent) {
+                                        dos.writeByte(topHeight & 0xFF);
+                                    }
+
+                                    // Overlay data
+                                    if (hasOverlays) {
+                                        // overlays 已经在 addOverlay 中完成了累加，无需再合并
+                                        dos.writeByte(overlays.size());
+                                        for (OverlayData overlay : overlays) {
+                                            serializeOverlay(overlay, dos, blockPalette);
+                                        }
+                                    }
+
+                                    // Biome data
+                                    if (biomeName != null) {
+                                        if (biomePalette.containsKey(biomeName)) {
+                                            dos.writeInt(biomePalette.get(biomeName));
+                                        } else {
+                                            dos.writeUTF(biomeName);
+                                            biomePalette.put(biomeName, biomePalette.size());
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Tile footer
+                            dos.writeByte(1);
+                            dos.writeInt(Integer.MAX_VALUE);
+                            dos.writeByte(0);
+                        }
+                    }
+                }
+            }
+        }
+        return baos.toByteArray();
+    }
+
+    private static int encodeHeightToParams(int height) {
+        return (height & 0xFF) << 12 | ((height >> 8) & 0xF) << 25;
+    }
+
+    private static void writeBlockStateNbt(String blockName, DataOutputStream dos) throws IOException {
+        ByteArrayOutputStream nbtBaos = new ByteArrayOutputStream();
+        try (DataOutputStream nbtDos = new DataOutputStream(nbtBaos)) {
+            nbtDos.writeByte(10);  // TAG_Compound
+            nbtDos.writeShort(0);  // empty name
+            nbtDos.writeByte(8);   // TAG_String
+            nbtDos.writeUTF("Name");
+            nbtDos.writeUTF(blockName);
+            nbtDos.writeByte(0);   // TAG_End
+        }
+        dos.write(nbtBaos.toByteArray());
+    }
+
+    private static void serializeOverlay(OverlayData overlay, DataOutputStream dos,
+                                          Map<String, Integer> blockPalette) throws IOException {
+        boolean isWater = BlockPropertyResolver.isWater(overlay.blockName);
+        int opacity = overlay.opacity;
+        int light = overlay.light;
+
+        int overlayParams = 0;
+        if (!isWater) overlayParams |= 1;
+        overlayParams |= light << 4;
+        overlayParams |= opacity << 11;
+        if (!isWater && !blockPalette.containsKey(overlay.blockName)) {
+            overlayParams |= 0x400;
+        }
+
+        dos.writeInt(overlayParams);
+
+        if (!isWater) {
+            if (blockPalette.containsKey(overlay.blockName)) {
+                dos.writeInt(blockPalette.get(overlay.blockName));
+            } else {
+                writeBlockStateNbt(overlay.blockName, dos);
+                blockPalette.put(overlay.blockName, blockPalette.size());
+            }
+        }
+    }
+
+    // ========== 数据结构 ==========
+
+    /**
+     * 添加 overlay 到列表（实现 Xaero 的累加逻辑）
+     *
+     * 参考 Xaero OverlayBuilder.build():
+     * - 相同方块类型：increaseOpacity(lightBlock)
+     * - 不同方块类型：创建新 overlay 层
+     *
+     * @param overlayList overlay 列表
+     * @param blockName 方块名称
+     * @param y Y 坐标
+     * @param opacityToAdd 要添加的 opacity 值（lightBlock）
+     * @param light 光照值
+     */
+    private static void addOverlay(List<OverlayData> overlayList, String blockName, int y, int opacityToAdd, int light) {
+        // 限制单个添加值最大为 15
+        if (opacityToAdd > 15) {
+            opacityToAdd = 15;
+        }
+
+        // 检查最后一个 overlay 是否是相同方块类型
+        OverlayData lastOverlay = overlayList.isEmpty() ? null : overlayList.get(overlayList.size() - 1);
+        if (lastOverlay != null && lastOverlay.blockName.equals(blockName)) {
+            // 相同方块类型：累加 opacity（参考 Overlay.increaseOpacity）
+            lastOverlay.opacity = Math.min(15, lastOverlay.opacity + opacityToAdd);
+        } else {
+            // 不同方块类型：创建新 overlay 层
+            overlayList.add(new OverlayData(blockName, y, opacityToAdd, light));
+        }
+    }
+
+    static class OverlayData {
+        final String blockName;
+        final int y;
+        int opacity;  // 可修改，用于累加
+        final int light;
+
+        OverlayData(String blockName, int y, int opacity, int light) {
+            this.blockName = blockName;
+            this.y = y;
+            this.opacity = opacity;
+            this.light = light;
+        }
+    }
+
+    static class MapRegionData {
+        final String[][] blockNames;
+        final int[][] topBlockY;
+        final String[][] biomeNames;
+        final int[][] heightMap;
+        final byte[][] lightMap;
+        final boolean[][] hasData;
+        final List<OverlayData>[][] overlays;
+        final int minBuildHeight;
+        final LightMode lightMode;  // 光照模式（用于调试/统计）
+
+        @SuppressWarnings("unchecked")
+        MapRegionData(int minBuildHeight, LightMode lightMode) {
+            this.minBuildHeight = minBuildHeight;
+            this.lightMode = lightMode;
+            blockNames = new String[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            topBlockY = new int[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            for (int x = 0; x < REGION_SIZE_BLOCKS; x++) {
+                Arrays.fill(topBlockY[x], -1);
+            }
+            biomeNames = new String[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            heightMap = new int[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            for (int x = 0; x < REGION_SIZE_BLOCKS; x++) {
+                Arrays.fill(heightMap[x], minBuildHeight);
+            }
+            lightMap = new byte[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            hasData = new boolean[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            overlays = new ArrayList[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+        }
+    }
+}
