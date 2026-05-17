@@ -31,7 +31,7 @@ public class ClientHashManager {
      * - Hash match → skip sync (file content identical)
      * - Hash mismatch + client timestamp older → sync
      *
-     * @param mapDir the mw$worldId directory
+     * @param mapDir the base directory (Multiplayer_<server>/null) or mw$worldId directory
      * @return map of relative path -> ClientMeta (timestamp in seconds + hash)
      */
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
@@ -42,28 +42,21 @@ public class ClientHashManager {
             return metaMap;
         }
 
-        // Get the dimension directory (null, DIM-1, etc.)
-        Path dimDir = mapDir.getParent(); // mw$worldId -> null/DIM-1/etc
-        if (dimDir == null) {
-            return metaMap;
-        }
-
-        Path serverDir = dimDir.getParent(); // null -> Multiplayer_<server>
+        // Determine the server directory (Multiplayer_<server>)
+        Path serverDir = findServerDir(mapDir);
         if (serverDir == null) {
+            LOGGER.warn("Could not find server directory from {}", mapDir);
             return metaMap;
         }
 
-        try (Stream<Path> walk = Files.walk(dimDir)) {
+        // Walk all dimension directories under server directory
+        try (Stream<Path> walk = Files.walk(serverDir)) {
             walk.filter(p -> p.toString().endsWith(".zip"))
                     .forEach(zipPath -> {
                         try {
                             // Extract region coordinates from filename
                             String fileName = zipPath.getFileName().toString();
                             if (!fileName.endsWith(".zip")) return;
-
-                            String coords = fileName.substring(0, fileName.length() - 4);
-                            String[] parts = coords.split("_");
-                            if (parts.length != 2) return;
 
                             // Get file modification time (seconds)
                             long timestampMillis = getFileModificationTime(zipPath);
@@ -72,17 +65,15 @@ public class ClientHashManager {
                             // Compute CRC32 hash
                             String hash = computeFileHash(zipPath);
 
-                            String relativePath = serverDir.relativize(zipPath).toString();
-                            relativePath = relativePath.replace("\\", "/");
-                            // Remove .zip extension for comparison with server format
-                            relativePath = relativePath.substring(0, relativePath.length() - 4);
+                            // Build relative path in server format
+                            String relativePath = buildRelativePath(zipPath, serverDir);
 
                             metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
 
                             LOGGER.debug("Region {}: ts={}s, hash={}", relativePath, timestampSeconds, hash);
 
-                        } catch (NumberFormatException e) {
-                            LOGGER.warn("Invalid region filename: {}", zipPath);
+                        } catch (Exception e) {
+                            LOGGER.warn("Invalid region filename: {}", zipPath, e);
                         }
                     });
         } catch (IOException e) {
@@ -92,6 +83,25 @@ public class ClientHashManager {
         LOGGER.info("Found {} regions with metadata", metaMap.size());
 
         return metaMap;
+    }
+
+    /**
+     * Find the server directory (Multiplayer_<server>) from a given path.
+     * Works with both base directory and mw$worldId directory.
+     */
+    private static Path findServerDir(Path mapDir) {
+        Path current = mapDir;
+
+        // Walk up the directory tree to find Multiplayer_<server>
+        while (current != null) {
+            String name = current.getFileName() != null ? current.getFileName().toString() : "";
+            if (name.startsWith("Multiplayer_")) {
+                return current;
+            }
+            current = current.getParent();
+        }
+
+        return null;
     }
 
     /**
@@ -141,6 +151,65 @@ public class ClientHashManager {
         } catch (IOException e) {
             LOGGER.error("Failed to get missing chunks info for {}", regionFile, e);
             return new HashSet<>();
+        }
+    }
+
+    /**
+     * Build relative path in server format: dimension/regionX_regionZ
+     * Converts Xaero's dimension names to Minecraft dimension names:
+     * - null → overworld
+     * - DIM-1 → the_nether
+     * - DIM1 → the_end
+     * Removes mw$worldId directory level.
+     *
+     * @param zipPath the zip file path
+     * @param serverDir the Multiplayer_<server> directory
+     * @return relative path in server format (without .zip extension)
+     */
+    private static String buildRelativePath(Path zipPath, Path serverDir) {
+        // Get relative path from server directory
+        String relative = serverDir.relativize(zipPath).toString();
+        relative = relative.replace("\\", "/");
+
+        // Remove .zip extension
+        if (relative.endsWith(".zip")) {
+            relative = relative.substring(0, relative.length() - 4);
+        }
+
+        // Parse path components: dimension/mw$worldId/regionX_regionZ
+        String[] parts = relative.split("/");
+        if (parts.length < 3) {
+            LOGGER.warn("Unexpected path format: {}", relative);
+            return relative;
+        }
+
+        String xaeroDim = parts[0];
+        String regionCoords = parts[parts.length - 1];  // Last part is regionX_regionZ
+
+        // Convert Xaero dimension to Minecraft dimension
+        String mcDim = convertXaeroDimension(xaeroDim);
+
+        // Build server format: dimension/regionX_regionZ
+        return mcDim + "/" + regionCoords;
+    }
+
+    /**
+     * Convert Xaero's dimension directory name to Minecraft dimension name.
+     * - null → overworld
+     * - DIM-1 → the_nether
+     * - DIM1 → the_end
+     * - others → keep as-is
+     */
+    private static String convertXaeroDimension(String xaeroDim) {
+        switch (xaeroDim) {
+            case "null":
+                return "overworld";
+            case "DIM-1":
+                return "the_nether";
+            case "DIM1":
+                return "the_end";
+            default:
+                return xaeroDim;
         }
     }
 }
