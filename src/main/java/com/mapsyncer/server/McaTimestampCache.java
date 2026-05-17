@@ -10,6 +10,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -47,7 +48,7 @@ public class McaTimestampCache {
     }
 
     /**
-     * 从文件加载缓存
+     * 从文件加载缓存（使用 Properties 格式，人类可读）
      */
     private void loadCache() {
         if (!Files.exists(cacheFilePath)) {
@@ -55,20 +56,29 @@ public class McaTimestampCache {
             return;
         }
 
-        try (DataInputStream dis = new DataInputStream(Files.newInputStream(cacheFilePath))) {
-            int dimensionCount = dis.readInt();
-            for (int i = 0; i < dimensionCount; i++) {
-                String dimension = dis.readUTF();
-                int regionCount = dis.readInt();
-                Map<String, Long> dimMap = new HashMap<>();
-                for (int j = 0; j < regionCount; j++) {
-                    String regionKey = dis.readUTF();  // "x_z" 格式
-                    long timestamp = dis.readLong();
-                    dimMap.put(regionKey, timestamp);
+        try (InputStream is = Files.newInputStream(cacheFilePath)) {
+            Properties props = new Properties();
+            props.load(is);
+
+            for (String key : props.stringPropertyNames()) {
+                try {
+                    long timestamp = Long.parseLong(props.getProperty(key));
+                    // 解析键：格式为 "dimension/region_x_z"
+                    String[] parts = key.split("/");
+                    if (parts.length == 2) {
+                        String dimension = parts[0];
+                        String regionKey = parts[1];
+                        timestampCache.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>())
+                                     .put(regionKey, timestamp);
+                    }
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Invalid timestamp for {}: {}", key, props.getProperty(key));
                 }
-                timestampCache.put(dimension, dimMap);
             }
-            LOGGER.info("Loaded timestamp cache with {} dimensions", dimensionCount);
+
+            int totalRegions = timestampCache.values().stream().mapToInt(Map::size).sum();
+            LOGGER.info("Loaded timestamp cache: {} dimensions, {} regions",
+                timestampCache.size(), totalRegions);
         } catch (IOException e) {
             LOGGER.warn("Failed to load timestamp cache, will rebuild: {}", e.getMessage());
             timestampCache.clear();
@@ -76,34 +86,32 @@ public class McaTimestampCache {
     }
 
     /**
-     * 保存缓存到文件
+     * 保存缓存到文件（使用 Properties 格式，人类可读）
      */
     public void saveCache() {
         try {
             Files.createDirectories(cacheFilePath.getParent());
 
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            DataOutputStream dos = new DataOutputStream(baos);
-
-            dos.writeInt(timestampCache.size());
+            Properties props = new Properties();
             for (Map.Entry<String, Map<String, Long>> dimEntry : timestampCache.entrySet()) {
-                dos.writeUTF(dimEntry.getKey());
-                Map<String, Long> dimMap = dimEntry.getValue();
-                dos.writeInt(dimMap.size());
-                for (Map.Entry<String, Long> regionEntry : dimMap.entrySet()) {
-                    dos.writeUTF(regionEntry.getKey());
-                    dos.writeLong(regionEntry.getValue());
+                String dimension = dimEntry.getKey();
+                for (Map.Entry<String, Long> regionEntry : dimEntry.getValue().entrySet()) {
+                    // 格式：dimension/region_x_z = timestamp
+                    String key = dimension + "/" + regionEntry.getKey();
+                    props.setProperty(key, String.valueOf(regionEntry.getValue()));
                 }
             }
 
-            dos.flush();
-
             // 先写入临时文件，再原子替换
             Path tempFile = cacheFilePath.resolveSibling(CACHE_FILE_NAME + ".temp");
-            Files.write(tempFile, baos.toByteArray());
+            try (OutputStream os = Files.newOutputStream(tempFile)) {
+                props.store(os, "MCA file modification timestamps for incremental update detection");
+            }
             Files.move(tempFile, cacheFilePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            LOGGER.info("Saved timestamp cache to {}", cacheFilePath);
+            int totalRegions = timestampCache.values().stream().mapToInt(Map::size).sum();
+            LOGGER.info("Saved timestamp cache: {} dimensions, {} regions to {}",
+                timestampCache.size(), totalRegions, cacheFilePath);
         } catch (IOException e) {
             LOGGER.error("Failed to save timestamp cache: {}", e.getMessage());
         }

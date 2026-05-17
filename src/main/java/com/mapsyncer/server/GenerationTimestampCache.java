@@ -71,7 +71,7 @@ public class GenerationTimestampCache {
     }
 
     /**
-     * 保存时间戳缓存到文件
+     * 保存时间戳缓存到文件（使用 Properties 格式，人类可读）
      */
     public void save() {
         try {
@@ -83,7 +83,10 @@ public class GenerationTimestampCache {
             }
 
             try (OutputStream os = Files.newOutputStream(cacheFile)) {
-                props.store(os, "Generation timestamps for map regions");
+                // 使用人类可读的注释格式
+                props.store(os, "Generation timestamps for map regions (milliseconds since epoch)\n" +
+                    "Format: dimension/region_x_z = timestamp\n" +
+                    "Example: overworld/-1_-1 = 1745123456789");
             }
 
             LOGGER.info("Saved {} generation timestamps to cache", timestamps.size());
