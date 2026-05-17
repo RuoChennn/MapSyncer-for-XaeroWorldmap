@@ -24,7 +24,7 @@ public class ClientHashManager {
      * If client timestamp >= server timestamp, skip sync (client has newer data).
      *
      * @param mapDir the mw$worldId directory
-     * @return map of relative path -> modification timestamp (milliseconds)
+     * @return map of relative path -> modification timestamp (milliseconds, comparison uses seconds)
      */
     public static Map<String, Long> computeTimestampsForSync(Path mapDir) {
         Map<String, Long> timestamps = new HashMap<>();
