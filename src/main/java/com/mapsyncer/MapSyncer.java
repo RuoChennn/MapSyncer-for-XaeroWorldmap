@@ -1,5 +1,6 @@
 package com.mapsyncer;
 
+import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
 import com.mapsyncer.network.PacketHandler;
@@ -37,7 +38,7 @@ public class MapSyncer {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // Client-side initialization
             modBus.addListener(this::onRegisterKeyMappings);
-            modBus.addListener(com.mapsyncer.client.MapPacketReceiver::register);
+            modBus.addListener(MapPacketReceiver::register);
             LOGGER.info("MapSyncer initialized (client mode)");
         } else {
             // Server-side initialization
