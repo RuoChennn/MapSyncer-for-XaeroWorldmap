@@ -201,6 +201,7 @@ public class ConversionOrchestrator {
         LOGGER.info("Dimension {}: {} total regions, {} need update", dimPath, regions.size(), needsUpdate.size());
 
         List<RegionCoords> failedRegions = new ArrayList<>();
+        int skippedCount = 0;
         long generationTime = System.currentTimeMillis();  // Unified generation timestamp for this run
 
         // 使用独立 MCA 解析器转换需要更新的区域（更快，不加载 chunks）
@@ -243,6 +244,8 @@ public class ConversionOrchestrator {
             if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
                 // 文件存在且时间戳未更新，跳过
                 processedCount++;
+                skippedCount++;
+                LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
                 continue;
             }
 
@@ -278,6 +281,10 @@ public class ConversionOrchestrator {
                 LOGGER.warn("Failed region: ({}, {})", coords.x(), coords.z());
             }
         }
+
+        // 输出汇总信息
+        LOGGER.info("Dimension {} completed: {} converted, {} skipped (unchanged), {} failed",
+            dimPath, processedCount - skippedCount, skippedCount, failedRegions.size());
 
         // 保存时间戳缓存
         mcaCache.saveCache();
