@@ -168,9 +168,12 @@ public class McaTimestampCache {
             return true;  // 区域缓存不存在，需要生成
         }
 
-        if (currentTimestamp > cachedTimestamp) {
-            LOGGER.info("Region {} in {} has been updated (cached={}, current={}), will regenerate",
-                regionKey, dimension, cachedTimestamp, currentTimestamp);
+        // 比较时都转换为秒级，避免缓存存储时的精度损失
+        long currentSeconds = currentTimestamp / 1000;
+        long cachedSeconds = cachedTimestamp / 1000;
+        if (currentSeconds > cachedSeconds) {
+            LOGGER.info("Region {} in {} has been updated (cached={}s, current={}s), will regenerate",
+                regionKey, dimension, cachedSeconds, currentSeconds);
             return true;  // 文件已更新
         }
 
@@ -226,13 +229,17 @@ public class McaTimestampCache {
                     long currentTimestamp = getFileTimestamp(mcaFile);
                     Long cachedTimestamp = dimCache.get(regionKey);
 
-                    if (cachedTimestamp == null || currentTimestamp > cachedTimestamp) {
+                    // 比较时都转换为秒级，避免缓存存储时的精度损失
+                    long currentSeconds = currentTimestamp / 1000;
+                    long cachedSeconds = cachedTimestamp != null ? cachedTimestamp / 1000 : 0;
+
+                    if (cachedTimestamp == null || currentSeconds > cachedSeconds) {
                         needsRegeneration.add(new RegionScanner.RegionCoords(regionX, regionZ));
                         dimCache.put(regionKey, currentTimestamp);
 
                         if (cachedTimestamp != null) {
-                            LOGGER.info("Detected update in {} / {}: cached={}, current={}",
-                                dimension, regionKey, cachedTimestamp, currentTimestamp);
+                            LOGGER.info("Detected update in {} / {}: cached={}s, current={}s",
+                                dimension, regionKey, cachedSeconds, currentSeconds);
                         }
                     }
                 }

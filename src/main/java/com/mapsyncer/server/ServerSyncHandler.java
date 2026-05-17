@@ -219,10 +219,14 @@ public class ServerSyncHandler {
                         long clientTs = clientTimestamps.getOrDefault(normalizedPath, 0L);
                         long serverTs = serverTimestamps.getOrDefault(normalizedPath, 0L);
 
+                        // 比较时都转换为秒级，避免缓存存储时的精度损失
+                        long clientSeconds = clientTs / 1000;
+                        long serverSeconds = serverTs / 1000;
+
                         // Skip if client has newer or same-age data (client explored after server generated)
-                        if (clientTs >= serverTs && clientTs > 0) {
-                            LOGGER.debug("Skipping {}: client ts {} >= server ts {}",
-                                    normalizedPath, clientTs, serverTs);
+                        if (clientSeconds >= serverSeconds && clientTs > 0) {
+                            LOGGER.debug("Skipping {}: client {}s >= server {}s",
+                                    normalizedPath, clientSeconds, serverSeconds);
                             return;
                         }
 
@@ -237,8 +241,8 @@ public class ServerSyncHandler {
                             int regionZ = Integer.parseInt(coords[1]);
                             String dimension = parts.length > 1 ? parts[parts.length - 2] : "null";
                             diffs.add(new ChunkMapData(regionX, regionZ, dimension, data));
-                            LOGGER.debug("Will sync {}: server ts {}, client ts {}",
-                                    normalizedPath, serverTs, clientTs);
+                            LOGGER.debug("Will sync {}: server {}s, client {}s",
+                                    normalizedPath, serverSeconds, clientSeconds);
                         } catch (IOException e) {
                             LOGGER.error("Failed to read zip file: {}", zipPath, e);
                         }

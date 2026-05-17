@@ -123,7 +123,7 @@ public class GenerationTimestampCache {
     /**
      * 检查region是否需要同步
      * @param relativePath 相对路径
-     * @param clientTimestamp 客户端时间戳
+     * @param clientTimestamp 客户端时间戳（毫秒）
      * @return true表示需要同步（客户端不存在或客户端时间早于服务端）
      */
     public boolean needsSync(String relativePath, long clientTimestamp) {
@@ -139,9 +139,13 @@ public class GenerationTimestampCache {
             return true;
         }
 
+        // 比较时都转换为秒级，避免精度损失
+        long clientSeconds = clientTimestamp / 1000;
+        long serverSeconds = serverTimestamp / 1000;
+
         // 客户端时间早于服务端，需要同步
         // 客户端时间晚于或等于服务端，不需要同步（保留客户端数据）
-        return clientTimestamp < serverTimestamp;
+        return clientSeconds < serverSeconds;
     }
 
     /**
