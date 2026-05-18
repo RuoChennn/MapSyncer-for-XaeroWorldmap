@@ -234,7 +234,15 @@ public class ServerSyncHandler {
         for (String key : clientMeta.keySet()) {
             String[] parts = key.split("[/\\\\]");
             if (parts.length > 1) {
-                requestedDimensions.add(parts[0]);  // First part is dimension name
+                String dim = parts[0];
+                // Skip placeholder entries (used when client has no local data)
+                if (!key.contains("_placeholder_")) {
+                    requestedDimensions.add(dim);  // First part is dimension name
+                } else {
+                    // Placeholder indicates client wants full sync for this dimension
+                    requestedDimensions.add(dim);
+                    LOGGER.debug("Found placeholder for dimension {}, will sync all regions", dim);
+                }
             }
         }
         LOGGER.info("Client requesting dimensions: {}", requestedDimensions);

@@ -179,15 +179,49 @@ public class MapSyncerCommand {
 
         // 计算本地文件的元数据（时间戳+哈希）
         Map<String, ClientMeta> metaMap;
+
         if (dimension.equals("all")) {
             // 同步所有维度
             metaMap = ClientHashManager.computeMetaForSync(baseDir);
         } else {
-            Path mwDir = targetDir != null ? findMwDir(targetDir) : null;
+            // 转换用户友好名称到服务端维度名
+            String serverDim;
+            switch (dimension) {
+                case "overworld":
+                    serverDim = "overworld";
+                    break;
+                case "nether":
+                    serverDim = "the_nether";
+                    break;
+                case "end":
+                    serverDim = "the_end";
+                    break;
+                default:
+                    serverDim = dimension;
+            }
+
+            // 同步指定维度：必须找到该维度的目录，不能 fallback 到 baseDir
+            if (targetDir == null || !targetDir.toFile().exists()) {
+                mc.player.displayClientMessage(
+                        prefix().append(Component.translatable("mapsyncer.command.no_map_dir").withStyle(style -> style.withColor(0xFF5555))),
+                        false);
+                LOGGER.warn("Dimension directory not found for: {}", dimension);
+                return;  // 不发送请求
+            }
+
+            Path mwDir = findMwDir(targetDir);
             if (mwDir != null) {
+                // 只扫描指定维度的 mw$ 目录
                 metaMap = ClientHashManager.computeMetaForSync(mwDir);
             } else {
-                metaMap = ClientHashManager.computeMetaForSync(baseDir);
+                // 维度目录存在但没有 mw$ 子目录（客户端首次同步该维度）
+                // 添加占位符元数据，让服务端知道请求的维度
+                mc.player.displayClientMessage(
+                        prefix().append(Component.translatable("mapsyncer.command.sync_dimension", dimension).withStyle(style -> style.withColor(0xFFFFFF))),
+                        false);
+                LOGGER.info("No mw$ directory found in {}, sending placeholder for {}", targetDir, serverDim);
+                metaMap = new java.util.HashMap<>();
+                metaMap.put(serverDim + "/_placeholder_", new ClientMeta(0, "00000000"));
             }
         }
 
