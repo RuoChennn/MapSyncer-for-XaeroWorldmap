@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -40,7 +41,7 @@ public class RegionScanner {
 
         List<DimensionRegions> result = new ArrayList<>();
         for (DimensionNames dn : dimNames) {
-            RegionScanResult scanResult = scanRegionDir(server.getWorldPath(LevelResource.ROOT), dn.name());
+            RegionScanResult scanResult = scanRegionDir(server.getWorldPath(LevelResource.ROOT), dn.key());
             result.add(new DimensionRegions(dn.key(), scanResult.regions(), scanResult.skippedEmptyCount()));
         }
         return result;
@@ -48,8 +49,7 @@ public class RegionScanner {
 
     public static RegionScanResult scanDimension(ServerLevel level) {
         Path worldRoot = level.getServer().getWorldPath(LevelResource.ROOT);
-        String dimId = level.dimension().location().getPath();
-        return scanRegionDir(worldRoot, dimId);
+        return scanRegionDir(worldRoot, level.dimension());
     }
 
     /**
@@ -60,23 +60,35 @@ public class RegionScanner {
             Path worldRoot = level.getServer().getWorldPath(LevelResource.ROOT);
             if (!Files.exists(worldRoot)) return null;
             worldRoot = worldRoot.toRealPath();
-            String dimId = level.dimension().location().getPath();
-            Path regionDir = ".".equals(dimId) ? worldRoot.resolve("region") : worldRoot.resolve(dimId).resolve("region");
-            if (!Files.exists(regionDir)) regionDir = worldRoot.resolve("region");
-            return Files.exists(regionDir) ? regionDir.toRealPath() : null;
+
+            DimensionPathMapping mapping = DimensionPathMapping.getInstance();
+            String dimFolder = mapping.getFolderName(level.dimension());
+            Path regionDir = mapping.isOverworld(level.dimension().location().getPath())
+                ? worldRoot.resolve("region")
+                : worldRoot.resolve(dimFolder).resolve("region");
+
+            if (!Files.exists(regionDir)) {
+                LOGGER.warn("Region directory not found for dimension {} (folder: {})",
+                    level.dimension().location(), dimFolder);
+                return null;
+            }
+            return regionDir.toRealPath();
         } catch (IOException e) {
             LOGGER.error("Failed to get region directory", e);
             return null;
         }
     }
 
-    private static RegionScanResult scanRegionDir(Path worldRoot, String dimId) {
-        Path regionDir = worldRoot.resolve(dimId).resolve("region");
+    private static RegionScanResult scanRegionDir(Path worldRoot, net.minecraft.resources.ResourceKey<Level> dimensionKey) {
+        DimensionPathMapping mapping = DimensionPathMapping.getInstance();
+        String dimPath = dimensionKey.location().getPath();
+        String dimFolder = mapping.getFolderName(dimensionKey);
+        Path regionDir = mapping.isOverworld(dimPath)
+            ? worldRoot.resolve("region")
+            : worldRoot.resolve(dimFolder).resolve("region");
+
         if (!Files.exists(regionDir)) {
-            regionDir = worldRoot.resolve("region");
-        }
-        if (!Files.exists(regionDir)) {
-            LOGGER.warn("Region directory not found for dimension: {}", dimId);
+            LOGGER.warn("Region directory not found for dimension: {} (folder: {})", dimPath, dimFolder);
             return new RegionScanResult(List.of(), 0);
         }
         return scanRegionDirectory(regionDir);

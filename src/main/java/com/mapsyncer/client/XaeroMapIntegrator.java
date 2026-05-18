@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.network.ChunkMapData;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
@@ -800,27 +801,9 @@ public class XaeroMapIntegrator {
      * Format: dimension/regionX_regionZ (matching server's generation_cache format)
      */
     private static String buildRelativePathForCache(ChunkMapData chunk) {
-        // Convert dimension to server format
-        String serverDim = toServerDimension(chunk.dimension);
+        // Convert dimension to server format using unified mapping
+        String serverDim = DimensionPathMapping.getInstance().toServerDimension(chunk.dimension);
         return serverDim + "/" + chunk.regionX + "_" + chunk.regionZ;
-    }
-
-    /**
-     * Convert client dimension name to server format.
-     * Server uses: overworld, the_nether, the_end
-     */
-    private static String toServerDimension(String dimension) {
-        if (dimension == null || dimension.isEmpty() ||
-            dimension.equals("null") || dimension.equals("minecraft:overworld")) {
-            return "overworld";
-        }
-        if (dimension.equals("DIM-1") || dimension.equals("minecraft:the_nether")) {
-            return "the_nether";
-        }
-        if (dimension.equals("DIM1") || dimension.equals("minecraft:the_end")) {
-            return "the_end";
-        }
-        return dimension;
     }
 
     /**
@@ -859,24 +842,9 @@ public class XaeroMapIntegrator {
      * Convert server dimension name to Xaero's directory name.
      * Xaero uses "null" for the overworld dimension.
      */
-    private static String toXaeroDimension(String dimension) {
-        if (dimension == null || dimension.isEmpty() ||
-            dimension.equals("overworld") || dimension.equals("minecraft:overworld")) {
-            return "null";
-        }
-        // Handle other common dimension mappings
-        if (dimension.equals("the_nether") || dimension.equals("minecraft:the_nether")) {
-            return "DIM-1";
-        }
-        if (dimension.equals("the_end") || dimension.equals("minecraft:the_end")) {
-            return "DIM1";
-        }
-        return dimension;
-    }
-
     private static Path writeChunkDataAndGetDir(ChunkMapData chunk, Path serverDir, int worldId) {
         // Path: Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip
-        String xaeroDim = toXaeroDimension(chunk.dimension);
+        String xaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(chunk.dimension);
         Path dimDir = serverDir.resolve(xaeroDim);
         Path mwDir = dimDir.resolve("mw$" + worldId);
         Path outputFile = mwDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip");

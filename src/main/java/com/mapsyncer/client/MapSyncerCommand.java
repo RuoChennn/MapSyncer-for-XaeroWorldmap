@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mapsyncer.client.ClientHashManager.ClientMeta;
 import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
@@ -93,17 +94,18 @@ public class MapSyncerCommand {
      * 将 Xaero 的维度目录名转换为维度建议名称
      */
     private static String xaeroDirToDimensionSuggestion(String dirName) {
-        // Xaero 目录名映射
-        switch (dirName) {
-            case "null":
+        // 使用统一映射获取服务端维度名
+        String serverDim = DimensionPathMapping.getInstance().toServerDimension(dirName);
+        // 转换为用户友好的命令名称
+        switch (serverDim) {
+            case "overworld":
                 return "overworld";
-            case "DIM-1":
+            case "the_nether":
                 return "nether";
-            case "DIM1":
+            case "the_end":
                 return "end";
             default:
-                // Mod 维度目录，直接使用目录名作为建议
-                return dirName;
+                return serverDim;
         }
     }
 
@@ -210,7 +212,7 @@ public class MapSyncerCommand {
 
     private static String normalizeDimension(String dim) {
         String lower = dim.toLowerCase();
-        // 原版维度快捷名称
+        // 原版维度快捷名称（用户友好名称）
         switch (lower) {
             case "overworld", "minecraft:overworld", "null":
                 return "overworld";
@@ -222,20 +224,24 @@ public class MapSyncerCommand {
                 return "all";
         }
 
-        // Mod 维度：保持原名称，允许用户输入任意维度名称
-        // 支持格式：modid:dimension 或 直接使用 Xaero 目录名（如 DIM7, custom_dim 等）
-        return dim;
+        // Mod 维度：使用统一映射转换
+        return DimensionPathMapping.getInstance().toServerDimension(dim);
     }
 
     private static String normalizeDimensionFromResource(String resourceLocation) {
-        if (resourceLocation.contains("overworld")) {
-            return "overworld";
-        } else if (resourceLocation.contains("the_nether")) {
-            return "nether";
-        } else if (resourceLocation.contains("the_end")) {
-            return "end";
+        // 使用统一映射转换
+        String serverDim = DimensionPathMapping.getInstance().toServerDimension(resourceLocation);
+        // 转换为用户友好的命令名称
+        switch (serverDim) {
+            case "overworld":
+                return "overworld";
+            case "the_nether":
+                return "nether";
+            case "the_end":
+                return "end";
+            default:
+                return serverDim;
         }
-        return resourceLocation;
     }
 
     private static Path getDimensionDir(Path baseDir, String dimension) {
@@ -243,22 +249,24 @@ public class MapSyncerCommand {
             return baseDir;
         }
 
-        String xaeroDim;
+        // 转换用户友好名称到服务端维度名
+        String serverDim;
         switch (dimension) {
             case "overworld":
-                xaeroDim = "null";
+                serverDim = "overworld";
                 break;
             case "nether":
-                xaeroDim = "DIM-1";
+                serverDim = "the_nether";
                 break;
             case "end":
-                xaeroDim = "DIM1";
+                serverDim = "the_end";
                 break;
             default:
-                // Mod 维度：直接使用用户输入的名称作为 Xaero 目录名
-                xaeroDim = dimension;
+                serverDim = dimension;
         }
 
+        // 使用统一映射获取 Xaero 目录名
+        String xaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(serverDim);
         return baseDir.resolve(xaeroDim);
     }
 

@@ -1,5 +1,6 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.util.DimensionPathMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -195,10 +196,7 @@ public class ClientHashManager {
 
     /**
      * Build relative path in server format: dimension/regionX_regionZ
-     * Converts Xaero's dimension names to Minecraft dimension names:
-     * - null → overworld
-     * - DIM-1 → the_nether
-     * - DIM1 → the_end
+     * Converts Xaero's dimension names to Minecraft dimension names.
      * Removes mw$worldId directory level.
      *
      * @param zipPath the zip file path
@@ -225,30 +223,10 @@ public class ClientHashManager {
         String xaeroDim = parts[0];
         String regionCoords = parts[parts.length - 1];  // Last part is regionX_regionZ
 
-        // Convert Xaero dimension to Minecraft dimension
-        String mcDim = convertXaeroDimension(xaeroDim);
+        // Convert Xaero dimension to Minecraft dimension using unified mapping
+        String mcDim = DimensionPathMapping.getInstance().toServerDimension(xaeroDim);
 
         // Build server format: dimension/regionX_regionZ
         return mcDim + "/" + regionCoords;
-    }
-
-    /**
-     * Convert Xaero's dimension directory name to Minecraft dimension name.
-     * - null → overworld
-     * - DIM-1 → the_nether
-     * - DIM1 → the_end
-     * - others → keep as-is
-     */
-    private static String convertXaeroDimension(String xaeroDim) {
-        switch (xaeroDim) {
-            case "null":
-                return "overworld";
-            case "DIM-1":
-                return "the_nether";
-            case "DIM1":
-                return "the_end";
-            default:
-                return xaeroDim;
-        }
     }
 }
