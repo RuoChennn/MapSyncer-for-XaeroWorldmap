@@ -1,0 +1,24 @@
+{
+  "mapsyncer.sync.start": "Starting sync...",
+  "mapsyncer.sync.waiting": "waiting...",
+  "mapsyncer.sync.completed": "Sync completed! %d regions in %ds",
+  "mapsyncer.sync.progress": "Progress: %d/%d (%d%%)",
+  "mapsyncer.sync.cancelled": "Sync cancelled",
+  "mapsyncer.sync.timeout": "Sync timed out, please try again",
+  "mapsyncer.sync.server_not_installed": "Server doesn't have MapSyncer installed!",
+
+  "mapsyncer.command.invalid_dimension": "Invalid dimension: %s. Use: overworld, nether, end, or all",
+  "mapsyncer.command.no_map_dir": "Unable to determine map directory. Are you connected to a server?",
+  "mapsyncer.command.sync_dimension": "Starting map sync for dimension: %s",
+  "mapsyncer.command.sync_current": "Starting map sync for current dimension: %s",
+  "mapsyncer.command.no_regions": "No existing regions found, requesting all from server...",
+  "mapsyncer.command.checking_regions": "Checking %d regions for updates (hash + timestamp)...",
+
+  "mapsyncer.cache.all_cleared": "All caches cleared, no reload needed",
+  "mapsyncer.cache.direct_reload": "Direct reload: %d regions",
+  "mapsyncer.cache.reload_failed": "Failed to trigger map reload",
+  "mapsyncer.cache.status": "Cache: %d cleared, %d reload",
+  "mapsyncer.cache.cleared": "Cache cleared...",
+
+  "mapsyncer.prefix": "[MapSyncer]"
+}

@@ -8,6 +8,7 @@ import com.mapsyncer.network.PacketHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -23,6 +24,13 @@ import java.util.Map;
 public class MapSyncerCommand {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapSyncerCommand.class);
+
+    /**
+     * 创建带颜色的前缀组件
+     */
+    private static MutableComponent prefix() {
+        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E)); // 黄色
+    }
 
     @SubscribeEvent
     public static void registerClientCommands(RegisterClientCommandsEvent event) {
@@ -56,7 +64,7 @@ public class MapSyncerCommand {
         String normalizedDim = normalizeDimension(dim);
         if (normalizedDim == null) {
             mc.player.displayClientMessage(
-                    Component.literal("无效的维度: " + dim + "。请使用: overworld, nether, end 或 all"),
+                    prefix().append(Component.translatable("mapsyncer.command.invalid_dimension", dim).withStyle(style -> style.withColor(0xFF5555))),
                     false);
             return 0;
         }
@@ -65,14 +73,14 @@ public class MapSyncerCommand {
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
         if (baseDir == null) {
             mc.player.displayClientMessage(
-                    Component.literal("无法确定地图目录。您是否已连接到服务器？"),
+                    prefix().append(Component.translatable("mapsyncer.command.no_map_dir").withStyle(style -> style.withColor(0xFF5555))),
                     false);
             return 0;
         }
 
         // 加载缓存并发送同步请求
         mc.player.displayClientMessage(
-                Component.literal("开始同步地图，维度: " + normalizedDim),
+                prefix().append(Component.translatable("mapsyncer.command.sync_dimension", normalizedDim).withStyle(style -> style.withColor(0xFFFFFF))),
                 false);
 
         sendSyncRequest(mc, baseDir, normalizedDim);
@@ -92,13 +100,13 @@ public class MapSyncerCommand {
         String normalizedDim = normalizeDimensionFromResource(currentDim);
 
         mc.player.displayClientMessage(
-                Component.literal("开始同步当前维度地图: " + normalizedDim),
+                prefix().append(Component.translatable("mapsyncer.command.sync_current", normalizedDim).withStyle(style -> style.withColor(0xFFFFFF))),
                 false);
 
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
         if (baseDir == null) {
             mc.player.displayClientMessage(
-                    Component.literal("无法确定地图目录"),
+                    prefix().append(Component.translatable("mapsyncer.command.no_map_dir").withStyle(style -> style.withColor(0xFF5555))),
                     false);
             return 0;
         }
@@ -130,11 +138,11 @@ public class MapSyncerCommand {
 
         if (metaMap.isEmpty()) {
             mc.player.displayClientMessage(
-                    Component.literal("未找到现有区域，请求服务器发送全部数据..."),
+                    prefix().append(Component.translatable("mapsyncer.command.no_regions").withStyle(style -> style.withColor(0xFFFFFF))),
                     false);
         } else {
             mc.player.displayClientMessage(
-                    Component.literal(String.format("正在检查 %d 个区域的更新（哈希+时间戳）...", metaMap.size())),
+                    prefix().append(Component.translatable("mapsyncer.command.checking_regions", metaMap.size()).withStyle(style -> style.withColor(0xFFFFFF))),
                     false);
         }
 

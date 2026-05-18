@@ -1,0 +1,24 @@
+{
+  "mapsyncer.sync.start": "开始同步...",
+  "mapsyncer.sync.waiting": "等待中...",
+  "mapsyncer.sync.completed": "同步完成! %d 个区域，耗时 %d 秒",
+  "mapsyncer.sync.progress": "进度: %d/%d (%d%%)",
+  "mapsyncer.sync.cancelled": "同步已取消",
+  "mapsyncer.sync.timeout": "同步超时，请重试",
+  "mapsyncer.sync.server_not_installed": "服务端没有安装MapSyncer哦~",
+
+  "mapsyncer.command.invalid_dimension": "无效的维度: %s。请使用: overworld, nether, end 或 all",
+  "mapsyncer.command.no_map_dir": "无法确定地图目录。您是否已连接到服务器？",
+  "mapsyncer.command.sync_dimension": "开始同步地图，维度: %s",
+  "mapsyncer.command.sync_current": "开始同步当前维度地图: %s",
+  "mapsyncer.command.no_regions": "未找到现有区域，请求服务器发送全部数据...",
+  "mapsyncer.command.checking_regions": "正在检查 %d 个区域的更新（哈希+时间戳）...",
+
+  "mapsyncer.cache.all_cleared": "所有缓存已清除，无需重新加载",
+  "mapsyncer.cache.direct_reload": "直接重新加载: %d 个区域",
+  "mapsyncer.cache.reload_failed": "触发地图重新加载失败",
+  "mapsyncer.cache.status": "缓存: %d 已清除, %d 需重新加载",
+  "mapsyncer.cache.cleared": "缓存已清除...",
+
+  "mapsyncer.prefix": "[MapSyncer]"
+}
