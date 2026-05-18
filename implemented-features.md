@@ -867,11 +867,11 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ---
 
-**文档版本**: 1.2
-**最后更新**: 2026-05-18
+**文档版本**: 1.3
+**最后更新**: 2026-05-19
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
-**状态标记说明**：✅ 已实现 | ⏳ 未实现/部分实现 | 📝 规划中 | ⚠️ 已知问题
+**状态标记说明**：✅ 已实现 | ⏳ 未实现/部分实现 | 📝 规划中 | ⚠️ 已知问题 | 🧪 未测试 | 🧪 未测试
 
 **近期更新**:
 - feat(client): 客户端 sync 指令支持动态列出已有维度数据
@@ -886,3 +886,33 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 - perf(client): 限制哈希计算并行度为2避免卡住游戏
 - fix(client): 修正客户端哈希缓存路径格式匹配服务端
 - refactor(cache): 改用 Properties 格式保存缓存文件，时间戳精度改为秒级
+
+### 🧪 2026-05-19 更新（未测试）
+
+- 🧪 feat(server): 地狱维度使用分层洞穴模式（CAVE mode），起始高度 Y=90
+  - RegionConverterStandalone 支持 CaveModeParams 参数
+  - ConversionOrchestrator 根据维度类型选择光照模式和洞穴参数
+  - 地狱使用 LightMode.CAVE，其他维度使用 LightMode.SURFACE
+- 🧪 refactor: 创建统一的 DimensionPathMapping 维度路径映射类
+  - 支持文件系统目录、Xaero 目录、ResourceLocation path 双向转换
+  - 原版维度映射：the_nether → DIM-1, the_end → DIM1, overworld → .
+  - 支持 Mod 维度动态注册映射（namespace:path → namespace$path）
+- 🧪 fix(server): 修复地狱维度路径映射问题
+  - RegionScanner 使用 DimensionPathMapping 获取正确目录名
+  - 服务端 generate 正确写入到 DIM-1 目录
+- 🧪 fix(server): generate 命令使用规范化维度名称
+  - 新增 getFriendlyName() 方法
+  - 命令建议和输出消息使用规范化名称（the_nether, the_end, overworld）
+  - 移除 minecraft: 前缀显示
+- 🧪 fix(server): 同步时根据客户端请求的维度过滤
+  - 从客户端元数据键中提取请求的维度列表
+  - 只处理客户端请求的维度的 region 文件
+  - 避免同步客户端未请求的维度
+- 🧪 fix(client): 单维度同步时不再 fallback 到所有维度
+  - 客户端同步指定维度时只扫描该维度的目录
+  - 移除 fallback 到 baseDir 的逻辑
+  - 客户端无本地数据时发送 placeholder 标识请求维度
+- 🧪 fix(server): 维度不存在提示（多语言支持）
+  - 检查请求维度的缓存目录是否存在
+  - 不存在时提示客户端需要先生成
+  - 新增翻译键：mapsyncer.sync.dimension_not_available
