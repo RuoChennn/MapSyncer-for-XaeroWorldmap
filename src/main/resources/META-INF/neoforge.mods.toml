@@ -12,13 +12,13 @@ authors="Ruo_Chen"
 [[dependencies.mapsyncer]]
 modId="neoforge"
 type="required"
-versionRange="[21.1.77,)"
+versionRange="[21.0,)"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.mapsyncer]]
 modId="minecraft"
 type="required"
-versionRange="[1.21.1,1.22)"
+versionRange="[1.21,1.22)"
 ordering="NONE"
 side="BOTH"
