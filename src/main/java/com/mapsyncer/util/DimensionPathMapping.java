@@ -281,6 +281,36 @@ public class DimensionPathMapping {
         return getXaeroFolder(normalized);
     }
 
+    /**
+     * 获取用户友好的维度显示名称
+     *
+     * 用于命令建议和日志显示：
+     * - 原版维度使用规范化名称 (the_nether, the_end, overworld)
+     * - mod 维度移除 minecraft: 前缀，保持原始 path
+     *
+     * @param dimPath 维度 path 或完整 ResourceLocation
+     * @return 用户友好的维度名称
+     */
+    public String getFriendlyName(String dimPath) {
+        String normalized = normalizeDimPath(dimPath);
+
+        // 移除 minecraft: 前缀，使用规范化名称
+        // 原版维度: the_nether, the_end, overworld
+        // mod 维度: 保持原始 path
+
+        return normalized;
+    }
+
+    /**
+     * 获取用户友好的维度显示名称
+     *
+     * @param dimensionKey 维度 ResourceKey
+     * @return 用户友好的维度名称
+     */
+    public String getFriendlyName(ResourceKey<Level> dimensionKey) {
+        return getFriendlyName(dimensionKey.location().getPath());
+    }
+
     // ========== 辅助方法 ==========
 
     /**

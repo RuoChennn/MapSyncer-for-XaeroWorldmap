@@ -7,6 +7,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -28,13 +29,13 @@ public class CacheGenerateCommand {
                         .then(Commands.argument("dimension", StringArgumentType.string())
                                 .suggests((ctx, builder) -> {
                                     MinecraftServer server = ctx.getSource().getServer();
+                                    DimensionPathMapping mapping = DimensionPathMapping.getInstance();
                                     // 动态列出所有已加载的维度（包括 mod 创建的维度）
+                                    // 原版维度使用用户友好名称，mod 维度使用原始 path
                                     for (ServerLevel level : server.getAllLevels()) {
                                         ResourceKey<Level> dimKey = level.dimension();
-                                        String dimPath = dimKey.location().getPath();
-                                        String dimFull = dimKey.location().toString();
-                                        builder.suggest(dimPath);
-                                        builder.suggest(dimFull);
+                                        String friendlyName = mapping.getFriendlyName(dimKey);
+                                        builder.suggest(friendlyName);
                                     }
                                     return builder.buildFuture();
                                 })
@@ -97,8 +98,9 @@ public class CacheGenerateCommand {
     private static int generateDimension(CommandContext<CommandSourceStack> ctx) {
         String dimensionId = StringArgumentType.getString(ctx, "dimension");
         MinecraftServer server = ctx.getSource().getServer();
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimensionId);
         ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting map generation for dimension: %s", dimensionId)), false);
+                String.format("Starting map generation for dimension: %s", friendlyName)), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimension(server, dimensionId);
@@ -115,8 +117,9 @@ public class CacheGenerateCommand {
     private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) {
         String dimensionId = StringArgumentType.getString(ctx, "dimension");
         MinecraftServer server = ctx.getSource().getServer();
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimensionId);
         ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting forced map generation for dimension: %s (ignoring cache)", dimensionId)), false);
+                String.format("Starting forced map generation for dimension: %s (ignoring cache)", friendlyName)), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimensionForce(server, dimensionId);
@@ -141,8 +144,9 @@ public class CacheGenerateCommand {
             return 0;
         }
 
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
         ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting single region conversion: (%d, %d) in %s", x, z, dimensionId)), false);
+                String.format("Starting single region conversion: (%d, %d) in %s", x, z, friendlyName)), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);
