@@ -155,6 +155,9 @@ public class RegionConverterStandalone {
         int caveStart = caveParams.caveStart();
         int caveDepth = caveParams.caveDepth();
 
+        // 洞穴模式判断
+        boolean isCaveMode = caveStart != Integer.MAX_VALUE;
+
         for (int lx = 0; lx < 16; lx++) {
             for (int lz = 0; lz < 16; lz++) {
                 int relX = chunkX * 16 + lx;
@@ -165,10 +168,23 @@ public class RegionConverterStandalone {
                     continue;  // 越界跳过
                 }
 
-                // 获取扫描起始高度（高度图值 + 3）
-                int startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
+                // 计算扫描范围
+                // 地表模式：使用高度图作为起始高度
+                // 洞穴模式：使用固定的 caveStart 和 caveDepth
+                int startY;
+                int scanBottomY;
                 int heightMapValue = chunk.heightmap()[lx][lz];
                 int chunkBottomY = chunk.chunkBottomY();
+
+                if (isCaveMode) {
+                    // 洞穴模式：从 caveStart 向下扫描到 caveStart - caveDepth
+                    startY = caveStart;
+                    scanBottomY = Math.max(caveStart - caveDepth, minBuildHeight);
+                } else {
+                    // 地表模式：从高度图向下扫描
+                    startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
+                    scanBottomY = minBuildHeight;
+                }
 
                 ChunkSectionParser.BlockState topState = null;
                 int topY = -1;
@@ -186,21 +202,34 @@ public class RegionConverterStandalone {
                     int sectionY = section.sectionY();
                     int sectionBaseY = sectionY * 16;
                     int sectionTopY = sectionBaseY + 15;
+                    int sectionBottomY = sectionBaseY;
+
+                    // 洞穴模式：跳过高于 caveStart 的 section
+                    if (isCaveMode && sectionTopY > startY) continue;
+
+                    // 跳过低于扫描底部的 section
+                    if (sectionBottomY < scanBottomY) continue;
 
                     if (sectionTopY < chunkBottomY) continue;
 
                     // 计算扫描起始高度
                     // 参考 Xaero WorldDataReader.java:425
-                    // startHeight = heightMapValue + 3 (或 sectionBasedHeight)
+                    // 地表模式：startHeight = heightMapValue + 3 (或 sectionBasedHeight)
+                    // 洞穴模式：startHeight = caveStart
                     // 如果不是第一个 section，额外 +1 (i > 0 && ++startHeight)
                     int effectiveStartY = startY;
                     if (sectionIndex > 0) {
                         effectiveStartY = Math.min(startY + 1, worldTopY - 1);
                     }
 
-                    // 如果高度图值低于 chunkBottomY，使用 section 顶部
-                    if (heightMapValue < chunkBottomY) {
+                    // 地表模式：如果高度图值低于 chunkBottomY，使用 section 顶部
+                    if (!isCaveMode && heightMapValue < chunkBottomY) {
                         effectiveStartY = sectionTopY;
+                    }
+
+                    // 洞穴模式：确保起始高度不超过 section 顶部
+                    if (isCaveMode) {
+                        effectiveStartY = Math.min(effectiveStartY, sectionTopY);
                     }
 
                     sectionIndex++;
@@ -214,8 +243,14 @@ public class RegionConverterStandalone {
                         int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
                         if (scanStartY < 0) scanStartY = 15;
 
-                        for (int ly = scanStartY; ly >= 0; ly--) {
+                        // 洞穴模式：计算 section 内的扫描底部
+                        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
+
+                        for (int ly = scanStartY; ly >= localScanBottomY; ly--) {
                             int worldY = sectionBaseY + ly;
+
+                            // 洞穴模式：低于扫描底部时停止
+                            if (worldY < scanBottomY) break;
 
                             // 检查含水方块（方块本身作为表面 + 同层水overlay）
                             // 含水方块需要添加水 overlay 来表示水覆盖效果
@@ -272,9 +307,15 @@ public class RegionConverterStandalone {
                         localStartY = effectiveStartY - sectionBaseY;
                     }
 
+                    // 洞穴模式：计算 section 内的扫描底部
+                    int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
+
                     // 从 localStartY 向下扫描
-                    for (int ly = localStartY; ly >= 0; ly--) {
+                    for (int ly = localStartY; ly >= localScanBottomY; ly--) {
                         int worldY = sectionBaseY + ly;
+
+                        // 低于扫描底部时停止
+                        if (worldY < scanBottomY) break;
                         if (worldY < chunkBottomY) break;
 
                         ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
@@ -574,6 +615,11 @@ public class RegionConverterStandalone {
      * - 相同方块类型：increaseOpacity(lightBlock)
      * - 不同方块类型：创建新 overlay 层
      *
+     * 重要修复：对于 lightBlock=0 的透明方块（海草、海带等），
+     * 设置最小 opacity=1，确保颜色能够正确显示。
+     * Xaero 客户端从纹理获取颜色时不完全依赖 opacity，
+     * 但服务端生成的数据需要正确的 opacity 才能渲染。
+     *
      * @param overlayList overlay 列表
      * @param blockName 方块名称
      * @param y Y 坐标
@@ -584,6 +630,18 @@ public class RegionConverterStandalone {
         // 限制单个添加值最大为 15
         if (opacityToAdd > 15) {
             opacityToAdd = 15;
+        }
+
+        // 关键修复：透明植物类方块（海草、海带等）的 lightBlock=0，
+        // 导致 opacity=0，颜色无法显示。设置最小 opacity=1。
+        // 这些方块是 TransparentBlock 类，有颜色但 lightBlock=0。
+        if (opacityToAdd == 0 && !BlockPropertyResolver.isWater(blockName)) {
+            // 检查是否是水生植物或透明植物
+            String blockId = blockName.toLowerCase();
+            if (blockId.contains("seagrass") || blockId.contains("kelp") ||
+                BlockPropertyResolver.isTransparent(blockName)) {
+                opacityToAdd = 1;  // 最小 opacity，确保颜色可见
+            }
         }
 
         // 检查最后一个 overlay 是否是相同方块类型

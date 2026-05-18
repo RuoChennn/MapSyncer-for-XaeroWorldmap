@@ -220,9 +220,22 @@ public class ConversionOrchestrator {
         int minBuildHeight = level.getMinBuildHeight();
         int worldTopY = level.getMaxBuildHeight();
 
-        // 默认使用地表模式（未来可从配置读取）
-        LightMode lightMode = LightMode.SURFACE;
-        CaveModeParams caveParams = CaveModeParams.NONE;
+        // 根据维度类型选择光照模式和洞穴参数
+        // 地狱使用分层洞穴模式，起始高度 Y=90，深度覆盖到世界底部
+        // 其他维度使用地表模式
+        LightMode lightMode;
+        CaveModeParams caveParams;
+        if (dimRegions.dimension() == Level.NETHER) {
+            lightMode = LightMode.CAVE;
+            // 地狱分层模式：起始高度90，深度覆盖整个世界高度范围
+            // 地狱世界高度通常是 0-128，所以深度设为 90 即可覆盖到底部
+            int caveDepth = Math.max(30, 90 - minBuildHeight);  // 确保覆盖到世界底部
+            caveParams = new CaveModeParams(90, caveDepth);
+            LOGGER.info("Nether dimension: using CAVE mode with caveStart=90, caveDepth={}", caveDepth);
+        } else {
+            lightMode = LightMode.SURFACE;
+            caveParams = CaveModeParams.NONE;
+        }
 
         // 使用时间戳缓存检测需要更新的区域
         McaTimestampCache mcaCache = getTimestampCache();

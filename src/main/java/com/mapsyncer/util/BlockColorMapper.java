@@ -163,6 +163,17 @@ public class BlockColorMapper {
         patternColors.put("dandelion", 0xFFFF00);
         patternColors.put("orchid", 0x3399FF);
 
+        // 双层花 - 需要根据 half 属性处理
+        // 向日葵上半部分（花头）- 黄色
+        patternColors.put("sunflower_upper", 0xFFD700);
+        // 向日葵下半部分（茎）- 绿色（已在 PLANT 覆盖）
+        // 玫瑰丛上半部分（花）- 红色
+        patternColors.put("rose_bush_upper", 0xFF3333);
+        // 牡丹上半部分（花）- 粉色
+        patternColors.put("peony_upper", 0xFFB6C1);
+        // 猪笼草上半部分（花）- 紫色
+        patternColors.put("pitcher_plant_upper", 0x9932CC);
+
         // 羊毛类
         patternColors.put("wool", 0xFFFFFF);
         patternColors.put("_wool", 0xFFFFFF);
@@ -200,6 +211,29 @@ public class BlockColorMapper {
     public static int getBlockColor(BlockState state) {
         String blockName = getKey(state);
         return blockColorCache.computeIfAbsent(blockName, name -> computeColor(state, name));
+    }
+
+    /**
+     * 获取方块颜色（通过方块名称和属性）
+     * 用于处理需要根据属性确定颜色的方块（如双层花的 half 属性）
+     *
+     * @param blockName 方块名称
+     * @param properties 方块属性
+     * @return 颜色值
+     */
+    public static int getBlockColorWithProperties(String blockName, Map<String, String> properties) {
+        // 特殊处理：双层花的 half 属性
+        if (properties != null && properties.containsKey("half")) {
+            String half = properties.get("half");
+            String key = blockName + "_" + half;
+            Integer specialColor = patternColors.get(key.toLowerCase());
+            if (specialColor != null) {
+                return specialColor;
+            }
+        }
+
+        // 默认使用方块名称获取颜色
+        return getBlockColorByName(blockName);
     }
 
     /**

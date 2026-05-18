@@ -265,25 +265,49 @@ public class BlockPropertyResolver {
 
     /**
      * 检查方块是否为透明方块（作为 overlay）
-     * 参考 Xaero shouldOverlay 实现
+     * 参考 Xaero shouldOverlay 实现：
+     * 1. AirBlock 或 TransparentBlock 类 → overlay
+     * 2. 渲染类型是 translucent 的方块 → overlay
+     *
+     * 重要：树叶渲染类型是 cutout，不是 translucent，所以树叶不应该是 overlay！
      */
     private static boolean checkTransparency(Block block, BlockState state) {
         // 1. AirBlock 或 TransparentBlock 类（Xaero 方式）
+        // TransparentBlock 包括：玻璃、冰、遮光玻璃等
         if (block instanceof AirBlock || block instanceof TransparentBlock) {
             return true;
         }
 
-        // 2. 检查光照遮挡值：小于15的通常是透明方块
-        int lightBlock = getLightBlock(state);
-        if (lightBlock > 0 && lightBlock < 15) {
+        // 2. 流体方块（水、熔岩）- 使用 translucent 渲染
+        FluidState fluidState = state.getFluidState();
+        if (!fluidState.isEmpty()) {
+            return true;  // 流体使用 translucent 渲染
+        }
+
+        // 3. 水生植物（海带、海草）- TransparentBlock 子类，已在上面判断
+        // 但有些 mod 可能不继承 TransparentBlock，需要额外检查
+        String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
+        if (blockId.contains("kelp") || blockId.contains("seagrass")) {
             return true;
         }
 
-        // 3. 水生植物（海带、海草）
-        String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
-        if (block == Blocks.KELP || block == Blocks.KELP_PLANT ||
-            block == Blocks.SEAGRASS || block == Blocks.TALL_SEAGRASS ||
-            blockId.contains("kelp") || blockId.contains("seagrass")) {
+        // 4. 已知使用 translucent 渲染类型的方块
+        // 参考 Minecraft 渲染类型定义
+        // 注意：树叶使用 cutout 渲染，不是 translucent，所以不在这里
+
+        // 5. 检查是否有 translucent 渲染类型的线索
+        // 服务端无法直接调用客户端渲染 API，所以使用方块属性推断
+        // translucent 渲染的方块通常有较低的 lightBlock 值，但不包括树叶
+        // 树叶的 lightBlock = 1，但渲染类型是 cutout_mipped，不是 translucent
+
+        // 排除树叶：树叶虽然有 lightBlock = 1，但使用 cutout 渲染，不应作为 overlay
+        if (state.is(BlockTags.LEAVES)) {
+            return false;  // 树叶不作为 overlay，是实体方块
+        }
+
+        // 其他 lightBlock < 15 的方块可能是 translucent
+        int lightBlock = getLightBlock(state);
+        if (lightBlock > 0 && lightBlock < 15) {
             return true;
         }
 
