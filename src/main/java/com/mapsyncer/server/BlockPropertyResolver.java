@@ -6,14 +6,48 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.AirBlock;
+import net.minecraft.world.level.block.AttachedStemBlock;
+import net.minecraft.world.level.block.BambooSaplingBlock;
+import net.minecraft.world.level.block.BambooStalkBlock;
+import net.minecraft.world.level.block.BaseCoralPlantBlock;
+import net.minecraft.world.level.block.BigDripleafBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BushBlock;
+import net.minecraft.world.level.block.CactusBlock;
+import net.minecraft.world.level.block.CaveVinesBlock;
+import net.minecraft.world.level.block.CaveVinesPlantBlock;
+import net.minecraft.world.level.block.ChorusFlowerBlock;
+import net.minecraft.world.level.block.ChorusPlantBlock;
+import net.minecraft.world.level.block.CropBlock;
+import net.minecraft.world.level.block.DeadBushBlock;
 import net.minecraft.world.level.block.DoublePlantBlock;
 import net.minecraft.world.level.block.FlowerBlock;
+import net.minecraft.world.level.block.GrowingPlantBlock;
+import net.minecraft.world.level.block.GrowingPlantBodyBlock;
+import net.minecraft.world.level.block.GrowingPlantHeadBlock;
+import net.minecraft.world.level.block.KelpBlock;
+import net.minecraft.world.level.block.KelpPlantBlock;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.MushroomBlock;
+import net.minecraft.world.level.block.NetherWartBlock;
+import net.minecraft.world.level.block.PitcherCropBlock;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.SaplingBlock;
+import net.minecraft.world.level.block.SeagrassBlock;
+import net.minecraft.world.level.block.SmallDripleafBlock;
+import net.minecraft.world.level.block.StemBlock;
+import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
+import net.minecraft.world.level.block.TallGrassBlock;
+import net.minecraft.world.level.block.TallSeagrassBlock;
 import net.minecraft.world.level.block.TransparentBlock;
+import net.minecraft.world.level.block.TorchflowerCropBlock;
+import net.minecraft.world.level.block.TwistingVinesBlock;
+import net.minecraft.world.level.block.TwistingVinesPlantBlock;
+import net.minecraft.world.level.block.WaterlilyBlock;
+import net.minecraft.world.level.block.WeepingVinesBlock;
+import net.minecraft.world.level.block.WeepingVinesPlantBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.Fluid;
@@ -57,6 +91,7 @@ public class BlockPropertyResolver {
         boolean isTransparent,      // 透明方块（玻璃、冰等）
         boolean isInvisible,        // 隐形方块（扫描时跳过）
         boolean isFlower,
+        boolean isPlant,            // 植物（花、草、作物、蘑菇等）
         boolean isGrassBlock,
         boolean isGlowing,          // 发光方块
         int lightBlock,             // 光照遮挡值
@@ -143,6 +178,9 @@ public class BlockPropertyResolver {
             // 检查是否为花：使用 BlockTags.FLOWERS + 类判断
             boolean isFlower = checkIsFlower(block, defaultState);
 
+            // 检查是否为植物：使用基类 + 标签判断（更广泛）
+            boolean isPlant = checkIsPlant(block, defaultState, isFlower);
+
             // 检查是否为草方块
             boolean isGrassBlock = block == Blocks.GRASS_BLOCK;
 
@@ -164,7 +202,7 @@ public class BlockPropertyResolver {
 
             return new BlockProperties(
                 isAir, isWater, isLava, isFluid,
-                isTransparent, isInvisible, isFlower, isGrassBlock,
+                isTransparent, isInvisible, isFlower, isPlant, isGrassBlock,
                 isGlowing, lightBlock, lightEmission, canBeWaterlogged,
                 hasVanillaColor, hasMapColor
             );
@@ -325,14 +363,160 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 4. 特定的原版花（蘑菇不算花标签但算花类）
+        // 4. MushroomBlock 类（蘑菇）
+        if (block instanceof MushroomBlock) {
+            return true;
+        }
+
+        // 5. WaterlilyBlock 类（睡莲）
+        if (block instanceof WaterlilyBlock) {
+            return true;
+        }
+
+        // 6. 特定的原版花（蘑菇不算花标签但算花类）
         if (block == Blocks.BROWN_MUSHROOM || block == Blocks.RED_MUSHROOM) {
             return true;
         }
 
-        // 5. PitcherCropBlock（ Pitcher 植物）
+        // 7. PitcherCropBlock（Pitcher 植物）
+        if (block instanceof PitcherCropBlock) {
+            return true;
+        }
+
+        // 8. TorchflowerCropBlock（火炬花作物）
+        if (block instanceof TorchflowerCropBlock) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 检查方块是否为植物（花、草、作物、蘑菇、藤蔓等）
+     * 使用基类继承检查 + BlockTags 标签
+     */
+    private static boolean checkIsPlant(Block block, BlockState state, boolean isFlower) {
+        // 如果已经是花，则也是植物
+        if (isFlower) {
+            return true;
+        }
+
+        // 1. BushBlock - 基础植物类（大多数植物的基类）
+        if (block instanceof BushBlock) {
+            return true;
+        }
+
+        // 2. CropBlock - 作物类（小麦、胡萝卜、土豆、甜菜根等）
+        if (block instanceof CropBlock) {
+            return true;
+        }
+
+        // 3. StemBlock - 瓜茎类（南瓜茎、西瓜茎）
+        if (block instanceof StemBlock) {
+            return true;
+        }
+
+        // 4. AttachedStemBlock - 已结果的瓜茎（已结果的南瓜/西瓜）
+        if (block instanceof AttachedStemBlock) {
+            return true;
+        }
+
+        // 5. SaplingBlock - 树苗类
+        if (block instanceof SaplingBlock) {
+            return true;
+        }
+
+        // 6. TallGrassBlock - 高草类
+        if (block instanceof TallGrassBlock) {
+            return true;
+        }
+
+        // 7. DeadBushBlock - 死灌木
+        if (block instanceof DeadBushBlock) {
+            return true;
+        }
+
+        // 8. CactusBlock - 仙人掌
+        if (block instanceof CactusBlock) {
+            return true;
+        }
+
+        // 9. SugarCaneBlock - 甘蔗
+        if (block instanceof SugarCaneBlock) {
+            return true;
+        }
+
+        // 10. BambooStalkBlock / BambooSaplingBlock - 竹子
+        if (block instanceof BambooStalkBlock || block instanceof BambooSaplingBlock) {
+            return true;
+        }
+
+        // 11. NetherWartBlock - 地狱疣
+        if (block instanceof NetherWartBlock) {
+            return true;
+        }
+
+        // 12. SeagrassBlock / TallSeagrassBlock - 海草
+        if (block instanceof SeagrassBlock || block instanceof TallSeagrassBlock) {
+            return true;
+        }
+
+        // 13. KelpBlock / KelpPlantBlock - 海带
+        if (block instanceof KelpBlock || block instanceof KelpPlantBlock) {
+            return true;
+        }
+
+        // 14. GrowingPlantBlock / GrowingPlantBodyBlock / GrowingPlantHeadBlock - 生长植物（藤蔓类）
+        if (block instanceof GrowingPlantBlock || block instanceof GrowingPlantBodyBlock || block instanceof GrowingPlantHeadBlock) {
+            return true;
+        }
+
+        // 15. CaveVinesBlock / CaveVinesPlantBlock - 洞穴藤蔓（发光地衣）
+        if (block instanceof CaveVinesBlock || block instanceof CaveVinesPlantBlock) {
+            return true;
+        }
+
+        // 16. TwistingVinesBlock / TwistingVinesPlantBlock - 扭曲藤蔓
+        if (block instanceof TwistingVinesBlock || block instanceof TwistingVinesPlantBlock) {
+            return true;
+        }
+
+        // 17. WeepingVinesBlock / WeepingVinesPlantBlock - 垂泪藤蔓
+        if (block instanceof WeepingVinesBlock || block instanceof WeepingVinesPlantBlock) {
+            return true;
+        }
+
+        // 18. ChorusPlantBlock / ChorusFlowerBlock - 紫颂植物
+        if (block instanceof ChorusPlantBlock || block instanceof ChorusFlowerBlock) {
+            return true;
+        }
+
+        // 19. BaseCoralPlantBlock - 珊瑚植物基类
+        if (block instanceof BaseCoralPlantBlock) {
+            return true;
+        }
+
+        // 20. BigDripleafBlock / SmallDripleafBlock - 滴叶草
+        if (block instanceof BigDripleafBlock || block instanceof SmallDripleafBlock) {
+            return true;
+        }
+
+        // 21. 使用 BlockTags 检查（支持 mod 植物）
+        // CROPS 标签 - 作物
+        if (state.is(BlockTags.CROPS)) {
+            return true;
+        }
+
+        // 22. 名称模式匹配（备用，用于未使用标准基类的 mod 植物）
         String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
-        if (blockId.contains("pitcher") || blockId.contains("pitcher_crop")) {
+        if (blockId.contains("plant") || blockId.contains("crop") ||
+            blockId.contains("sapling") || blockId.contains("seed") ||
+            blockId.contains("vine") || blockId.contains("fern") ||
+            blockId.contains("bush") || blockId.contains("grass") ||
+            blockId.contains("kelp") || blockId.contains("seagrass") ||
+            blockId.contains("cactus") || blockId.contains("reed") ||
+            blockId.contains("stem") || blockId.contains("leaf") ||
+            blockId.contains("mushroom") || blockId.contains("fungus")) {
             return true;
         }
 
@@ -389,6 +573,18 @@ public class BlockPropertyResolver {
         boolean isFlower = name.contains("flower") || name.contains("rose") ||
                           name.contains("tulip") || name.contains("lily");
 
+        // 植物检测（名称模式匹配）
+        boolean isPlant = isFlower || name.contains("plant") || name.contains("crop") ||
+                         name.contains("sapling") || name.contains("seed") ||
+                         name.contains("vine") || name.contains("fern") ||
+                         name.contains("bush") || name.contains("grass") ||
+                         name.contains("kelp") || name.contains("seagrass") ||
+                         name.contains("cactus") || name.contains("reed") ||
+                         name.contains("stem") || name.contains("leaf") ||
+                         name.contains("mushroom") || name.contains("fungus") ||
+                         name.contains("wheat") || name.contains("carrot") ||
+                         name.contains("potato") || name.contains("beetroot");
+
         boolean isGrassBlock = name.contains("grass_block");
 
         boolean isGlowing = name.contains("glow") || name.contains("lantern") ||
@@ -408,7 +604,7 @@ public class BlockPropertyResolver {
 
         return new BlockProperties(
             isAir, isWater, isLava, isFluid,
-            isTransparent, isInvisible, isFlower, isGrassBlock,
+            isTransparent, isInvisible, isFlower, isPlant, isGrassBlock,
             isGlowing, lightBlock, lightEmission, canBeWaterlogged,
             hasVanillaColor, hasMapColor
         );
@@ -478,6 +674,10 @@ public class BlockPropertyResolver {
 
     public static boolean isFlower(String blockName) {
         return getProperties(blockName).isFlower();
+    }
+
+    public static boolean isPlant(String blockName) {
+        return getProperties(blockName).isPlant();
     }
 
     public static boolean isGrassBlock(String blockName) {
