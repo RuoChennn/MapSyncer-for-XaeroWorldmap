@@ -247,6 +247,18 @@ public class ServerSyncHandler {
         }
         LOGGER.info("Client requesting dimensions: {}", requestedDimensions);
 
+        // 检查请求的维度是否有缓存数据
+        for (String requestedDim : requestedDimensions) {
+            Path dimCacheDir = cacheDir.resolve(requestedDim);
+            if (!Files.exists(dimCacheDir) || !dimCacheDir.toFile().isDirectory()) {
+                serverPlayer.sendSystemMessage(Component.literal(
+                        String.format("Dimension '%s' map data not available. Run /mapsyncer generate %s first.",
+                                requestedDim, requestedDim)));
+                LOGGER.warn("Requested dimension {} has no cache data at {}", requestedDim, dimCacheDir);
+                // 继续处理其他维度，而不是直接返回
+            }
+        }
+
         try {
             Files.walk(cacheDir)
                     .filter(p -> p.toString().endsWith(".zip"))
