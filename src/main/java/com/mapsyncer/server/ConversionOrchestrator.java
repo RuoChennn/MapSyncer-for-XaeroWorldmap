@@ -75,7 +75,7 @@ public class ConversionOrchestrator {
         LOGGER.info("Starting conversion of {} regions across {} dimensions", totalCount, allRegions.size());
         try {
             for (DimensionRegions dimRegions : allRegions) {
-                convertDimension(server, dimRegions);
+                convertDimension(server, dimRegions, false);
             }
         } finally {
             isRunning = false;
@@ -108,7 +108,38 @@ public class ConversionOrchestrator {
         totalCount = regions.size();
         currentDimension = dimKey;
         try {
-            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()));
+            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()), false);
+        } finally {
+            isRunning = false;
+            currentStatus = "completed";
+        }
+    }
+
+    public static void generateDimensionForce(MinecraftServer server, String dimensionId) {
+        if (isRunning) {
+            LOGGER.warn("Conversion already in progress");
+            return;
+        }
+        isRunning = true;
+        processedCount = 0;
+        ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
+        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
+        ServerLevel level = server.getLevel(dimKey);
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
+
+        // Force save all chunks before reading .mca files
+        if (!saveAllChunks(server)) {
+            LOGGER.error("Failed to save all chunks, aborting map generation");
+            isRunning = false;
+            return;
+        }
+
+        RegionScanner.RegionScanResult scanResult = RegionScanner.scanDimension(level);
+        List<RegionCoords> regions = scanResult.regions();
+        totalCount = regions.size();
+        currentDimension = dimKey;
+        try {
+            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()), true);
         } finally {
             isRunning = false;
             currentStatus = "completed";
@@ -165,7 +196,7 @@ public class ConversionOrchestrator {
         finally { isRunning = false; currentStatus = "completed"; }
     }
 
-    private static void convertDimension(MinecraftServer server, DimensionRegions dimRegions) {
+    private static void convertDimension(MinecraftServer server, DimensionRegions dimRegions, boolean force) {
         ServerLevel level = server.getLevel(dimRegions.dimension());
         if (level == null) { LOGGER.error("Level not loaded"); return; }
 
@@ -196,10 +227,10 @@ public class ConversionOrchestrator {
         // 使用时间戳缓存检测需要更新的区域
         McaTimestampCache mcaCache = getTimestampCache();
         GenerationCache genCache = GenerationCache.getInstance(CACHE_DIR);
-        List<RegionCoords> needsUpdate = mcaCache.scanAndUpdate(dimPath, regionDir);
+        List<RegionCoords> needsUpdate = force ? dimRegions.regions() : mcaCache.scanAndUpdate(dimPath, regionDir);
 
         List<RegionCoords> regions = dimRegions.regions();
-        LOGGER.info("Dimension {}: {} total regions, {} need update", dimPath, regions.size(), needsUpdate.size());
+        LOGGER.info("Dimension {}: {} total regions, {} need update (force={})", dimPath, regions.size(), needsUpdate.size(), force);
 
         List<RegionCoords> failedRegions = new ArrayList<>();
         int skippedCount = 0;
@@ -238,42 +269,44 @@ public class ConversionOrchestrator {
             }
         }
 
-        // 也处理尚未生成过的区域（新增区域）
-        for (RegionCoords coords : regions) {
-            if (needsUpdate.contains(coords)) continue;  // 已处理
+        // 非 force 模式下，也处理尚未生成过的区域（新增区域）
+        if (!force) {
+            for (RegionCoords coords : regions) {
+                if (needsUpdate.contains(coords)) continue;  // 已处理
 
-            // 检查输出文件是否存在
-            if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
-                // 文件存在且时间戳未更新，跳过
-                processedCount++;
-                skippedCount++;
-                LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
-                continue;
-            }
-
-            // 新区域，需要生成
-            currentStatus = "Generating new region (" + coords.x() + ", " + coords.z() + ")";
-            Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
-
-            ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY);
-
-            if (converted != null) {
-                try {
-                    Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
-                    mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                    // Update generation cache with timestamp and hash
-                    String relativePath = dimPath + "/" + coords.x() + "_" + coords.z();
-                    genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
-                } catch (IOException e) {
-                    LOGGER.error("Failed to write region file", e);
-                    failedRegions.add(coords);
+                // 检查输出文件是否存在
+                if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
+                    // 文件存在且时间戳未更新，跳过
+                    processedCount++;
+                    skippedCount++;
+                    LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
                     continue;
                 }
-                processedCount++;
-                LOGGER.info("Generated new region ({}, {}): {}/{}", coords.x(), coords.z(), processedCount, totalCount);
-            } else {
-                failedRegions.add(coords);
+
+                // 新区域，需要生成
+                currentStatus = "Generating new region (" + coords.x() + ", " + coords.z() + ")";
+                Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
+
+                ConvertedRegion converted = RegionConverterStandalone.convertRegion(
+                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY);
+
+                if (converted != null) {
+                    try {
+                        Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
+                        mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
+                        // Update generation cache with timestamp and hash
+                        String relativePath = dimPath + "/" + coords.x() + "_" + coords.z();
+                        genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
+                    } catch (IOException e) {
+                        LOGGER.error("Failed to write region file", e);
+                        failedRegions.add(coords);
+                        continue;
+                    }
+                    processedCount++;
+                    LOGGER.info("Generated new region ({}, {}): {}/{}", coords.x(), coords.z(), processedCount, totalCount);
+                } else {
+                    failedRegions.add(coords);
+                }
             }
         }
 
@@ -346,7 +379,7 @@ public class ConversionOrchestrator {
         }
     }
 
-    private static ResourceKey<Level> parseDimensionId(String id, MinecraftServer server) {
+    public static ResourceKey<Level> parseDimensionId(String id, MinecraftServer server) {
         String normalized = id.toLowerCase();
 
         // 原版维度快捷名称

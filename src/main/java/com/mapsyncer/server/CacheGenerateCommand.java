@@ -12,6 +12,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 
 public class CacheGenerateCommand {
@@ -23,16 +24,23 @@ public class CacheGenerateCommand {
                         .executes(CacheGenerateCommand::generateAll)
                         .then(Commands.argument("dimension", StringArgumentType.string())
                                 .suggests((ctx, builder) -> {
-                                    builder.suggest("overworld");
-                                    builder.suggest("the_nether");
-                                    builder.suggest("the_end");
+                                    MinecraftServer server = ctx.getSource().getServer();
+                                    // 动态列出所有已加载的维度（包括 mod 创建的维度）
+                                    for (ServerLevel level : server.getAllLevels()) {
+                                        ResourceKey<Level> dimKey = level.dimension();
+                                        String dimPath = dimKey.location().getPath();
+                                        String dimFull = dimKey.location().toString();
+                                        builder.suggest(dimPath);
+                                        builder.suggest(dimFull);
+                                    }
                                     return builder.buildFuture();
                                 })
-                                .executes(CacheGenerateCommand::generateDimension))
-                        .then(Commands.literal("--region")
+                                .executes(CacheGenerateCommand::generateDimension)
                                 .then(Commands.argument("x", IntegerArgumentType.integer())
                                         .then(Commands.argument("z", IntegerArgumentType.integer())
-                                                .executes(CacheGenerateCommand::generateSingleRegion)))))
+                                                .executes(CacheGenerateCommand::generateSingleRegion)))
+                                .then(Commands.literal("force")
+                                        .executes(CacheGenerateCommand::generateDimensionForce))))
                 .then(Commands.literal("status")
                         .executes(CacheGenerateCommand::showStatus))
                 .then(Commands.literal("incremental")
@@ -86,14 +94,37 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) {
+        String dimensionId = StringArgumentType.getString(ctx, "dimension");
+        MinecraftServer server = ctx.getSource().getServer();
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                String.format("Starting forced map generation for dimension: %s (ignoring cache)", dimensionId)), false);
+
+        Thread worker = new Thread(() -> {
+            ConversionOrchestrator.generateDimensionForce(server, dimensionId);
+            ctx.getSource().sendSuccess(() -> Component.literal(
+                    String.format("Forced dimension generation completed: %d/%d regions",
+                            ConversionOrchestrator.getProcessedCount(),
+                            ConversionOrchestrator.getTotalCount())), false);
+        }, "xaero-map-generator");
+        worker.start();
+
+        return Command.SINGLE_SUCCESS;
+    }
+
     private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) {
+        String dimensionId = StringArgumentType.getString(ctx, "dimension");
         int x = IntegerArgumentType.getInteger(ctx, "x");
         int z = IntegerArgumentType.getInteger(ctx, "z");
         MinecraftServer server = ctx.getSource().getServer();
-        ResourceKey<Level> dimension = ctx.getSource().getLevel().dimension();
+        ResourceKey<Level> dimension = ConversionOrchestrator.parseDimensionId(dimensionId, server);
+        if (dimension == null) {
+            ctx.getSource().sendFailure(Component.literal("Unknown dimension: " + dimensionId));
+            return 0;
+        }
 
         ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting single region conversion: (%d, %d)", x, z)), false);
+                String.format("Starting single region conversion: (%d, %d) in %s", x, z, dimensionId)), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);

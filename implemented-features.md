@@ -28,11 +28,12 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 - 将每个 region 文件转换为 Xaero 格式的 `.zip` 文件
 - 输出到统一的缓存目录 `server_map_cache/`
 
-#### ✅ 单维度生成
+#### ⏳ 单维度生成
 - 支持指定维度单独生成
 - 支持快捷名称：`overworld`、`nether`、`end`
 - 支持完整维度 ID：`minecraft:the_nether`
-- 支持 mod 维度的 ResourceLocation 格式
+- 支持 mod 维度的 ResourceLocation 格式（未测试）
+- 动态列出所有已加载维度（包括 mod 维度）作为指令建议（未测试）
 
 #### ✅ 单区域生成
 - 支持生成指定坐标的单个区域
@@ -125,13 +126,16 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 命令 | 功能 | 权限要求 |
 |------|------|----------|
 | `/mapsyncer generate` | 生成所有维度地图缓存 | OP (level 4) |
-| `/mapsyncer generate <dimension>` | 生成指定维度缓存 | OP |
-| `/mapsyncer generate --region <x> <z>` | 生成单个区域 | OP |
+| `/mapsyncer generate <dimension>` | 生成指定维度缓存（增量模式） | OP |
+| `/mapsyncer generate <dimension> <x> <z>` | 生成指定维度的单个区域 | OP |
+| `/mapsyncer generate <dimension> force` | 强制生成维度（无视已有缓存） | OP |
 | `/mapsyncer status` | 查看生成进度和状态 | OP |
 | `/mapsyncer incremental off` | 禁用增量更新 | OP |
 | `/mapsyncer incremental tick [interval]` | 设置 TICK 模式 | OP |
 | `/mapsyncer incremental scheduled [hour] [minute]` | 设置定时模式 | OP |
 | `/mapsyncer incremental status` | 查看增量更新状态 | OP |
+
+**注**：mod 维度生成功能未测试，指令建议已支持动态列出所有已加载维度。
 
 ---
 
@@ -645,7 +649,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 │   └── ...
 ├── DIM1/                         # 末地
 │   └── ...
-├── <mod_dimension>/              # Mod 维度
+├── <mod_dimension>/              # Mod 维度（未测试）
 │   └── ...
 ├── mca_timestamps.cache          # MCA 修改时间缓存（旧格式）
 └── generation_cache.properties   # 生成时间戳+哈希缓存（新格式）
@@ -737,6 +741,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | LZ4 压缩不支持 | 暂不支持 LZ4 压缩的 MCA 文件 |
 | 大地图处理耗时 | 非常大的地图同步需要大量时间，但是增量挺快的 |
 | 单人世界未测试 | 主要针对多人服务器场景，我猜你单人也用不上 |
+| Mod 维度未测试 | 理论支持但未实际测试，建议先在小范围测试 |
 | 其他维度有限支持 | 主要测试主世界 |
 
 ### 12.3 性能考虑 ⚠️
@@ -866,6 +871,9 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 **状态标记说明**：✅ 已实现 | ⏳ 未实现/部分实现 | 📝 规划中 | ⚠️ 已知问题
 
 **近期更新**:
+- feat(server): 改进 generate 指令结构，支持 `<dim> [x] [z]` 和 `force` 参数
+- feat(server): 动态列出所有已加载维度作为指令建议（支持 mod 维度）
+- docs: 标记 mod 维度生成功能为未测试状态
 - feat(client): 实现客户端时间戳缓存与精准地图刷新机制
 - feat(server): 在转换日志中显示空MCA文件计数和总region数
 - feat(server): 扩展植物方块基类检查支持更多类型
