@@ -6,6 +6,7 @@ import com.mapsyncer.mca.RegionConverterStandalone.CaveModeParams;
 import com.mapsyncer.mca.RegionConverterStandalone.ConvertedRegion;
 import com.mapsyncer.server.RegionScanner.DimensionRegions;
 import com.mapsyncer.server.RegionScanner.RegionCoords;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -165,7 +166,9 @@ public class ConversionOrchestrator {
             return;
         }
 
-        Path outputDir = CACHE_DIR.resolve(dimension.location().getPath());
+        // 使用 Xaero 格式的维度目录名（与客户端保持一致）
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimension.location().getPath());
+        Path outputDir = CACHE_DIR.resolve(xaeroDimName);
         Path regionDir = RegionScanner.getRegionDir(level);
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", dimension);
@@ -201,8 +204,11 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded"); return; }
 
         currentDimension = dimRegions.dimension();
+        // 使用服务端维度名作为缓存 key（便于客户端识别）
         String dimPath = dimRegions.dimension().location().getPath();
-        Path outputDir = CACHE_DIR.resolve(dimPath);
+        // 使用 Xaero 格式的目录名存储文件（与客户端保持一致）
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+        Path outputDir = CACHE_DIR.resolve(xaeroDimName);
 
         try { Files.createDirectories(outputDir); } catch (IOException e) {
             LOGGER.error("Failed to create output directory: {}", outputDir, e);
@@ -212,7 +218,7 @@ public class ConversionOrchestrator {
         // 获取 region 目录路径
         Path regionDir = RegionScanner.getRegionDir(level);
         if (regionDir == null) {
-            LOGGER.error("Region directory not found for dimension: {}", dimPath);
+            LOGGER.error("Region directory not found for dimension: {}", xaeroDimName);
             return;
         }
 
@@ -267,8 +273,8 @@ public class ConversionOrchestrator {
                 try {
                     Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                     mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                    // Update generation cache with timestamp and hash
-                    String relativePath = dimPath + "/" + coords.x() + "_" + coords.z();
+                    // Update generation cache with timestamp and hash (使用 Xaero 格式的键)
+                    String relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
                     genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
                 } catch (IOException e) {
                     LOGGER.error("Failed to write region file", e);
@@ -307,8 +313,8 @@ public class ConversionOrchestrator {
                     try {
                         Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                         mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                        // Update generation cache with timestamp and hash
-                        String relativePath = dimPath + "/" + coords.x() + "_" + coords.z();
+                        // Update generation cache with timestamp and hash (使用 Xaero 格式的键)
+                        String relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
                         genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
                     } catch (IOException e) {
                         LOGGER.error("Failed to write region file", e);
@@ -454,7 +460,9 @@ public class ConversionOrchestrator {
             if (level == null) continue;
 
             String dimPath = dimRegions.dimension().location().getPath();
-            Path outputDir = CACHE_DIR.resolve(dimPath);
+            // 使用 Xaero 格式的目录名（与客户端保持一致）
+            String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+            Path outputDir = CACHE_DIR.resolve(xaeroDimName);
             Path regionDir = RegionScanner.getRegionDir(level);
             if (regionDir == null) continue;
 

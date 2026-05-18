@@ -41,5 +41,7 @@
   "mapsyncer.help.client.note": "§e提示: §f维度名称支持 overworld/nether/end/mod维度ID",
 
   "mapsyncer.chunk.paused": "§e[MapSyncer] §7区块更新已暂停...",
-  "mapsyncer.chunk.resumed": "§e[MapSyncer] §a区块更新已恢复"
+  "mapsyncer.chunk.resumed": "§e[MapSyncer] §a区块更新已恢复",
+
+  "mapsyncer.sync.dimension_not_available": "维度 %s 的地图暂未生成或维度不存在，请联系管理员执行生成命令"
 }

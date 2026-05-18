@@ -184,20 +184,21 @@ public class MapSyncerCommand {
             // 同步所有维度
             metaMap = ClientHashManager.computeMetaForSync(baseDir);
         } else {
-            // 转换用户友好名称到服务端维度名
-            String serverDim;
+            // 转换用户友好名称到 Xaero 格式（服务端缓存目录使用 Xaero 格式）
+            DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+            String xaeroDim;
             switch (dimension) {
                 case "overworld":
-                    serverDim = "overworld";
+                    xaeroDim = "null";
                     break;
                 case "nether":
-                    serverDim = "the_nether";
+                    xaeroDim = "DIM-1";
                     break;
                 case "end":
-                    serverDim = "the_end";
+                    xaeroDim = "DIM1";
                     break;
                 default:
-                    serverDim = dimension;
+                    xaeroDim = dimMapping.toXaeroDimension(dimension);
             }
 
             // 同步指定维度：必须找到该维度的目录，不能 fallback 到 baseDir
@@ -215,13 +216,13 @@ public class MapSyncerCommand {
                 metaMap = ClientHashManager.computeMetaForSync(mwDir);
             } else {
                 // 维度目录存在但没有 mw$ 子目录（客户端首次同步该维度）
-                // 添加占位符元数据，让服务端知道请求的维度
+                // 添加占位符元数据，让服务端知道请求的维度（使用 Xaero 格式）
                 mc.player.displayClientMessage(
                         prefix().append(Component.translatable("mapsyncer.command.sync_dimension", dimension).withStyle(style -> style.withColor(0xFFFFFF))),
                         false);
-                LOGGER.info("No mw$ directory found in {}, sending placeholder for {}", targetDir, serverDim);
+                LOGGER.info("No mw$ directory found in {}, sending placeholder for {} (xaero: {})", targetDir, dimension, xaeroDim);
                 metaMap = new java.util.HashMap<>();
-                metaMap.put(serverDim + "/_placeholder_", new ClientMeta(0, "00000000"));
+                metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
             }
         }
 

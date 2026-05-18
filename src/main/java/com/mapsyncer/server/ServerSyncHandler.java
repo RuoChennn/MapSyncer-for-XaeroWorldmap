@@ -5,6 +5,7 @@ import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.ChunkMapData;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.server.GenerationCache.RegionMeta;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
@@ -230,6 +231,7 @@ public class ServerSyncHandler {
         int timestampSkipCount = 0;
 
         // Determine which dimensions the client is requesting (based on their metadata keys)
+        // 客户端发送的维度名是 Xaero 格式（如 null, DIM-1, DIM1）
         Set<String> requestedDimensions = new java.util.HashSet<>();
         for (String key : clientMeta.keySet()) {
             String[] parts = key.split("[/\\\\]");
@@ -237,7 +239,7 @@ public class ServerSyncHandler {
                 String dim = parts[0];
                 // Skip placeholder entries (used when client has no local data)
                 if (!key.contains("_placeholder_")) {
-                    requestedDimensions.add(dim);  // First part is dimension name
+                    requestedDimensions.add(dim);  // First part is dimension name (Xaero format)
                 } else {
                     // Placeholder indicates client wants full sync for this dimension
                     requestedDimensions.add(dim);
@@ -245,16 +247,20 @@ public class ServerSyncHandler {
                 }
             }
         }
-        LOGGER.info("Client requesting dimensions: {}", requestedDimensions);
+        LOGGER.info("Client requesting dimensions (Xaero format): {}", requestedDimensions);
 
         // 检查请求的维度是否有缓存数据
-        for (String requestedDim : requestedDimensions) {
-            Path dimCacheDir = cacheDir.resolve(requestedDim);
+        // 客户端发送的是 Xaero 格式，服务端缓存目录也是 Xaero 格式
+        DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+        for (String xaeroDim : requestedDimensions) {
+            Path dimCacheDir = cacheDir.resolve(xaeroDim);
             if (!Files.exists(dimCacheDir) || !dimCacheDir.toFile().isDirectory()) {
+                // 将 Xaero 格式转换为用户友好名称用于提示
+                String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 serverPlayer.sendSystemMessage(Component.literal(
                         String.format("Dimension '%s' map data not available. Run /mapsyncer generate %s first.",
-                                requestedDim, requestedDim)));
-                LOGGER.warn("Requested dimension {} has no cache data at {}", requestedDim, dimCacheDir);
+                                friendlyDim, friendlyDim)));
+                LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
                 // 继续处理其他维度，而不是直接返回
             }
         }
@@ -268,13 +274,13 @@ public class ServerSyncHandler {
                         // Remove .zip extension and normalize path separator
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
 
-                        // Parse dimension from path
+                        // Parse dimension from path (服务端缓存目录使用 Xaero 格式)
                         String[] parts = normalizedPath.split("[/\\\\]");
-                        String dimension = parts.length > 1 ? parts[0] : "unknown";
+                        String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
 
-                        // Skip if client didn't request this dimension
-                        if (!requestedDimensions.contains(dimension)) {
-                            LOGGER.debug("Skipping {}: dimension {} not requested by client", normalizedPath, dimension);
+                        // Skip if client didn't request this dimension (直接用 Xaero 格式匹配)
+                        if (!requestedDimensions.contains(xaeroDimName)) {
+                            LOGGER.debug("Skipping {}: xaero dim {} not requested by client", normalizedPath, xaeroDimName);
                             // dimensionSkipCount would need to be AtomicInteger for lambda
                             return;
                         }

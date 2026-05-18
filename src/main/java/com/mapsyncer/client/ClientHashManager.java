@@ -1,6 +1,5 @@
 package com.mapsyncer.client;
 
-import com.mapsyncer.util.DimensionPathMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -201,7 +200,8 @@ public class ClientHashManager {
      *
      * @param zipPath the zip file path
      * @param serverDir the Multiplayer_<server> directory
-     * @return relative path in server format (without .zip extension)
+     * @return relative path in Xaero format (without .zip extension)
+     *         Format: xaero_dim/regionX_regionZ (e.g., "null/-1_-1", "DIM-1/-1_-1")
      */
     private static String buildRelativePath(Path zipPath, Path serverDir) {
         // Get relative path from server directory
@@ -223,10 +223,8 @@ public class ClientHashManager {
         String xaeroDim = parts[0];
         String regionCoords = parts[parts.length - 1];  // Last part is regionX_regionZ
 
-        // Convert Xaero dimension to Minecraft dimension using unified mapping
-        String mcDim = DimensionPathMapping.getInstance().toServerDimension(xaeroDim);
-
-        // Build server format: dimension/regionX_regionZ
-        return mcDim + "/" + regionCoords;
+        // Keep Xaero dimension format (server cache now uses Xaero format directories)
+        // Build Xaero format: xaero_dim/regionX_regionZ
+        return xaeroDim + "/" + regionCoords;
     }
 }

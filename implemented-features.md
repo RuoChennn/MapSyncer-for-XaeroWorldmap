@@ -644,19 +644,21 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ```
 <server>/server_map_cache/
-├── overworld/                    # 主世界
+├── null/                         # 主世界（与客户端 Xaero 目录一致）
 │   ├── -1_-1.zip                 # 区域文件
 │   ├── 0_0.zip
 │   └── ...
-├── DIM-1/                        # 下界
+├── DIM-1/                        # 下界（与客户端 Xaero 目录一致）
 │   └── ...
-├── DIM1/                         # 末地
+├── DIM1/                         # 末地（与客户端 Xaero 目录一致）
 │   └── ...
 ├── <mod_dimension>/              # Mod 维度（未测试）
 │   └── ...
 ├── mca_timestamps.cache          # MCA 修改时间缓存（旧格式）
 └── generation_cache.properties   # 生成时间戳+哈希缓存（新格式）
 ```
+
+**注意**: 服务端缓存目录命名已改为 Xaero 格式，便于与客户端目录对应管理。
 
 ### 10.2 客户端地图目录 ✅
 
@@ -889,13 +891,22 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ### 🧪 2026-05-19 更新（未测试）
 
+- 🧪 refactor(server): **服务端缓存目录使用 Xaero 格式命名**
+  - 服务端 `server_map_cache/` 目录结构与客户端 Xaero 目录保持一致
+  - 主世界: `server_map_cache/null/`（与客户端 `null/` 对应）
+  - 地狱: `server_map_cache/DIM-1/`（与客户端 `DIM-1/` 对应）
+  - 末地: `server_map_cache/DIM1/`（与客户端 `DIM1/` 对应）
+  - GenerationCache 键格式改为 Xaero 格式
+  - 客户端元数据键发送 Xaero 格式（与服务端缓存路径一致）
+  - 便于管理和调试，服务端与客户端目录命名统一
+
 - 🧪 feat(server): 地狱维度使用分层洞穴模式（CAVE mode），起始高度 Y=90
   - RegionConverterStandalone 支持 CaveModeParams 参数
   - ConversionOrchestrator 根据维度类型选择光照模式和洞穴参数
   - 地狱使用 LightMode.CAVE，其他维度使用 LightMode.SURFACE
 - 🧪 refactor: 创建统一的 DimensionPathMapping 维度路径映射类
   - 支持文件系统目录、Xaero 目录、ResourceLocation path 双向转换
-  - 原版维度映射：the_nether → DIM-1, the_end → DIM1, overworld → .
+  - 原版维度映射：the_nether → DIM-1, the_end → DIM1, overworld → null
   - 支持 Mod 维度动态注册映射（namespace:path → namespace$path）
 - 🧪 fix(server): 修复地狱维度路径映射问题
   - RegionScanner 使用 DimensionPathMapping 获取正确目录名
@@ -916,3 +927,8 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
   - 检查请求维度的缓存目录是否存在
   - 不存在时提示客户端需要先生成
   - 新增翻译键：mapsyncer.sync.dimension_not_available
+- 🧪 debug(client): 添加 getCurrentServerBaseDirectory 调试日志
+  - 输出 connection 和 serverData 状态
+  - 便于排查地图目录获取失败问题
+
+**注意**: 此次更新后，旧的 `server_map_cache/` 目录结构不再兼容，需要删除旧缓存并重新运行 `/mapsyncer generate`

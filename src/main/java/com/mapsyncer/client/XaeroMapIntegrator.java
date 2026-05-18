@@ -686,12 +686,17 @@ public class XaeroMapIntegrator {
     public static Path getCurrentServerBaseDirectory() {
         Minecraft mc = Minecraft.getInstance();
         ClientPacketListener connection = mc.getConnection();
+        LOGGER.debug("getCurrentServerBaseDirectory: connection={}", connection);
         if (connection == null) {
+            LOGGER.warn("getCurrentServerBaseDirectory: connection is null");
             return null;
         }
 
         ServerData serverData = connection.getServerData();
+        LOGGER.debug("getCurrentServerBaseDirectory: serverData={}, serverData.ip={}",
+                serverData, serverData != null ? serverData.ip : "N/A");
         if (serverData == null) {
+            LOGGER.warn("getCurrentServerBaseDirectory: serverData is null");
             return null;
         }
 
