@@ -17,8 +17,11 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.stream.Stream;
 
 @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
 public class MapSyncerCommand {
@@ -41,15 +44,51 @@ public class MapSyncerCommand {
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .then(net.minecraft.commands.Commands.argument("dim", StringArgumentType.string())
                                         .suggests((context, builder) -> {
+                                            // 原版维度快捷名称
                                             builder.suggest("overworld");
                                             builder.suggest("nether");
                                             builder.suggest("end");
                                             builder.suggest("all");
+
+                                            // 扫描 Xaero 目录列出已有维度数据
+                                            Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
+                                            if (baseDir != null) {
+                                                try (Stream<Path> dirs = Files.list(baseDir)) {
+                                                    dirs.filter(p -> Files.isDirectory(p))
+                                                        .filter(p -> !p.getFileName().toString().startsWith("mw$"))
+                                                        .forEach(p -> {
+                                                            String dimName = p.getFileName().toString();
+                                                            // 将 Xaero 目录名转换为维度建议
+                                                            String suggestion = xaeroDirToDimensionSuggestion(dimName);
+                                                            builder.suggest(suggestion);
+                                                        });
+                                                } catch (IOException e) {
+                                                    LOGGER.debug("Failed to scan Xaero directory for dimensions", e);
+                                                }
+                                            }
                                             return builder.buildFuture();
                                         })
                                         .executes(MapSyncerCommand::executeSync))
                                 .executes(MapSyncerCommand::executeSyncCurrentDim))
         );
+    }
+
+    /**
+     * 将 Xaero 的维度目录名转换为维度建议名称
+     */
+    private static String xaeroDirToDimensionSuggestion(String dirName) {
+        // Xaero 目录名映射
+        switch (dirName) {
+            case "null":
+                return "overworld";
+            case "DIM-1":
+                return "nether";
+            case "DIM1":
+                return "end";
+            default:
+                // Mod 维度目录，直接使用目录名作为建议
+                return dirName;
+        }
     }
 
     private static int executeSync(CommandContext<CommandSourceStack> context) {
@@ -154,7 +193,9 @@ public class MapSyncerCommand {
     }
 
     private static String normalizeDimension(String dim) {
-        switch (dim.toLowerCase()) {
+        String lower = dim.toLowerCase();
+        // 原版维度快捷名称
+        switch (lower) {
             case "overworld", "minecraft:overworld", "null":
                 return "overworld";
             case "nether", "the_nether", "minecraft:the_nether", "dim-1":
@@ -163,9 +204,11 @@ public class MapSyncerCommand {
                 return "end";
             case "all", "*":
                 return "all";
-            default:
-                return null;
         }
+
+        // Mod 维度：保持原名称，允许用户输入任意维度名称
+        // 支持格式：modid:dimension 或 直接使用 Xaero 目录名（如 DIM7, custom_dim 等）
+        return dim;
     }
 
     private static String normalizeDimensionFromResource(String resourceLocation) {
@@ -196,6 +239,7 @@ public class MapSyncerCommand {
                 xaeroDim = "DIM1";
                 break;
             default:
+                // Mod 维度：直接使用用户输入的名称作为 Xaero 目录名
                 xaeroDim = dimension;
         }
 

@@ -149,6 +149,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | `/mapsyncer sync overworld` | 同步主世界 |
 | `/mapsyncer sync nether` | 同步下界 |
 | `/mapsyncer sync end` | 同步末地 |
+| `/mapsyncer sync <dimension>` | 同步指定维度（支持 mod 维度） |
 | `/mapsyncer sync all` | 同步所有维度 |
 
 #### ✅ 维度名称支持
@@ -156,6 +157,8 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 - 支持快捷名称：`nether`/`the_nether`/`dim-1`
 - 支持末地别名：`end`/`the_end`/`dim1`
 - 支持通配符：`all`/`*`
+- 支持 mod 维度名称（直接使用维度 ID 或 Xaero 目录名）
+- 动态扫描 Xaero 目录列出已有维度数据作为建议
 
 ### 3.2 时间戳与哈希计算系统 ✅
 
@@ -871,6 +874,8 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 **状态标记说明**：✅ 已实现 | ⏳ 未实现/部分实现 | 📝 规划中 | ⚠️ 已知问题
 
 **近期更新**:
+- feat(client): 客户端 sync 指令支持动态列出已有维度数据
+- feat(client): 支持同步任意 mod 维度名称
 - feat(server): 改进 generate 指令结构，支持 `<dim> [x] [z]` 和 `force` 参数
 - feat(server): 动态列出所有已加载维度作为指令建议（支持 mod 维度）
 - docs: 标记 mod 维度生成功能为未测试状态
