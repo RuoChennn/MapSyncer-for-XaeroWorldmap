@@ -66,6 +66,7 @@ public class ConversionOrchestrator {
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
         totalCount = allRegions.stream().mapToInt(d -> d.regions().size()).sum();
+        int totalSkippedEmpty = allRegions.stream().mapToInt(DimensionRegions::skippedEmptyCount).sum();
         if (totalCount == 0) {
             LOGGER.info("No regions found to convert");
             isRunning = false;
@@ -79,7 +80,7 @@ public class ConversionOrchestrator {
         } finally {
             isRunning = false;
             currentStatus = "completed";
-            LOGGER.info("Conversion completed: {}/{} regions", processedCount, totalCount);
+            LOGGER.info("Conversion completed: {}/{} regions, {} skipped (empty MCA)", processedCount, totalCount, totalSkippedEmpty);
         }
     }
 
@@ -102,15 +103,15 @@ public class ConversionOrchestrator {
             return;
         }
 
-        List<RegionCoords> regions = RegionScanner.scanDimension(level);
+        RegionScanner.RegionScanResult scanResult = RegionScanner.scanDimension(level);
+        List<RegionCoords> regions = scanResult.regions();
         totalCount = regions.size();
         currentDimension = dimKey;
         try {
-            convertDimension(server, new DimensionRegions(dimKey, regions));
+            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()));
         } finally {
             isRunning = false;
             currentStatus = "completed";
-            LOGGER.info("Dimension conversion completed: {}/{} regions", processedCount, totalCount);
         }
     }
 
@@ -285,8 +286,8 @@ public class ConversionOrchestrator {
         }
 
         // 输出汇总信息
-        LOGGER.info("Dimension {} completed: {} converted, {} skipped (unchanged), {} failed",
-            dimPath, processedCount - skippedCount, skippedCount, failedRegions.size());
+        LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA), {} failed",
+            dimPath, regions.size(), processedCount - skippedCount, skippedCount, dimRegions.skippedEmptyCount(), failedRegions.size());
 
         // 保存时间戳缓存
         mcaCache.saveCache();

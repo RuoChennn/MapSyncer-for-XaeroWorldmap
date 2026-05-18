@@ -23,7 +23,10 @@ public class RegionScanner {
     public record RegionCoords(int x, int z) {
     }
 
-    public record DimensionRegions(net.minecraft.resources.ResourceKey<Level> dimension, List<RegionCoords> regions) {
+    public record RegionScanResult(List<RegionCoords> regions, int skippedEmptyCount) {
+    }
+
+    public record DimensionRegions(net.minecraft.resources.ResourceKey<Level> dimension, List<RegionCoords> regions, int skippedEmptyCount) {
     }
 
     public static List<DimensionRegions> scanAllDimensions(MinecraftServer server) {
@@ -37,13 +40,13 @@ public class RegionScanner {
 
         List<DimensionRegions> result = new ArrayList<>();
         for (DimensionNames dn : dimNames) {
-            List<RegionCoords> regions = scanRegionDir(server.getWorldPath(LevelResource.ROOT), dn.name());
-            result.add(new DimensionRegions(dn.key(), regions));
+            RegionScanResult scanResult = scanRegionDir(server.getWorldPath(LevelResource.ROOT), dn.name());
+            result.add(new DimensionRegions(dn.key(), scanResult.regions(), scanResult.skippedEmptyCount()));
         }
         return result;
     }
 
-    public static List<RegionCoords> scanDimension(ServerLevel level) {
+    public static RegionScanResult scanDimension(ServerLevel level) {
         Path worldRoot = level.getServer().getWorldPath(LevelResource.ROOT);
         String dimId = level.dimension().location().getPath();
         return scanRegionDir(worldRoot, dimId);
@@ -67,29 +70,43 @@ public class RegionScanner {
         }
     }
 
-    private static List<RegionCoords> scanRegionDir(Path worldRoot, String dimId) {
+    private static RegionScanResult scanRegionDir(Path worldRoot, String dimId) {
         Path regionDir = worldRoot.resolve(dimId).resolve("region");
         if (!Files.exists(regionDir)) {
             regionDir = worldRoot.resolve("region");
         }
         if (!Files.exists(regionDir)) {
             LOGGER.warn("Region directory not found for dimension: {}", dimId);
-            return List.of();
+            return new RegionScanResult(List.of(), 0);
         }
         return scanRegionDirectory(regionDir);
     }
 
-    public static List<RegionCoords> scanRegionDirectory(Path regionDir) {
+    public static RegionScanResult scanRegionDirectory(Path regionDir) {
         List<RegionCoords> regions = new ArrayList<>();
         if (!Files.exists(regionDir)) {
-            return regions;
+            return new RegionScanResult(regions, 0);
         }
 
+        int skippedEmpty = 0;
         try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(regionDir)) {
             for (Path file : stream) {
                 String fileName = file.getFileName().toString();
                 Matcher matcher = REGION_PATTERN.matcher(fileName);
                 if (matcher.matches()) {
+                    // Skip empty (0KB) MCA files - they contain no chunk data
+                    try {
+                        long fileSize = Files.size(file);
+                        if (fileSize == 0) {
+                            skippedEmpty++;
+                            LOGGER.debug("Skipping empty MCA file: {} (0 bytes)", fileName);
+                            continue;
+                        }
+                    } catch (IOException e) {
+                        LOGGER.warn("Failed to check file size for {}", fileName, e);
+                        continue;
+                    }
+
                     int regionX = Integer.parseInt(matcher.group(1));
                     int regionZ = Integer.parseInt(matcher.group(2));
                     regions.add(new RegionCoords(regionX, regionZ));
@@ -99,7 +116,11 @@ public class RegionScanner {
             LOGGER.error("Failed to scan region directory: {}", regionDir, e);
         }
 
-        return regions;
+        if (skippedEmpty > 0) {
+            LOGGER.info("Skipped {} empty (0KB) MCA files in {}", skippedEmpty, regionDir);
+        }
+
+        return new RegionScanResult(regions, skippedEmpty);
     }
 
     private record DimensionNames(String name, net.minecraft.resources.ResourceKey<Level> key) {}
