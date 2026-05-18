@@ -30,6 +30,14 @@ public class XaeroMapIntegrator {
     private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
 
     /**
+     * Get the set of regions that were updated during sync.
+     * @return A copy of the updated regions set
+     */
+    public static Set<RegionCoord> getUpdatedRegions() {
+        return new HashSet<>(updatedRegions);
+    }
+
+    /**
      * Region coordinate record for tracking which regions were updated
      */
     public record RegionCoord(int x, int z) {}
@@ -186,8 +194,8 @@ public class XaeroMapIntegrator {
         for (RegionCoord viewRegion : viewRegions) {
             if (regionsToReset.size() >= nearbyLimit) break;
             // Add regions close to player position
-            if (Math.abs(viewRegion.x - playerRegionX) <= 1 &&
-                Math.abs(viewRegion.z - playerRegionZ) <= 1) {
+            if (Math.abs(viewRegion.x() - playerRegionX) <= 1 &&
+                Math.abs(viewRegion.z() - playerRegionZ) <= 1) {
                 regionsToReset.add(viewRegion);
             }
         }
@@ -196,13 +204,14 @@ public class XaeroMapIntegrator {
                 updatedRegions.size(), viewRegions.size(), regionsToReset.size());
 
         // Perform the reset only for selected regions
-        return resetSpecificRegions(regionsToReset);
+        return resetSpecificRegionLoadStates(regionsToReset);
     }
 
     /**
      * Reset loadState for specific regions only.
+     * Public method for external callers.
      */
-    private static int resetSpecificRegions(Set<RegionCoord> regionsToReset) {
+    public static int resetSpecificRegionLoadStates(Set<RegionCoord> regionsToReset) {
         int resetCount = 0;
 
         try {
@@ -719,6 +728,7 @@ public class XaeroMapIntegrator {
      * Write map data received from server to the correct location.
      * Uses the server-provided worldId to ensure correct directory path.
      * Returns the mw directory path for further processing.
+     * Also saves server timestamps to local cache for future sync comparison.
      */
     public static Path writeMapDataAndReturnDir(List<ChunkMapData> chunks, int serverWorldId) {
         Minecraft mc = Minecraft.getInstance();
@@ -763,12 +773,63 @@ public class XaeroMapIntegrator {
         Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
         Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
 
+        // Get timestamp cache for this server
+        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+
         Path lastMwDir = null;
         for (ChunkMapData chunk : chunks) {
             lastMwDir = writeChunkDataAndGetDir(chunk, serverDir, serverWorldId);
+
+            // Update timestamp cache with server's timestamp and computed hash
+            String relativePath = buildRelativePathForCache(chunk);
+            String hash = computeHash(chunk.data);
+            tsCache.update(relativePath, chunk.timestampSeconds, hash);
+            LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
+                    relativePath, chunk.timestampSeconds, hash);
         }
 
+        // Save timestamp cache after all chunks written
+        tsCache.save();
+        LOGGER.info("Saved timestamp cache for {} regions", chunks.size());
+
         return lastMwDir;
+    }
+
+    /**
+     * Build relative path for timestamp cache in server format.
+     * Format: dimension/regionX_regionZ (matching server's generation_cache format)
+     */
+    private static String buildRelativePathForCache(ChunkMapData chunk) {
+        // Convert dimension to server format
+        String serverDim = toServerDimension(chunk.dimension);
+        return serverDim + "/" + chunk.regionX + "_" + chunk.regionZ;
+    }
+
+    /**
+     * Convert client dimension name to server format.
+     * Server uses: overworld, the_nether, the_end
+     */
+    private static String toServerDimension(String dimension) {
+        if (dimension == null || dimension.isEmpty() ||
+            dimension.equals("null") || dimension.equals("minecraft:overworld")) {
+            return "overworld";
+        }
+        if (dimension.equals("DIM-1") || dimension.equals("minecraft:the_nether")) {
+            return "the_nether";
+        }
+        if (dimension.equals("DIM1") || dimension.equals("minecraft:the_end")) {
+            return "the_end";
+        }
+        return dimension;
+    }
+
+    /**
+     * Compute CRC32 hash of data.
+     */
+    private static String computeHash(byte[] data) {
+        java.util.zip.CRC32 crc32 = new java.util.zip.CRC32();
+        crc32.update(data);
+        return String.format("%08x", crc32.getValue());
     }
 
     /**

@@ -168,16 +168,26 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Trigger Xaero World Map reload for regions near player.
-     * Uses selective reset instead of full reload for better performance.
+     * Trigger Xaero World Map reload for regions that need it.
+     * Only reloads regions where cache was not found (new regions from server).
+     * Uses direct requestLoad instead of startFullMapReload for better precision.
      */
     private static void triggerXaeroReloadAndResume() {
         try {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null) return;
 
-            // Clear cache before reload (only for affected regions)
-            clearXaeroCacheSelective();
+            // Clear cache for synced regions and get regions that need reload
+            // (regions without existing cache need to be loaded from disk)
+            java.util.Set<XaeroMapIntegrator.RegionCoord> regionsToReload = clearXaeroCacheSelective();
+
+            if (regionsToReload.isEmpty()) {
+                LOGGER.info("No regions need reload, all caches were cleared");
+                mc.player.displayClientMessage(
+                        Component.literal("§e[MapSyncer] §aAll caches cleared, no reload needed"), false);
+                resumeChunkUpdates();
+                return;
+            }
 
             // Get WorldMapSession using reflection
             Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
@@ -215,46 +225,61 @@ public class MapPacketReceiver {
             Class<?> mapSaveLoadClass = Class.forName("xaero.map.file.MapSaveLoad");
             Method detectRegions = mapSaveLoadClass.getMethod("detectRegions", int.class);
             detectRegions.invoke(mapSaveLoad, 20);
-            LOGGER.info("Triggered region detection");
+            LOGGER.info("Triggered region detection for {} synced regions", regionsToReload.size());
 
-            // Selectively reset loadState for regions in view distance
-            // This is much more efficient than resetting all regions
-            int resetCount = XaeroMapIntegrator.selectiveResetRegionLoadStates();
-            LOGGER.info("Selective reset: {} regions will reload from disk", resetCount);
+            // Directly request load for each region that needs reload
+            // This is more efficient than startFullMapReload which iterates all regions
+            Method getLeafMapRegion = mapProcessorClass.getMethod("getLeafMapRegion", int.class, int.class, int.class, boolean.class);
+            Method requestLoad = mapSaveLoadClass.getMethod("requestLoad", Class.forName("xaero.map.region.MapRegion"), String.class);
 
-            // Get MapWorld from MapProcessor
-            Method getMapWorld = mapProcessorClass.getMethod("getMapWorld");
-            Object mapWorld = getMapWorld.invoke(mapProcessor);
+            int loadedCount = 0;
+            int createdCount = 0;
 
-            if (mapWorld == null) {
-                LOGGER.warn("Could not get Xaero MapWorld");
-                resumeChunkUpdates();
-                return;
+            for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
+                // Get or create MapRegion for this coordinate
+                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
+
+                if (mapRegion == null) {
+                    LOGGER.debug("Could not get/create MapRegion for ({}, {})", coord.x(), coord.z());
+                    continue;
+                }
+
+                // Check current loadState
+                Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
+                java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
+                loadStateField.setAccessible(true);
+                byte currentLoadState = loadStateField.getByte(mapRegion);
+
+                // Reset loadState to 0 if currently loaded (state 2 or 4)
+                if (currentLoadState == 2 || currentLoadState == 4) {
+                    loadStateField.setByte(mapRegion, (byte) 0);
+                    loadedCount++;
+
+                    // Also reset hasHadTerrain to force fresh load
+                    try {
+                        java.lang.reflect.Field hasHadTerrainField = mapRegionClass.getDeclaredField("hasHadTerrain");
+                        hasHadTerrainField.setAccessible(true);
+                        hasHadTerrainField.setBoolean(mapRegion, false);
+                    } catch (NoSuchFieldException ignored) {}
+
+                    LOGGER.debug("Reset loadState for region ({}, {})", coord.x(), coord.z());
+                } else if (currentLoadState == 0 || currentLoadState == 1) {
+                    // Region was just created or already pending load
+                    createdCount++;
+                }
+
+                // Request load for this region
+                requestLoad.invoke(mapSaveLoad, mapRegion, "sync reload");
             }
 
-            // Get current dimension from MapWorld
-            Class<?> mapWorldClass = Class.forName("xaero.map.world.MapWorld");
-            Method getCurrentDimension = mapWorldClass.getMethod("getCurrentDimension");
-            Object mapDimension = getCurrentDimension.invoke(mapWorld);
-
-            if (mapDimension == null) {
-                LOGGER.warn("Could not get Xaero MapDimension");
-                resumeChunkUpdates();
-                return;
-            }
-
-            // Trigger reload - Xaero will reload regions based on their loadState
-            // Only regions with loadState=0 will be reloaded from disk
-            Class<?> mapDimensionClass = Class.forName("xaero.map.world.MapDimension");
-            Method startFullMapReload = mapDimensionClass.getMethod("startFullMapReload", int.class, boolean.class, mapProcessorClass);
-            startFullMapReload.invoke(mapDimension, Integer.MAX_VALUE, false, mapProcessor);
-
-            LOGGER.info("Successfully triggered selective Xaero map reload");
+            int totalRequested = loadedCount + createdCount;
+            LOGGER.info("Direct reload requested: {} reset, {} new, total {} regions",
+                    loadedCount, createdCount, totalRequested);
 
             mc.player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §aSelective reload: " + resetCount + " regions"), false);
+                    Component.literal("§e[MapSyncer] §aDirect reload: " + totalRequested + " regions"), false);
 
-            // Re-enable chunk updates after reload is triggered
+            // Re-enable chunk updates after reload requests
             resumeChunkUpdates();
 
         } catch (Exception e) {
@@ -277,33 +302,117 @@ public class MapPacketReceiver {
 
     /**
      * Clear Xaero cache files selectively for updated regions.
-     * Only clears cache for regions that were updated and are in view distance.
+     * Only clears cache for regions that were synced from server.
+     * If cache doesn't exist for a region, mark it for reload.
+     * @return Set of regions that need reload (no cache found)
      */
-    private static void clearXaeroCacheSelective() {
+    private static java.util.Set<XaeroMapIntegrator.RegionCoord> clearXaeroCacheSelective() {
+        java.util.Set<XaeroMapIntegrator.RegionCoord> regionsToReload = new java.util.HashSet<>();
+
         try {
             Path mwDir = lastMwDir;
             if (mwDir == null || !mwDir.toFile().exists()) {
                 LOGGER.info("No mw directory found, skipping cache clear");
-                return;
+                return regionsToReload;
             }
 
-            // Get regions that need cache clear: updated + view distance
-            java.util.Set<XaeroMapIntegrator.RegionCoord> updatedRegions = XaeroMapIntegrator.getViewDistanceRegions();
+            // Get regions that were actually synced from server
+            java.util.Set<XaeroMapIntegrator.RegionCoord> syncedRegions = XaeroMapIntegrator.getUpdatedRegions();
+            if (syncedRegions.isEmpty()) {
+                LOGGER.info("No synced regions to clear cache for");
+                return regionsToReload;
+            }
 
-            LOGGER.info("Clearing cache for {} regions in view distance", updatedRegions.size());
+            LOGGER.info("Checking cache for {} synced regions", syncedRegions.size());
 
-            // Clear cache directories - we clear entire cache for simplicity
-            // (selective cache clearing would require parsing .xwmc file names)
-            deleteCacheDirectory(mwDir.resolve("cache"));
-            deleteCacheDirectory(mwDir.resolve("cache_1"));
+            // Find all cache directories (cache, cache_1, cache_<version>)
+            java.util.List<Path> cacheDirs = findCacheDirectories(mwDir);
+            if (cacheDirs.isEmpty()) {
+                LOGGER.info("No cache directories found, all {} regions need reload", syncedRegions.size());
+                regionsToReload.addAll(syncedRegions);
+                return regionsToReload;
+            }
 
-            LOGGER.info("Cache cleared for updated regions");
-            Minecraft.getInstance().player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §7Cache cleared..."), false);
+            int cacheClearedCount = 0;
+            int reloadNeededCount = 0;
+
+            // For each synced region, check if cache exists
+            for (XaeroMapIntegrator.RegionCoord region : syncedRegions) {
+                String cacheFileName = region.x() + "_" + region.z() + ".xwmc";
+                boolean cacheFound = false;
+
+                // Check all cache directories for this region's cache
+                for (Path cacheDir : cacheDirs) {
+                    Path cacheFile = cacheDir.resolve(cacheFileName);
+                    if (cacheFile.toFile().exists()) {
+                        try {
+                            java.nio.file.Files.deleteIfExists(cacheFile);
+                            cacheFound = true;
+                            cacheClearedCount++;
+                            LOGGER.debug("Deleted cache file: {}", cacheFile);
+                        } catch (Exception e) {
+                            LOGGER.warn("Failed to delete cache file: {}", cacheFile);
+                        }
+                        break; // Found and deleted, no need to check other directories
+                    }
+                }
+
+                // If no cache found for this region, it needs reload
+                if (!cacheFound) {
+                    regionsToReload.add(region);
+                    reloadNeededCount++;
+                    LOGGER.debug("No cache for region ({}, {}), will trigger reload", region.x(), region.z());
+                }
+            }
+
+            LOGGER.info("Cache cleared: {} files, reload needed: {} regions", cacheClearedCount, reloadNeededCount);
+
+            if (Minecraft.getInstance().player != null) {
+                Minecraft.getInstance().player.displayClientMessage(
+                        Component.literal("§e[MapSyncer] §7Cache: " + cacheClearedCount + " cleared, " + reloadNeededCount + " reload"), false);
+            }
 
         } catch (Exception e) {
             LOGGER.warn("Failed to clear cache: {}", e.getMessage());
         }
+
+        return regionsToReload;
+    }
+
+    /**
+     * Find all cache directories in mw directory.
+     * Cache directories are named: cache, cache_1, cache_<version>
+     */
+    private static java.util.List<Path> findCacheDirectories(Path mwDir) {
+        java.util.List<Path> cacheDirs = new java.util.ArrayList<>();
+
+        try {
+            // Standard cache directories
+            Path cache = mwDir.resolve("cache");
+            Path cache1 = mwDir.resolve("cache_1");
+
+            if (cache.toFile().exists() && cache.toFile().isDirectory()) {
+                cacheDirs.add(cache);
+            }
+            if (cache1.toFile().exists() && cache1.toFile().isDirectory()) {
+                cacheDirs.add(cache1);
+            }
+
+            // Also check for versioned cache directories (cache_<number>)
+            try (java.nio.file.DirectoryStream<Path> stream = java.nio.file.Files.newDirectoryStream(mwDir, "cache_*")) {
+                for (Path dir : stream) {
+                    if (dir.toFile().isDirectory() && !cacheDirs.contains(dir)) {
+                        cacheDirs.add(dir);
+                    }
+                }
+            }
+
+            LOGGER.debug("Found {} cache directories", cacheDirs.size());
+        } catch (Exception e) {
+            LOGGER.warn("Failed to find cache directories: {}", e.getMessage());
+        }
+
+        return cacheDirs;
     }
 
     /**

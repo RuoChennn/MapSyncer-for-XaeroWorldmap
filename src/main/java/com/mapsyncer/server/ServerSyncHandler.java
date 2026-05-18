@@ -249,7 +249,7 @@ public class ServerSyncHandler {
                         // Client has no metadata → sync (new region for client)
                         if (clientMetaEntry == null) {
                             LOGGER.debug("Will sync {}: client has no metadata (new region)", normalizedPath);
-                            addChunkData(diffs, zipPath, normalizedPath);
+                            addChunkData(diffs, zipPath, normalizedPath, serverMeta.timestampSeconds());
                             return;
                         }
 
@@ -265,7 +265,7 @@ public class ServerSyncHandler {
                         if (clientMetaEntry.timestampSeconds() < serverMeta.timestampSeconds()) {
                             LOGGER.debug("Will sync {}: hash mismatch, client ts={}s < server ts={}s",
                                     normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
-                            addChunkData(diffs, zipPath, normalizedPath);
+                            addChunkData(diffs, zipPath, normalizedPath, serverMeta.timestampSeconds());
                         } else {
                             // Client timestamp newer → skip (client explored newer content)
                             LOGGER.debug("Skipping {}: hash mismatch but client ts={}s >= server ts={}s",
@@ -397,7 +397,7 @@ public class ServerSyncHandler {
     /**
      * Helper to add chunk data from zip file.
      */
-    private static void addChunkData(List<ChunkMapData> diffs, Path zipPath, String normalizedPath) {
+    private static void addChunkData(List<ChunkMapData> diffs, Path zipPath, String normalizedPath, long timestampSeconds) {
         try {
             byte[] data = Files.readAllBytes(zipPath);
             // Parse dimension and coordinates from path
@@ -407,7 +407,7 @@ public class ServerSyncHandler {
             int regionX = Integer.parseInt(coords[0]);
             int regionZ = Integer.parseInt(coords[1]);
             String dimension = parts.length > 1 ? parts[parts.length - 2] : "null";
-            diffs.add(new ChunkMapData(regionX, regionZ, dimension, data));
+            diffs.add(new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds));
         } catch (IOException e) {
             LOGGER.error("Failed to read zip file: {}", zipPath, e);
         }

@@ -32,6 +32,9 @@ public class ClientHashManager {
      * - Hash match → skip sync (file content identical)
      * - Hash mismatch + client timestamp older → sync
      *
+     * Uses cached timestamps from previous sync (stored in sync_timestamps.cache)
+     * to avoid issues where file modification time changes after write.
+     *
      * Uses parallel processing with limited concurrency (2 threads) to avoid
      * blocking the game while computing hashes for many regions.
      *
@@ -52,6 +55,11 @@ public class ClientHashManager {
             LOGGER.warn("Could not find server directory from {}", mapDir);
             return metaMap;
         }
+
+        // Load cached timestamps from previous sync
+        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+        Map<String, ClientTimestampCache.CacheEntry> cachedTimestamps = tsCache.getAll();
+        LOGGER.info("Loaded {} cached timestamps from previous sync", cachedTimestamps.size());
 
         // Collect all zip files first
         java.util.List<Path> zipFiles;
@@ -76,19 +84,29 @@ public class ClientHashManager {
                                     String fileName = zipPath.getFileName().toString();
                                     if (!fileName.endsWith(".zip")) return;
 
-                                    // Get file modification time (seconds)
-                                    long timestampMillis = getFileModificationTime(zipPath);
-                                    long timestampSeconds = timestampMillis / 1000;
+                                    // Build relative path in server format
+                                    String relativePath = buildRelativePath(zipPath, serverDir);
 
                                     // Compute CRC32 hash
                                     String hash = computeFileHash(zipPath);
 
-                                    // Build relative path in server format
-                                    String relativePath = buildRelativePath(zipPath, serverDir);
+                                    // Use cached timestamp if available (from previous sync)
+                                    // This avoids issues where file modification time changes
+                                    ClientTimestampCache.CacheEntry cached = cachedTimestamps.get(relativePath);
+                                    long timestampSeconds;
+                                    if (cached != null) {
+                                        timestampSeconds = cached.timestampSeconds();
+                                        LOGGER.debug("Region {}: using cached ts={}s, hash={}",
+                                                relativePath, timestampSeconds, hash);
+                                    } else {
+                                        // No cached timestamp, use file modification time
+                                        long timestampMillis = getFileModificationTime(zipPath);
+                                        timestampSeconds = timestampMillis / 1000;
+                                        LOGGER.debug("Region {}: using file ts={}s, hash={} (no cache)",
+                                                relativePath, timestampSeconds, hash);
+                                    }
 
                                     metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
-
-                                    LOGGER.debug("Region {}: ts={}s, hash={}", relativePath, timestampSeconds, hash);
 
                                 } catch (Exception e) {
                                     LOGGER.warn("Invalid region filename: {}", zipPath, e);
