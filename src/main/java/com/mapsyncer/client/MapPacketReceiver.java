@@ -123,7 +123,7 @@ public class MapPacketReceiver {
                 LOGGER.warn("Sync was stale, cleared accumulated data");
                 if (Minecraft.getInstance().player != null) {
                     Minecraft.getInstance().player.displayClientMessage(
-                        Component.literal("§e[MapSyncer] §cSync timed out, please try again"), false);
+                        Component.literal("§e[MapSyncer] §c同步超时，请重试"), false);
                 }
                 return;
             }
@@ -184,7 +184,7 @@ public class MapPacketReceiver {
             if (regionsToReload.isEmpty()) {
                 LOGGER.info("No regions need reload, all caches were cleared");
                 mc.player.displayClientMessage(
-                        Component.literal("§e[MapSyncer] §aAll caches cleared, no reload needed"), false);
+                        Component.literal("§e[MapSyncer] §a所有缓存已清除，无需重新加载"), false);
                 resumeChunkUpdates();
                 return;
             }
@@ -277,7 +277,7 @@ public class MapPacketReceiver {
                     loadedCount, createdCount, totalRequested);
 
             mc.player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §aDirect reload: " + totalRequested + " regions"), false);
+                    Component.literal("§e[MapSyncer] §a直接重新加载: " + totalRequested + " 个区域"), false);
 
             // Re-enable chunk updates after reload requests
             resumeChunkUpdates();
@@ -285,7 +285,7 @@ public class MapPacketReceiver {
         } catch (Exception e) {
             LOGGER.error("Failed to trigger Xaero map reload", e);
             Minecraft.getInstance().player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §cFailed to trigger map reload"), false);
+                    Component.literal("§e[MapSyncer] §c触发地图重新加载失败"), false);
             // Always re-enable chunk updates, even on error
             resumeChunkUpdates();
         }
@@ -369,7 +369,7 @@ public class MapPacketReceiver {
 
             if (Minecraft.getInstance().player != null) {
                 Minecraft.getInstance().player.displayClientMessage(
-                        Component.literal("§e[MapSyncer] §7Cache: " + cacheClearedCount + " cleared, " + reloadNeededCount + " reload"), false);
+                        Component.literal("§e[MapSyncer] §7缓存: " + cacheClearedCount + " 已清除, " + reloadNeededCount + " 需重新加载"), false);
             }
 
         } catch (Exception e) {
@@ -439,7 +439,7 @@ public class MapPacketReceiver {
 
             LOGGER.info("Xaero surface cache cleared successfully");
             Minecraft.getInstance().player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §7Cache cleared..."), false);
+                    Component.literal("§e[MapSyncer] §7缓存已清除..."), false);
 
         } catch (Exception e) {
             LOGGER.warn("Failed to clear Xaero cache: {}", e.getMessage());

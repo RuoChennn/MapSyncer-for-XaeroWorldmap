@@ -3,6 +3,10 @@ package com.mapsyncer.client;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 public class SyncProgressTracker {
 
     private static volatile boolean tracking = false;
@@ -12,24 +16,58 @@ public class SyncProgressTracker {
     private static volatile long startTime = 0;
     private static volatile int lastDisplayedPercent = -1;
 
+    // 服务端响应超时检测
+    private static volatile boolean receivedFirstResponse = false;
+    private static final long SERVER_RESPONSE_TIMEOUT_MS = 5000; // 5秒超时
+    private static ScheduledExecutorService timeoutChecker = null;
+
     public static void startTracking() {
         tracking = true;
         processed = 0;
         total = 0;
-        status = "waiting...";
+        status = "等待中...";
         startTime = System.currentTimeMillis();
         lastDisplayedPercent = -1;
+        receivedFirstResponse = false;
 
         // 在聊天栏显示开始消息
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
             mc.player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §fStarting sync..."),
+                    Component.literal("§e[MapSyncer] §f开始同步..."),
                     false);
         }
+
+        // 启动超时检测
+        startTimeoutChecker();
+    }
+
+    private static void startTimeoutChecker() {
+        if (timeoutChecker != null) {
+            timeoutChecker.shutdownNow();
+        }
+        timeoutChecker = Executors.newSingleThreadScheduledExecutor();
+        timeoutChecker.schedule(() -> {
+            if (tracking && !receivedFirstResponse) {
+                // 超时未收到服务端响应，弹出提示
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.player != null) {
+                    mc.player.displayClientMessage(
+                            Component.literal("§e[MapSyncer] §c服务端没有安装MapSyncer哦~"),
+                            false);
+                }
+                cancelTracking();
+            }
+        }, SERVER_RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     }
 
     public static void update(int processed, int total, String status) {
+        // 标记收到服务端响应，取消超时检测
+        if (!receivedFirstResponse) {
+            receivedFirstResponse = true;
+            stopTimeoutChecker();
+        }
+
         SyncProgressTracker.processed = processed;
         SyncProgressTracker.total = total;
         SyncProgressTracker.status = status;
@@ -46,7 +84,8 @@ public class SyncProgressTracker {
 
     public static void complete() {
         tracking = false;
-        status = "completed";
+        status = "已完成";
+        stopTimeoutChecker();
 
         long elapsed = getElapsedSeconds();
 
@@ -54,8 +93,24 @@ public class SyncProgressTracker {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
             mc.player.displayClientMessage(
-                    Component.literal(String.format("§e[MapSyncer] §aSync completed! §f%d regions in %ds", total, elapsed)),
+                    Component.literal(String.format("§e[MapSyncer] §a同步完成! §f%d 个区域，耗时 %d 秒", total, elapsed)),
                     false);
+        }
+    }
+
+    /**
+     * 取消同步追踪（服务端未响应时调用）
+     */
+    public static void cancelTracking() {
+        tracking = false;
+        status = "已取消";
+        stopTimeoutChecker();
+    }
+
+    private static void stopTimeoutChecker() {
+        if (timeoutChecker != null) {
+            timeoutChecker.shutdownNow();
+            timeoutChecker = null;
         }
     }
 
@@ -64,7 +119,7 @@ public class SyncProgressTracker {
         if (mc.player != null && tracking) {
             String message;
             if (total > 0) {
-                message = String.format("§e[MapSyncer] §fProgress: %d/%d (%d%%)", processed, total, lastDisplayedPercent);
+                message = String.format("§e[MapSyncer] §f进度: %d/%d (%d%%)", processed, total, lastDisplayedPercent);
             } else {
                 message = "§e[MapSyncer] §f" + status;
             }

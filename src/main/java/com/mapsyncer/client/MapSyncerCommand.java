@@ -56,7 +56,7 @@ public class MapSyncerCommand {
         String normalizedDim = normalizeDimension(dim);
         if (normalizedDim == null) {
             mc.player.displayClientMessage(
-                    Component.literal("Invalid dimension: " + dim + ". Use: overworld, nether, end, or all"),
+                    Component.literal("无效的维度: " + dim + "。请使用: overworld, nether, end 或 all"),
                     false);
             return 0;
         }
@@ -65,14 +65,14 @@ public class MapSyncerCommand {
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
         if (baseDir == null) {
             mc.player.displayClientMessage(
-                    Component.literal("Unable to determine map directory. Are you connected to a server?"),
+                    Component.literal("无法确定地图目录。您是否已连接到服务器？"),
                     false);
             return 0;
         }
 
         // 加载缓存并发送同步请求
         mc.player.displayClientMessage(
-                Component.literal("Starting map sync for dimension: " + normalizedDim),
+                Component.literal("开始同步地图，维度: " + normalizedDim),
                 false);
 
         sendSyncRequest(mc, baseDir, normalizedDim);
@@ -92,13 +92,13 @@ public class MapSyncerCommand {
         String normalizedDim = normalizeDimensionFromResource(currentDim);
 
         mc.player.displayClientMessage(
-                Component.literal("Starting map sync for current dimension: " + normalizedDim),
+                Component.literal("开始同步当前维度地图: " + normalizedDim),
                 false);
 
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
         if (baseDir == null) {
             mc.player.displayClientMessage(
-                    Component.literal("Unable to determine map directory"),
+                    Component.literal("无法确定地图目录"),
                     false);
             return 0;
         }
@@ -130,11 +130,11 @@ public class MapSyncerCommand {
 
         if (metaMap.isEmpty()) {
             mc.player.displayClientMessage(
-                    Component.literal("No existing regions found, requesting all from server..."),
+                    Component.literal("未找到现有区域，请求服务器发送全部数据..."),
                     false);
         } else {
             mc.player.displayClientMessage(
-                    Component.literal(String.format("Checking %d regions for updates (hash + timestamp)...", metaMap.size())),
+                    Component.literal(String.format("正在检查 %d 个区域的更新（哈希+时间戳）...", metaMap.size())),
                     false);
         }
 
