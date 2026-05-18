@@ -225,8 +225,19 @@ public class ServerSyncHandler {
         // 1. Hash match → skip (file content identical)
         // 2. Hash mismatch + client timestamp older → sync
         // 3. Hash mismatch + client timestamp newer → skip (client has newer data)
+        // 4. Client has no metadata for this dimension → skip (not requested)
         int hashMatchCount = 0;
         int timestampSkipCount = 0;
+
+        // Determine which dimensions the client is requesting (based on their metadata keys)
+        Set<String> requestedDimensions = new java.util.HashSet<>();
+        for (String key : clientMeta.keySet()) {
+            String[] parts = key.split("[/\\\\]");
+            if (parts.length > 1) {
+                requestedDimensions.add(parts[0]);  // First part is dimension name
+            }
+        }
+        LOGGER.info("Client requesting dimensions: {}", requestedDimensions);
 
         try {
             Files.walk(cacheDir)
@@ -236,6 +247,17 @@ public class ServerSyncHandler {
                         String relativePath = cacheDir.relativize(zipPath).toString();
                         // Remove .zip extension and normalize path separator
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
+
+                        // Parse dimension from path
+                        String[] parts = normalizedPath.split("[/\\\\]");
+                        String dimension = parts.length > 1 ? parts[0] : "unknown";
+
+                        // Skip if client didn't request this dimension
+                        if (!requestedDimensions.contains(dimension)) {
+                            LOGGER.debug("Skipping {}: dimension {} not requested by client", normalizedPath, dimension);
+                            // dimensionSkipCount would need to be AtomicInteger for lambda
+                            return;
+                        }
 
                         RegionMeta serverMeta = serverCache.get(normalizedPath);
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
