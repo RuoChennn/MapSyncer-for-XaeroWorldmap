@@ -20,5 +20,23 @@
   "mapsyncer.cache.status": "缓存: %d 已清除, %d 需重新加载",
   "mapsyncer.cache.cleared": "缓存已清除...",
 
-  "mapsyncer.prefix": "[MapSyncer]"
+  "mapsyncer.prefix": "[MapSyncer]",
+
+  "mapsyncer.help.server.header": "§e[MapSyncer] §f服务端命令帮助:",
+  "mapsyncer.help.server.generate": "§7/mapsyncer generate §f- 生成所有维度地图缓存",
+  "mapsyncer.help.server.generate_dim": "§7/mapsyncer generate <维度> §f- 生成指定维度缓存（增量模式）",
+  "mapsyncer.help.server.generate_region": "§7/mapsyncer generate <维度> <x> <z> §f- 生成指定区域的地图",
+  "mapsyncer.help.server.generate_force": "§7/mapsyncer generate <维度> force §f- 强制重新生成（无视已有缓存）",
+  "mapsyncer.help.server.status": "§7/mapsyncer status §f- 查看生成进度和状态",
+  "mapsyncer.help.server.incremental_header": "§e增量更新命令:",
+  "mapsyncer.help.server.incremental_off": "§7/mapsyncer incremental off §f- 禁用增量更新",
+  "mapsyncer.help.server.incremental_tick": "§7/mapsyncer incremental tick [间隔] §f- 设置 TICK 模式",
+  "mapsyncer.help.server.incremental_scheduled": "§7/mapsyncer incremental scheduled [时] [分] §f- 设置定时模式",
+  "mapsyncer.help.server.incremental_status": "§7/mapsyncer incremental status §f- 查看增量更新状态",
+
+  "mapsyncer.help.client.header": "§f客户端命令帮助:",
+  "mapsyncer.help.client.sync": "§7/mapsyncer sync §f- 同步当前维度地图",
+  "mapsyncer.help.client.sync_dim": "§7/mapsyncer sync <维度> §f- 同步指定维度（支持 mod 维度）",
+  "mapsyncer.help.client.sync_all": "§7/mapsyncer sync all §f- 同步所有维度",
+  "mapsyncer.help.client.note": "§e提示: §f维度名称支持 overworld/nether/end/mod维度ID"
 }

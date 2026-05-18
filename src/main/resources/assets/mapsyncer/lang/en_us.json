@@ -20,5 +20,23 @@
   "mapsyncer.cache.status": "Cache: %d cleared, %d reload",
   "mapsyncer.cache.cleared": "Cache cleared...",
 
-  "mapsyncer.prefix": "[MapSyncer]"
+  "mapsyncer.prefix": "[MapSyncer]",
+
+  "mapsyncer.help.server.header": "§e[MapSyncer] §fServer Commands Help:",
+  "mapsyncer.help.server.generate": "§7/mapsyncer generate §f- Generate map cache for all dimensions",
+  "mapsyncer.help.server.generate_dim": "§7/mapsyncer generate <dim> §f- Generate cache for specified dimension (incremental)",
+  "mapsyncer.help.server.generate_region": "§7/mapsyncer generate <dim> <x> <z> §f- Generate single region",
+  "mapsyncer.help.server.generate_force": "§7/mapsyncer generate <dim> force §f- Force regenerate (ignore existing cache)",
+  "mapsyncer.help.server.status": "§7/mapsyncer status §f- Show generation progress and status",
+  "mapsyncer.help.server.incremental_header": "§eIncremental Update Commands:",
+  "mapsyncer.help.server.incremental_off": "§7/mapsyncer incremental off §f- Disable incremental updates",
+  "mapsyncer.help.server.incremental_tick": "§7/mapsyncer incremental tick [interval] §f- Set TICK mode",
+  "mapsyncer.help.server.incremental_scheduled": "§7/mapsyncer incremental scheduled [hour] [min] §f- Set scheduled mode",
+  "mapsyncer.help.server.incremental_status": "§7/mapsyncer incremental status §f- Show incremental update status",
+
+  "mapsyncer.help.client.header": "§fClient Commands Help:",
+  "mapsyncer.help.client.sync": "§7/mapsyncer sync §f- Sync current dimension map",
+  "mapsyncer.help.client.sync_dim": "§7/mapsyncer sync <dim> §f- Sync specified dimension (supports mod dimensions)",
+  "mapsyncer.help.client.sync_all": "§7/mapsyncer sync all §f- Sync all dimensions",
+  "mapsyncer.help.client.note": "§eNote: §fDimension names support overworld/nether/end/mod dimension ID"
 }

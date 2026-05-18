@@ -41,6 +41,9 @@ public class MapSyncerCommand {
 
         dispatcher.register(
                 net.minecraft.commands.Commands.literal("mapsyncer")
+                        .executes(MapSyncerCommand::showHelp)
+                        .then(net.minecraft.commands.Commands.literal("help")
+                                .executes(MapSyncerCommand::showHelp))
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .then(net.minecraft.commands.Commands.argument("dim", StringArgumentType.string())
                                         .suggests((context, builder) -> {
@@ -71,6 +74,19 @@ public class MapSyncerCommand {
                                         .executes(MapSyncerCommand::executeSync))
                                 .executes(MapSyncerCommand::executeSyncCurrentDim))
         );
+    }
+
+    private static int showHelp(CommandContext<CommandSourceStack> context) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return 0;
+
+        mc.player.displayClientMessage(prefix(), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.help.client.header").withStyle(s -> s.withColor(0xFFFFFF)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.help.client.sync").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.help.client.sync_dim").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.help.client.sync_all").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.help.client.note").withStyle(s -> s.withColor(0xFFFF55)), false);
+        return 1;
     }
 
     /**

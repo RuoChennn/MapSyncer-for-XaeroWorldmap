@@ -20,6 +20,9 @@ public class CacheGenerateCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mapsyncer")
                 .requires(source -> source.hasPermission(4))
+                .executes(CacheGenerateCommand::showHelp)
+                .then(Commands.literal("help")
+                        .executes(CacheGenerateCommand::showHelp))
                 .then(Commands.literal("generate")
                         .executes(CacheGenerateCommand::generateAll)
                         .then(Commands.argument("dimension", StringArgumentType.string())
@@ -58,6 +61,21 @@ public class CacheGenerateCommand {
                                                 .executes(CacheGenerateCommand::setScheduledTime))))
                         .then(Commands.literal("status")
                                 .executes(CacheGenerateCommand::showIncrementalStatus))));
+    }
+
+    private static int showHelp(CommandContext<CommandSourceStack> ctx) {
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.header"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_dim"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_region"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_force"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.status"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_header"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_off"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_tick"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_scheduled"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_status"), false);
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
