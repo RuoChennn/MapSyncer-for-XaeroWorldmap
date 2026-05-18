@@ -59,7 +59,7 @@ public class XaeroMapIntegrator {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
                 mc.player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §7Chunk updates paused..."), false);
+                    Component.translatable("mapsyncer.chunk.paused"), false);
             }
 
             // Try to pause Xaero's MapWriter thread via reflection
@@ -80,7 +80,7 @@ public class XaeroMapIntegrator {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
                 mc.player.displayClientMessage(
-                    Component.literal("§e[MapSyncer] §aChunk updates resumed"), false);
+                    Component.translatable("mapsyncer.chunk.resumed"), false);
             }
 
             // Resume Xaero's MapWriter thread

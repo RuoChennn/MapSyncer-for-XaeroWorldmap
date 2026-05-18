@@ -38,5 +38,8 @@
   "mapsyncer.help.client.sync": "§7/mapsyncer sync §f- Sync current dimension map",
   "mapsyncer.help.client.sync_dim": "§7/mapsyncer sync <dim> §f- Sync specified dimension (supports mod dimensions)",
   "mapsyncer.help.client.sync_all": "§7/mapsyncer sync all §f- Sync all dimensions",
-  "mapsyncer.help.client.note": "§eNote: §fDimension names support overworld/nether/end/mod dimension ID"
+  "mapsyncer.help.client.note": "§eNote: §fDimension names support overworld/nether/end/mod dimension ID",
+
+  "mapsyncer.chunk.paused": "§e[MapSyncer] §7Chunk updates paused...",
+  "mapsyncer.chunk.resumed": "§e[MapSyncer] §aChunk updates resumed"
 }

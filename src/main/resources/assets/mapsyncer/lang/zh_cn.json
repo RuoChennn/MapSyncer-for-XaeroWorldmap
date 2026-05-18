@@ -38,5 +38,8 @@
   "mapsyncer.help.client.sync": "§7/mapsyncer sync §f- 同步当前维度地图",
   "mapsyncer.help.client.sync_dim": "§7/mapsyncer sync <维度> §f- 同步指定维度（支持 mod 维度）",
   "mapsyncer.help.client.sync_all": "§7/mapsyncer sync all §f- 同步所有维度",
-  "mapsyncer.help.client.note": "§e提示: §f维度名称支持 overworld/nether/end/mod维度ID"
+  "mapsyncer.help.client.note": "§e提示: §f维度名称支持 overworld/nether/end/mod维度ID",
+
+  "mapsyncer.chunk.paused": "§e[MapSyncer] §7区块更新已暂停...",
+  "mapsyncer.chunk.resumed": "§e[MapSyncer] §a区块更新已恢复"
 }
