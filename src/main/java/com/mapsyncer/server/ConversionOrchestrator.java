@@ -15,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -215,16 +216,21 @@ public class ConversionOrchestrator {
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
-        // 获取 Xaero 格式的目录名
-        // 优先使用配置中的 xaeroFolder，否则使用默认映射
-        String xaeroDimName;
-        String configXaeroFolder = scanConfig.xaeroFolder();
-        if (configXaeroFolder != null && !configXaeroFolder.isEmpty()) {
-            xaeroDimName = configXaeroFolder;
-            LOGGER.info("Using configured xaero_folder: {}", xaeroDimName);
+        // 获取 Xaero 格式的目录名（用于输出）
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+
+        // 获取 MCA 文件存放目录（用于读取）
+        // 优先使用配置中的 regionFolder，否则使用默认路径
+        Path regionDir;
+        String configRegionFolder = scanConfig.regionFolder();
+        if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
+            // 使用配置指定的 region 目录
+            regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
+            LOGGER.info("Using configured region_folder: {} -> {}", configRegionFolder, regionDir);
         } else {
-            xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
-            LOGGER.info("Using default dimension mapping: {} -> {}", dimPath, xaeroDimName);
+            // 使用 Minecraft 默认路径
+            regionDir = RegionScanner.getRegionDir(level);
+            LOGGER.info("Using default region path for dimension {}", dimPath);
         }
 
         // 计算输出目录（包含 caves/<layer> 子目录）
@@ -243,8 +249,7 @@ public class ConversionOrchestrator {
             return;
         }
 
-        // 获取 region 目录路径
-        Path regionDir = RegionScanner.getRegionDir(level);
+        // 检查 region 目录是否存在
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", xaeroDimName);
             return;
