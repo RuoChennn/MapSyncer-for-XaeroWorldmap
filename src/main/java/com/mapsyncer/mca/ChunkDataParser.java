@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Chunk数据解析器
@@ -14,8 +15,37 @@ import java.util.Map;
 public class ChunkDataParser {
 
     /**
+     * 可接受的区块状态集合
+     * 参考 Xaero WorldDataReader: 接受 >= FEATURES 状态的区块
+     *
+     * ChunkStatus 顺序：
+     * empty -> structure_starts -> structure_references -> biomes -> noise -> surface -> features -> light -> spawn -> heightmaps -> full
+     *
+     * Xaero 在 WorldDataReader.java 第333-340行：
+     * - chunkStatusIndex < BIOMES.getIndex() → return false（跳过）
+     * - handleChunkBiomes() 处理生物群系数据
+     * - chunkStatusIndex < FEATURES.getIndex() → return false（跳过）
+     *
+     * 所以 Xaero 接受 >= FEATURES 的状态，包括：
+     * features, light, spawn, heightmaps, full
+     */
+    private static final Set<String> ACCEPTABLE_STATUSES = Set.of(
+        "minecraft:features",
+        "minecraft:light",
+        "minecraft:spawn",
+        "minecraft:heightmaps",
+        "minecraft:full",
+        // 不带命名空间的简写
+        "features",
+        "light",
+        "spawn",
+        "heightmaps",
+        "full"
+    );
+
+    /**
      * 判断区块状态是否应该跳过
-     * 只处理状态为 "minecraft:full" 的区块
+     * 参考 Xaero WorldDataReader: 接受 >= FEATURES 状态的区块
      * @param status 区块状态字符串
      * @return true 表示跳过该区块
      */
@@ -27,8 +57,8 @@ public class ChunkDataParser {
         // 处理带命名空间和不带命名空间的状态
         String normalizedStatus = status.contains(":") ? status : "minecraft:" + status;
 
-        // 只接受 "minecraft:full" 状态
-        return !normalizedStatus.equals("minecraft:full");
+        // 接受 >= FEATURES 状态的区块
+        return !ACCEPTABLE_STATUSES.contains(normalizedStatus);
     }
 
     /**

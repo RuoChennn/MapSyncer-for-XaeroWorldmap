@@ -397,7 +397,8 @@ public class RegionConverterStandalone {
                     data.blockNames[relX][relZ] = topState != null ? topState.name() : "minecraft:air";
                     int topBlockYValue = (highestBlockY >= 0) ? highestBlockY : topY;
                     data.topBlockY[relX][relZ] = topBlockYValue;
-                    data.biomeNames[relX][relZ] = biomeName;
+                    // 参考 Xaero: biomeName 为 null 时使用 THE_VOID（虚空区域的深紫色）
+                    data.biomeNames[relX][relZ] = biomeName != null ? biomeName : DEFAULT_BIOME;
                     data.lightMap[relX][relZ] = surfaceLight;
                     if (!overlayList.isEmpty()) {
                         data.overlays[relX][relZ] = overlayList;

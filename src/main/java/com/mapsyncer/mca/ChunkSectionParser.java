@@ -394,8 +394,10 @@ public class ChunkSectionParser {
      * @param smoothBoundary 是否启用边界平滑
      */
     public static String getBiomeAt(SectionData section, int x, int y, int z, boolean smoothBoundary) {
+        // 参考 Xaero WorldDataReader: 默认使用 THE_VOID biome
+        // 当 biomePalette 为空时返回 THE_VOID（虚空区域的深紫色）
         if (section.biomePalette.isEmpty()) {
-            return null;
+            return "minecraft:the_void";
         }
 
         // 单生物群系palette
@@ -403,9 +405,9 @@ public class ChunkSectionParser {
             return section.biomePalette.get(0);
         }
 
-        // 无数据
+        // 无数据时返回 THE_VOID（默认值）
         if (section.biomeData == null || section.biomeBitsPerEntry == 0) {
-            return null;
+            return "minecraft:the_void";
         }
 
         // 标准计算：voxelIndex = (y/4)*16 + (z/4)*4 + (x/4)
