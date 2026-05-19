@@ -44,6 +44,42 @@ public class ConversionOrchestrator {
     // 时间戳缓存实例
     private static McaTimestampCache timestampCache;
 
+    // 单区域生成结果状态
+    public enum SingleRegionResult {
+        SUCCESS,
+        REGION_NOT_FOUND,
+        CONVERSION_FAILED,
+        ALREADY_RUNNING
+    }
+
+    /**
+     * 清除维度缓存目录
+     * @param dimCacheDir 维度缓存目录路径
+     */
+    private static void clearDimensionCache(Path dimCacheDir) {
+        if (!Files.exists(dimCacheDir)) {
+            LOGGER.info("No existing cache to clear for dimension: {}", dimCacheDir);
+            return;
+        }
+
+        try {
+            // 递归删除目录中的所有文件和子目录
+            Files.walk(dimCacheDir)
+                    .sorted((a, b) -> -a.compareTo(b)) // 先删除文件再删除目录
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                            LOGGER.debug("Deleted: {}", path);
+                        } catch (IOException e) {
+                            LOGGER.warn("Failed to delete: {}", path);
+                        }
+                    });
+            LOGGER.info("Cleared cache directory: {}", dimCacheDir);
+        } catch (IOException e) {
+            LOGGER.error("Failed to clear dimension cache: {}", dimCacheDir, e);
+        }
+    }
+
     /**
      * 获取或初始化时间戳缓存
      */
@@ -132,6 +168,12 @@ public class ConversionOrchestrator {
         ServerLevel level = server.getLevel(dimKey);
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
 
+        // 强制生成前先清除该维度的缓存目录
+        String dimPath = dimKey.location().getPath();
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+        Path dimCacheDir = CACHE_DIR.resolve(xaeroDimName);
+        clearDimensionCache(dimCacheDir);
+
         // Force save all chunks before reading .mca files
         if (!saveAllChunks(server)) {
             LOGGER.error("Failed to save all chunks, aborting map generation");
@@ -151,45 +193,118 @@ public class ConversionOrchestrator {
         }
     }
 
-    public static void generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int regionX, int regionZ) {
+    /**
+     * 检查单个区域的 MCA 文件是否存在
+     * @param server MinecraftServer 实例
+     * @param dimension 维度 ResourceKey
+     * @param regionX 区域 X 坐标
+     * @param regionZ 区域 Z 坐标
+     * @return MCA 文件路径（如果存在），null 表示不存在
+     */
+    public static Path checkMcaFileExists(MinecraftServer server, ResourceKey<Level> dimension, int regionX, int regionZ) {
+        ServerLevel level = server.getLevel(dimension);
+        if (level == null) return null;
+
+        String dimPath = dimension.location().getPath();
+        DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+
+        Path regionDir;
+        String configRegionFolder = scanConfig.regionFolder();
+        if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
+            regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
+        } else {
+            regionDir = RegionScanner.getRegionDir(level);
+        }
+
+        if (regionDir == null) return null;
+
+        Path mcaPath = regionDir.resolve("r." + regionX + "." + regionZ + ".mca");
+        return Files.exists(mcaPath) ? mcaPath : null;
+    }
+
+    public static SingleRegionResult generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int regionX, int regionZ) {
         if (isRunning) {
             LOGGER.warn("Conversion already in progress");
-            return;
+            return SingleRegionResult.ALREADY_RUNNING;
         }
+
+        // 提前检查 MCA 文件是否存在
+        Path mcaPath = checkMcaFileExists(server, dimension, regionX, regionZ);
+        if (mcaPath == null) {
+            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.location().getPath());
+            return SingleRegionResult.REGION_NOT_FOUND;
+        }
+
         isRunning = true;
         totalCount = 1;
         processedCount = 0;
         currentDimension = dimension;
         ServerLevel level = server.getLevel(dimension);
-        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimension); isRunning = false; return; }
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimension); isRunning = false; return SingleRegionResult.CONVERSION_FAILED; }
 
         // Force save all chunks before reading .mca files
         if (!saveAllChunks(server)) {
             LOGGER.error("Failed to save all chunks, aborting map generation");
             isRunning = false;
-            return;
+            return SingleRegionResult.CONVERSION_FAILED;
         }
 
+        // 使用服务端维度名作为缓存 key
+        String dimPath = dimension.location().getPath();
+
+        // 从配置获取维度扫描配置
+        DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+        ScanMode scanMode = scanConfig.scanMode();
+        int caveLayer = scanConfig.getCaveLayer();
+
         // 使用 Xaero 格式的维度目录名（与客户端保持一致）
-        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimension.location().getPath());
-        Path outputDir = CACHE_DIR.resolve(xaeroDimName);
-        Path regionDir = RegionScanner.getRegionDir(level);
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+
+        // 获取 MCA 文件存放目录（用于读取）
+        Path regionDir;
+        String configRegionFolder = scanConfig.regionFolder();
+        if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
+            regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
+        } else {
+            regionDir = RegionScanner.getRegionDir(level);
+        }
+
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", dimension);
             isRunning = false;
-            return;
+            return SingleRegionResult.CONVERSION_FAILED;
+        }
+
+        // 计算输出目录（包含 caves/<layer> 子目录）
+        Path baseOutputDir = CACHE_DIR.resolve(xaeroDimName);
+        Path outputDir;
+        if (caveLayer == Integer.MAX_VALUE) {
+            outputDir = baseOutputDir;
+        } else {
+            outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
         }
 
         int minBuildHeight = level.getMinBuildHeight();
         int worldTopY = level.getMaxBuildHeight();
 
-        // 默认使用地表模式（未来可从配置读取）
-        LightMode lightMode = LightMode.SURFACE;
-        CaveModeParams caveParams = CaveModeParams.NONE;
+        // 根据配置选择光照模式和洞穴参数
+        LightMode lightMode;
+        CaveModeParams caveParams;
+        if (scanMode == ScanMode.CAVE) {
+            lightMode = LightMode.CAVE;
+            int caveDepth = scanConfig.getCaveDepth(minBuildHeight);
+            caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
+            LOGGER.info("Single region generation: using CAVE mode with caveStart={}, caveLayer={}",
+                scanConfig.caveStart(), caveLayer);
+        } else {
+            lightMode = LightMode.SURFACE;
+            caveParams = CaveModeParams.NONE;
+            LOGGER.info("Single region generation: using SURFACE mode");
+        }
 
+        SingleRegionResult result = SingleRegionResult.SUCCESS;
         try {
             Files.createDirectories(outputDir);
-            Path mcaPath = regionDir.resolve("r." + regionX + "." + regionZ + ".mca");
             ConvertedRegion converted = RegionConverterStandalone.convertRegion(
                 mcaPath, regionX, regionZ, minBuildHeight, worldTopY, lightMode, caveParams);
             if (converted != null) {
@@ -197,10 +312,18 @@ public class ConversionOrchestrator {
                 processedCount = 1;
                 LOGGER.info("Converted single region: ({}, {})", regionX, regionZ);
             } else {
-                LOGGER.warn("Could not convert region ({}, {}): file not found or invalid", regionX, regionZ);
+                LOGGER.warn("Could not convert region ({}, {}): conversion failed", regionX, regionZ);
+                result = SingleRegionResult.CONVERSION_FAILED;
             }
-        } catch (IOException e) { LOGGER.error("Failed to write region file", e); }
-        finally { isRunning = false; currentStatus = "completed"; }
+        } catch (IOException e) {
+            LOGGER.error("Failed to write region file", e);
+            result = SingleRegionResult.CONVERSION_FAILED;
+        }
+        finally {
+            isRunning = false;
+            currentStatus = "completed";
+        }
+        return result;
     }
 
     private static void convertDimension(MinecraftServer server, DimensionRegions dimRegions, boolean force) {
@@ -496,32 +619,68 @@ public class ConversionOrchestrator {
         }
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
-        McaTimestampCache cache = getTimestampCache();
+        McaTimestampCache mcaCache = getTimestampCache();
+        GenerationCache genCache = GenerationCache.getInstance(CACHE_DIR);
         int totalUpdated = 0;
+        long generationTimeSeconds = System.currentTimeMillis() / 1000;
 
         for (DimensionRegions dimRegions : allRegions) {
             ServerLevel level = server.getLevel(dimRegions.dimension());
             if (level == null) continue;
 
             String dimPath = dimRegions.dimension().location().getPath();
-            // 使用 Xaero 格式的目录名（与客户端保持一致）
+
+            // 从配置获取维度扫描配置
+            DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+            ScanMode scanMode = scanConfig.scanMode();
+            int caveLayer = scanConfig.getCaveLayer();
+
+            // 获取 Xaero 格式的目录名（用于输出）
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
-            Path outputDir = CACHE_DIR.resolve(xaeroDimName);
-            Path regionDir = RegionScanner.getRegionDir(level);
+
+            // 获取 MCA 文件存放目录（用于读取）
+            Path regionDir;
+            String configRegionFolder = scanConfig.regionFolder();
+            if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
+                regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
+            } else {
+                regionDir = RegionScanner.getRegionDir(level);
+            }
             if (regionDir == null) continue;
+
+            // 计算输出目录（包含 caves/<layer> 子目录）
+            Path baseOutputDir = CACHE_DIR.resolve(xaeroDimName);
+            Path outputDir;
+            if (caveLayer == Integer.MAX_VALUE) {
+                outputDir = baseOutputDir;
+            } else {
+                outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
+            }
 
             int minBuildHeight = level.getMinBuildHeight();
             int worldTopY = level.getMaxBuildHeight();
 
+            // 获取光照模式和洞穴参数
+            LightMode lightMode;
+            CaveModeParams caveParams;
+            if (scanMode == ScanMode.CAVE) {
+                lightMode = LightMode.CAVE;
+                int caveDepth = scanConfig.getCaveDepth(minBuildHeight);
+                caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
+            } else {
+                lightMode = LightMode.SURFACE;
+                caveParams = CaveModeParams.NONE;
+            }
+
             // Scan for regions that need update
-            java.util.List<RegionCoords> needsUpdate = cache.scanAndUpdate(dimPath, regionDir);
+            java.util.List<RegionCoords> needsUpdate = mcaCache.scanAndUpdate(dimPath, regionDir);
 
             if (needsUpdate.isEmpty()) {
                 LOGGER.debug("No updates needed for dimension {}", dimPath);
                 continue;
             }
 
-            LOGGER.info("Dimension {}: {} regions need incremental update", dimPath, needsUpdate.size());
+            LOGGER.info("Dimension {}: {} regions need incremental update (mode={})", dimPath, needsUpdate.size(), scanMode);
 
             try {
                 Files.createDirectories(outputDir);
@@ -535,14 +694,24 @@ public class ConversionOrchestrator {
                 if (!Files.exists(mcaPath)) continue;
 
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY);
+                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY, lightMode, caveParams);
 
                 if (converted != null) {
                     try {
-                        XaeroWriter.writeRegionFile(outputDir, converted);
-                        cache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
+                        Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
+                        mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
+
+                        // Update GenerationCache with correct relativePath format
+                        String relativePath;
+                        if (caveLayer == Integer.MAX_VALUE) {
+                            relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
+                        } else {
+                            relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
+                        }
+                        genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
+
                         totalUpdated++;
-                        LOGGER.debug("Incrementally updated region ({}, {}) in {}", coords.x(), coords.z(), dimPath);
+                        LOGGER.debug("Incrementally updated region ({}, {}) in {} (layer={})", coords.x(), coords.z(), dimPath, caveLayer == Integer.MAX_VALUE ? "surface" : caveLayer);
                     } catch (IOException e) {
                         LOGGER.error("Failed to write region file during incremental update", e);
                     }
@@ -552,7 +721,8 @@ public class ConversionOrchestrator {
 
         if (totalUpdated > 0) {
             LOGGER.info("Incremental scan completed: {} regions updated", totalUpdated);
-            cache.saveCache();
+            mcaCache.saveCache();
+            genCache.save();
         }
     }
 

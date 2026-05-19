@@ -173,7 +173,7 @@ public class ServerSyncHandler {
      * @param bytesSent Number of bytes sent in this batch
      */
     private static void applySpeedLimit(int bytesSent) {
-        int limitKBps = ModConfig.COMMON.syncSpeedLimitKBps.get();
+        int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
         if (limitKBps <= 0) return; // No limit
 
         // Calculate how long this batch should take at the limit speed
@@ -213,7 +213,7 @@ public class ServerSyncHandler {
         Path cacheDir = ConversionOrchestrator.CACHE_DIR;
 
         if (!Files.exists(cacheDir)) {
-            serverPlayer.sendSystemMessage(Component.literal("No map cache available. Run /mapsyncer generate first."));
+            serverPlayer.sendSystemMessage(Component.translatable("mapsyncer.server.no_cache"));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -257,9 +257,8 @@ public class ServerSyncHandler {
             if (!Files.exists(dimCacheDir) || !dimCacheDir.toFile().isDirectory()) {
                 // 将 Xaero 格式转换为用户友好名称用于提示
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
-                serverPlayer.sendSystemMessage(Component.literal(
-                        String.format("Dimension '%s' map data not available. Run /mapsyncer generate %s first.",
-                                friendlyDim, friendlyDim)));
+                serverPlayer.sendSystemMessage(Component.translatable(
+                        "mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
                 // 继续处理其他维度，而不是直接返回
             }
@@ -340,8 +339,8 @@ public class ServerSyncHandler {
                 serverPlayer.getName().getString(), total, hashMatchCount, timestampSkipCount);
 
         if (total == 0) {
-            serverPlayer.sendSystemMessage(Component.literal(
-                    String.format("Map is up-to-date. %d hash match, %d timestamp skip.", hashMatchCount, timestampSkipCount)));
+            serverPlayer.sendSystemMessage(Component.translatable(
+                    "mapsyncer.server.map_uptodate", hashMatchCount, timestampSkipCount));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -350,14 +349,13 @@ public class ServerSyncHandler {
             return;
         }
 
-        serverPlayer.sendSystemMessage(Component.literal(
-                String.format("Starting map sync: %d regions to download (%d identical, %d newer on client skipped)",
-                        total, hashMatchCount, timestampSkipCount)));
+        serverPlayer.sendSystemMessage(Component.translatable(
+                "mapsyncer.server.sync_start", total, hashMatchCount, timestampSkipCount));
 
         // Check if this is a resumed sync
         SyncProgress existingProgress = playerSyncProgress.get(playerId);
         int startIndex = 0;
-        if (existingProgress != null && ModConfig.COMMON.enableResumeSync.get()) {
+        if (existingProgress != null && ModConfig.SERVER.enableResumeSync.get()) {
             // Resume from last progress if same total count
             if (existingProgress.totalChunks == total) {
                 startIndex = Math.min(existingProgress.totalChunks - 1, total - 1);
@@ -432,7 +430,7 @@ public class ServerSyncHandler {
                 new PacketHandler.SyncProgressPayload(total, total, "completed"));
 
         serverPlayer.sendSystemMessage(
-                Component.literal(String.format("Map sync complete: %d regions sent", total)));
+                Component.translatable("mapsyncer.server.sync_complete", total));
         LOGGER.info("Map sync complete for player {}: {} regions",
                 serverPlayer.getName().getString(), total);
 

@@ -43,5 +43,32 @@
   "mapsyncer.chunk.paused": "§e[MapSyncer] §7区块更新已暂停...",
   "mapsyncer.chunk.resumed": "§e[MapSyncer] §a区块更新已恢复",
 
-  "mapsyncer.sync.dimension_not_available": "维度 %s 的地图暂未生成或维度不存在，请联系管理员执行生成命令"
+  "mapsyncer.sync.dimension_not_available": "维度 %s 的地图暂未生成或维度不存在，请联系管理员执行生成命令",
+
+  "mapsyncer.command.unknown_dimension": "未知维度: %s",
+  "mapsyncer.command.region_not_found": "区域 (%d, %d) 在维度 %s 中不存在，请确认坐标是否正确",
+  "mapsyncer.command.generating_region": "开始生成区域 (%d, %d) 在维度 %s...",
+  "mapsyncer.command.region_converted": "区域转换完成",
+  "mapsyncer.command.region_conversion_failed": "区域 (%d, %d) 转换失败",
+
+  "mapsyncer.command.incremental_disabled": "增量更新已禁用",
+  "mapsyncer.command.incremental_tick_set": "增量更新已设置为 TICK 模式（间隔: %d ticks = %.1f 秒）",
+  "mapsyncer.command.incremental_tick_interval": "增量更新已设置为 TICK 模式，间隔 %d ticks（%.1f 秒）",
+  "mapsyncer.command.incremental_scheduled_set": "增量更新已设置为定时模式（每日 %02d:%02d）",
+
+  "mapsyncer.server.no_cache": "地图缓存不可用。请先运行 /mapsyncer generate",
+  "mapsyncer.server.dim_not_available": "维度 '%s' 地图数据不可用。请先运行 /mapsyncer generate %s",
+  "mapsyncer.server.map_uptodate": "地图已是最新。%d 个哈希匹配，%d 个时间戳跳过。",
+  "mapsyncer.server.sync_start": "开始地图同步：需下载 %d 个区域（%d 个相同，%d 个客户端较新已跳过）",
+  "mapsyncer.server.sync_complete": "地图同步完成：已发送 %d 个区域",
+
+  "mapsyncer.generate.start_full": "开始全量地图生成...",
+  "mapsyncer.generate.full_complete": "地图生成完成：%d/%d 个区域",
+  "mapsyncer.generate.start_dim": "开始生成维度地图：%s",
+  "mapsyncer.generate.dim_complete": "维度生成完成：%d/%d 个区域",
+  "mapsyncer.generate.start_force": "开始强制生成维度地图：%s（忽略缓存）",
+  "mapsyncer.generate.force_complete": "强制维度生成完成：%d/%d 个区域",
+  "mapsyncer.generate.in_progress": "转换进行中：%d/%d 个区域 - %s",
+  "mapsyncer.generate.no_progress": "当前无转换任务",
+  "mapsyncer.generate.incremental_status": "增量更新：%s"
 }

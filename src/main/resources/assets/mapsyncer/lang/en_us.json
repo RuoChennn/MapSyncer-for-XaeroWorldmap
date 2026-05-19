@@ -41,5 +41,34 @@
   "mapsyncer.help.client.note": "§eNote: §fDimension names support overworld/nether/end/mod dimension ID",
 
   "mapsyncer.chunk.paused": "§e[MapSyncer] §7Chunk updates paused...",
-  "mapsyncer.chunk.resumed": "§e[MapSyncer] §aChunk updates resumed"
+  "mapsyncer.chunk.resumed": "§e[MapSyncer] §aChunk updates resumed",
+
+  "mapsyncer.sync.dimension_not_available": "Dimension %s map not generated or dimension does not exist, please ask admin to run generation command",
+
+  "mapsyncer.command.unknown_dimension": "Unknown dimension: %s",
+  "mapsyncer.command.region_not_found": "Region (%d, %d) does not exist in dimension %s, please verify coordinates",
+  "mapsyncer.command.generating_region": "Starting generation for region (%d, %d) in dimension %s...",
+  "mapsyncer.command.region_converted": "Region conversion completed",
+  "mapsyncer.command.region_conversion_failed": "Region (%d, %d) conversion failed",
+
+  "mapsyncer.command.incremental_disabled": "Incremental updates disabled",
+  "mapsyncer.command.incremental_tick_set": "Incremental updates set to TICK mode (interval: %d ticks = %.1f seconds)",
+  "mapsyncer.command.incremental_tick_interval": "Incremental updates set to TICK mode with interval %d ticks (%.1f seconds)",
+  "mapsyncer.command.incremental_scheduled_set": "Incremental updates set to SCHEDULED mode (daily at %02d:%02d)",
+
+  "mapsyncer.server.no_cache": "No map cache available. Run /mapsyncer generate first.",
+  "mapsyncer.server.dim_not_available": "Dimension '%s' map data not available. Run /mapsyncer generate %s first.",
+  "mapsyncer.server.map_uptodate": "Map is up-to-date. %d hash match, %d timestamp skip.",
+  "mapsyncer.server.sync_start": "Starting map sync: %d regions to download (%d identical, %d newer on client skipped)",
+  "mapsyncer.server.sync_complete": "Map sync complete: %d regions sent",
+
+  "mapsyncer.generate.start_full": "Starting full map generation...",
+  "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions",
+  "mapsyncer.generate.start_dim": "Starting map generation for dimension: %s",
+  "mapsyncer.generate.dim_complete": "Dimension generation completed: %d/%d regions",
+  "mapsyncer.generate.start_force": "Starting forced map generation for dimension: %s (ignoring cache)",
+  "mapsyncer.generate.force_complete": "Forced dimension generation completed: %d/%d regions",
+  "mapsyncer.generate.in_progress": "Conversion in progress: %d/%d regions - %s",
+  "mapsyncer.generate.no_progress": "No conversion in progress",
+  "mapsyncer.generate.incremental_status": "Incremental updates: %s"
 }

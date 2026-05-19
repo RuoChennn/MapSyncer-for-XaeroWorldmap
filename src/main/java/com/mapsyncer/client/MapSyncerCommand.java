@@ -126,14 +126,8 @@ public class MapSyncerCommand {
             return 0;
         }
 
-        // 获取地图目录
+        // 获取地图目录（可能为 null，但仍然可以发送请求）
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
-        if (baseDir == null) {
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.command.no_map_dir").withStyle(style -> style.withColor(0xFF5555))),
-                    false);
-            return 0;
-        }
 
         // 加载缓存并发送同步请求
         mc.player.displayClientMessage(
@@ -160,13 +154,8 @@ public class MapSyncerCommand {
                 prefix().append(Component.translatable("mapsyncer.command.sync_current", normalizedDim).withStyle(style -> style.withColor(0xFFFFFF))),
                 false);
 
+        // 获取地图目录（可能为 null，但仍然可以发送请求）
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
-        if (baseDir == null) {
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.command.no_map_dir").withStyle(style -> style.withColor(0xFF5555))),
-                    false);
-            return 0;
-        }
 
         sendSyncRequest(mc, baseDir, normalizedDim);
 
@@ -174,55 +163,61 @@ public class MapSyncerCommand {
     }
 
     private static void sendSyncRequest(Minecraft mc, Path baseDir, String dimension) {
-        // 根据维度获取目标目录
-        Path targetDir = getDimensionDir(baseDir, dimension);
-
         // 计算本地文件的元数据（时间戳+哈希）
         Map<String, ClientMeta> metaMap;
 
+        // 转换用户友好名称到 Xaero 格式（服务端缓存目录使用 Xaero 格式）
+        DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+        String xaeroDim;
+        switch (dimension) {
+            case "overworld":
+                xaeroDim = "null";
+                break;
+            case "nether":
+                xaeroDim = "DIM-1";
+                break;
+            case "end":
+                xaeroDim = "DIM1";
+                break;
+            default:
+                xaeroDim = dimMapping.toXaeroDimension(dimension);
+        }
+
+        // 获取同步时间戳缓存，用于判断是否首次同步
+        ClientTimestampCache tsCache = baseDir != null ? ClientTimestampCache.getInstance(baseDir) : null;
+
         if (dimension.equals("all")) {
             // 同步所有维度
-            metaMap = ClientHashManager.computeMetaForSync(baseDir);
-        } else {
-            // 转换用户友好名称到 Xaero 格式（服务端缓存目录使用 Xaero 格式）
-            DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
-            String xaeroDim;
-            switch (dimension) {
-                case "overworld":
-                    xaeroDim = "null";
-                    break;
-                case "nether":
-                    xaeroDim = "DIM-1";
-                    break;
-                case "end":
-                    xaeroDim = "DIM1";
-                    break;
-                default:
-                    xaeroDim = dimMapping.toXaeroDimension(dimension);
-            }
-
-            // 同步指定维度：必须找到该维度的目录，不能 fallback 到 baseDir
-            if (targetDir == null || !targetDir.toFile().exists()) {
-                mc.player.displayClientMessage(
-                        prefix().append(Component.translatable("mapsyncer.command.no_map_dir").withStyle(style -> style.withColor(0xFF5555))),
-                        false);
-                LOGGER.warn("Dimension directory not found for: {}", dimension);
-                return;  // 不发送请求
-            }
-
-            Path mwDir = findMwDir(targetDir);
-            if (mwDir != null) {
-                // 只扫描指定维度的 mw$ 目录
-                metaMap = ClientHashManager.computeMetaForSync(mwDir);
+            if (baseDir != null && baseDir.toFile().exists() && tsCache != null && tsCache.cacheFileExists()) {
+                // 已同步过，计算哈希
+                metaMap = ClientHashManager.computeMetaForSync(baseDir);
+                LOGGER.info("Sync all dimensions: found {} cached entries", metaMap.size());
             } else {
-                // 维度目录存在但没有 mw$ 子目录（客户端首次同步该维度）
-                // 添加占位符元数据，让服务端知道请求的维度（使用 Xaero 格式）
-                mc.player.displayClientMessage(
-                        prefix().append(Component.translatable("mapsyncer.command.sync_dimension", dimension).withStyle(style -> style.withColor(0xFFFFFF))),
-                        false);
-                LOGGER.info("No mw$ directory found in {}, sending placeholder for {} (xaero: {})", targetDir, dimension, xaeroDim);
+                // 首次同步，发送空元数据请求全部数据
+                metaMap = new java.util.HashMap<>();
+                LOGGER.info("First time sync for all dimensions, sending empty request");
+            }
+        } else {
+            // 单维度同步
+            if (tsCache != null && tsCache.cacheFileExists() && tsCache.hasDimensionSynced(xaeroDim)) {
+                // 该维度已同步过，计算哈希
+                Path targetDir = getDimensionDir(baseDir, dimension);
+                Path mwDir = findMwDir(targetDir);
+                if (mwDir != null) {
+                    metaMap = ClientHashManager.computeMetaForSync(mwDir);
+                    LOGGER.info("Dimension {} (xaero: {}) previously synced, found {} cached entries",
+                            dimension, xaeroDim, metaMap.size());
+                } else {
+                    // 缓存文件存在但没有 mw$ 目录（异常情况）
+                    metaMap = new java.util.HashMap<>();
+                    metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
+                    LOGGER.warn("Dimension {} has sync cache but no mw$ directory, sending placeholder", dimension);
+                }
+            } else {
+                // 首次同步该维度，发送 placeholder
                 metaMap = new java.util.HashMap<>();
                 metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
+                LOGGER.info("First time sync for dimension {} (xaero: {}), sending placeholder", dimension, xaeroDim);
             }
         }
 

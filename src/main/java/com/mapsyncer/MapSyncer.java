@@ -5,6 +5,7 @@ import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.server.CacheGenerateCommand;
+import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.ServerSyncHandler;
 import net.neoforged.api.distmarker.Dist;
@@ -32,7 +33,6 @@ public class MapSyncer {
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         modBus.addListener(this::commonSetup);
 
-        modContainer.registerConfig(Type.COMMON, ModConfig.COMMON_SPEC);
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -54,6 +54,10 @@ public class MapSyncer {
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        // 注册所有已加载维度到配置文件
+        DimensionRegistry.registerAllDimensions(event.getServer());
+
+        // 启动增量更新（如果已配置）
         UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
         if (mode != UpdateMode.DISABLED) {
             IncrementalUpdateHandler.getInstance().start(event.getServer());

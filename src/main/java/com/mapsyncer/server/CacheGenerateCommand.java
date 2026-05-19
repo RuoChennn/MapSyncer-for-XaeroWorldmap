@@ -7,6 +7,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
+import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.commands.CommandSourceStack;
@@ -15,6 +16,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class CacheGenerateCommand {
 
@@ -81,14 +83,14 @@ public class CacheGenerateCommand {
 
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
         MinecraftServer server = ctx.getSource().getServer();
-        ctx.getSource().sendSuccess(() -> Component.literal("Starting full map generation..."), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.generate.start_full"), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateAll(server);
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                    String.format("Map generation completed: %d/%d regions",
-                            ConversionOrchestrator.getProcessedCount(),
-                            ConversionOrchestrator.getTotalCount())), false);
+            ctx.getSource().sendSuccess(() -> Component.translatable(
+                    "mapsyncer.generate.full_complete",
+                    ConversionOrchestrator.getProcessedCount(),
+                    ConversionOrchestrator.getTotalCount()), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -99,15 +101,15 @@ public class CacheGenerateCommand {
         String dimensionId = StringArgumentType.getString(ctx, "dimension");
         MinecraftServer server = ctx.getSource().getServer();
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimensionId);
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting map generation for dimension: %s", friendlyName)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "mapsyncer.generate.start_dim", friendlyName), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimension(server, dimensionId);
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                    String.format("Dimension generation completed: %d/%d regions",
-                            ConversionOrchestrator.getProcessedCount(),
-                            ConversionOrchestrator.getTotalCount())), false);
+            ctx.getSource().sendSuccess(() -> Component.translatable(
+                    "mapsyncer.generate.dim_complete",
+                    ConversionOrchestrator.getProcessedCount(),
+                    ConversionOrchestrator.getTotalCount()), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -118,15 +120,15 @@ public class CacheGenerateCommand {
         String dimensionId = StringArgumentType.getString(ctx, "dimension");
         MinecraftServer server = ctx.getSource().getServer();
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimensionId);
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting forced map generation for dimension: %s (ignoring cache)", friendlyName)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "mapsyncer.generate.start_force", friendlyName), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimensionForce(server, dimensionId);
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                    String.format("Forced dimension generation completed: %d/%d regions",
-                            ConversionOrchestrator.getProcessedCount(),
-                            ConversionOrchestrator.getTotalCount())), false);
+            ctx.getSource().sendSuccess(() -> Component.translatable(
+                    "mapsyncer.generate.force_complete",
+                    ConversionOrchestrator.getProcessedCount(),
+                    ConversionOrchestrator.getTotalCount()), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -140,17 +142,27 @@ public class CacheGenerateCommand {
         MinecraftServer server = ctx.getSource().getServer();
         ResourceKey<Level> dimension = ConversionOrchestrator.parseDimensionId(dimensionId, server);
         if (dimension == null) {
-            ctx.getSource().sendFailure(Component.literal("Unknown dimension: " + dimensionId));
+            ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.unknown_dimension", dimensionId));
+            return 0;
+        }
+
+        // 提前检查 MCA 文件是否存在
+        if (ConversionOrchestrator.checkMcaFileExists(server, dimension, x, z) == null) {
+            String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
+            ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.region_not_found", x, z, friendlyName));
             return 0;
         }
 
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Starting single region conversion: (%d, %d) in %s", x, z, friendlyName)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.generating_region", x, z, friendlyName), false);
 
         Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);
-            ctx.getSource().sendSuccess(() -> Component.literal("Single region conversion completed"), false);
+            SingleRegionResult result = ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);
+            if (result == SingleRegionResult.SUCCESS) {
+                ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.region_converted"), false);
+            } else if (result == SingleRegionResult.CONVERSION_FAILED) {
+                ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.region_conversion_failed", x, z));
+            }
         }, "xaero-map-generator");
         worker.start();
 
@@ -159,31 +171,31 @@ public class CacheGenerateCommand {
 
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
         if (ConversionOrchestrator.isRunning()) {
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                    String.format("Conversion in progress: %d/%d regions - %s",
-                            ConversionOrchestrator.getProcessedCount(),
-                            ConversionOrchestrator.getTotalCount(),
-                            ConversionOrchestrator.getStatus())), false);
+            ctx.getSource().sendSuccess(() -> Component.translatable(
+                    "mapsyncer.generate.in_progress",
+                    ConversionOrchestrator.getProcessedCount(),
+                    ConversionOrchestrator.getTotalCount(),
+                    ConversionOrchestrator.getStatus()), false);
         } else {
-            ctx.getSource().sendSuccess(() -> Component.literal("No conversion in progress"), false);
+            ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.generate.no_progress"), false);
         }
         return Command.SINGLE_SUCCESS;
     }
 
     private static int setIncrementalOff(CommandContext<CommandSourceStack> ctx) {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.DISABLED);
+        saveConfig();
         IncrementalUpdateHandler.getInstance().stop();
-        ctx.getSource().sendSuccess(() -> Component.literal("Incremental updates disabled"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_disabled"), false);
         return Command.SINGLE_SUCCESS;
     }
 
     private static int setIncrementalTick(CommandContext<CommandSourceStack> ctx) {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
+        saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Incremental updates set to TICK mode (interval: %d ticks = %.1f seconds)",
-                        interval, interval / 20.0f)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_tick_set", interval, interval / 20.0f), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -191,20 +203,19 @@ public class CacheGenerateCommand {
         int interval = IntegerArgumentType.getInteger(ctx, "interval");
         ModConfig.SERVER.incrementalUpdateIntervalTicks.set(interval);
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
+        saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Incremental updates set to TICK mode with interval %d ticks (%.1f seconds)",
-                        interval, interval / 20.0f)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_tick_interval", interval, interval / 20.0f), false);
         return Command.SINGLE_SUCCESS;
     }
 
     private static int setIncrementalScheduled(CommandContext<CommandSourceStack> ctx) {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
+        saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         int hour = ModConfig.SERVER.scheduledUpdateHour.get();
         int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Incremental updates set to SCHEDULED mode (daily at %02d:%02d)", hour, minute)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -212,10 +223,10 @@ public class CacheGenerateCommand {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
         ModConfig.SERVER.scheduledUpdateHour.set(hour);
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
+        saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Incremental updates set to SCHEDULED mode (daily at %02d:%02d)", hour, minute)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -225,16 +236,23 @@ public class CacheGenerateCommand {
         ModConfig.SERVER.scheduledUpdateHour.set(hour);
         ModConfig.SERVER.scheduledUpdateMinute.set(minute);
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
+        saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Incremental updates set to SCHEDULED mode (daily at %02d:%02d)", hour, minute)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * 保存服务端配置到文件
+     */
+    private static void saveConfig() {
+        ModConfig.SERVER_SPEC.save();
     }
 
     private static int showIncrementalStatus(CommandContext<CommandSourceStack> ctx) {
         String status = IncrementalUpdateHandler.getInstance().getStatusInfo();
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                String.format("Incremental updates: %s", status)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "mapsyncer.generate.incremental_status", status), false);
         return Command.SINGLE_SUCCESS;
     }
 }

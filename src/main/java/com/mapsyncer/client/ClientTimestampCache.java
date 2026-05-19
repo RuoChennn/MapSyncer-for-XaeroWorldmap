@@ -163,6 +163,30 @@ public class ClientTimestampCache {
     }
 
     /**
+     * 检查指定维度是否已同步过
+     * @param xaeroDim Xaero 格式的维度名（如 "null", "DIM-1", "DIM1"）
+     * @return true 如果该维度至少有一个已同步的 region
+     */
+    public boolean hasDimensionSynced(String xaeroDim) {
+        // 检查 cache 中是否有以该维度开头的 key
+        // key 格式：xaeroDim/regionX_regionZ 或 xaeroDim/caves/layer/regionX_regionZ
+        String prefix = xaeroDim + "/";
+        for (String key : cache.keySet()) {
+            if (key.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 检查缓存文件是否存在（表示至少运行过一次同步）
+     */
+    public boolean cacheFileExists() {
+        return Files.exists(cacheFile);
+    }
+
+    /**
      * 获取缓存文件路径
      */
     public Path getCacheFile() {

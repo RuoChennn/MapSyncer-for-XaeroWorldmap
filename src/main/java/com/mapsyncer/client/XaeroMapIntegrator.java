@@ -696,6 +696,10 @@ public class XaeroMapIntegrator {
     /**
      * Get the base directory for the current server (null directory).
      * Path structure: xaero/world-map/Multiplayer_<server>/null/
+     *
+     * 支持多种游戏模式：
+     * - 多人游戏：Multiplayer_<serverIP>/
+     * - 单机游戏/局域网：单机游戏使用 "Singleplayer" 目录名，局域网使用 LAN server 特殊处理
      */
     public static Path getCurrentServerBaseDirectory() {
         Minecraft mc = Minecraft.getInstance();
@@ -706,41 +710,84 @@ public class XaeroMapIntegrator {
             return null;
         }
 
+        // 尝试获取 ServerData（多人游戏）
         ServerData serverData = connection.getServerData();
         LOGGER.debug("getCurrentServerBaseDirectory: serverData={}, serverData.ip={}",
                 serverData, serverData != null ? serverData.ip : "N/A");
-        if (serverData == null) {
-            LOGGER.warn("getCurrentServerBaseDirectory: serverData is null");
-            return null;
-        }
-
-        String serverIP = serverData.ip;
-        if (serverIP == null || serverIP.isEmpty()) {
-            serverIP = "Unknown";
-        }
-
-        // Clean up server IP
-        int portDivider = serverIP.lastIndexOf(":");
-        if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
-            portDivider = serverIP.lastIndexOf("]:") + 1;
-        }
-        if (portDivider > 0) {
-            serverIP = serverIP.substring(0, portDivider);
-        }
-        serverIP = serverIP.replace("[", "").replace("]", "");
-        serverIP = serverIP.replaceAll(":", ".");
-        while (serverIP.endsWith(".")) {
-            serverIP = serverIP.substring(0, serverIP.length() - 1);
-        }
-        if (serverIP.isEmpty()) {
-            serverIP = "Empty Address";
-        }
 
         Path gameDir = mc.gameDirectory.toPath();
         Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+
+        String serverIP;
+
+        if (serverData != null && serverData.ip != null && !serverData.ip.isEmpty()) {
+            // 多人游戏模式
+            serverIP = serverData.ip;
+
+            // Clean up server IP
+            int portDivider = serverIP.lastIndexOf(":");
+            if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
+                portDivider = serverIP.lastIndexOf("]:") + 1;
+            }
+            if (portDivider > 0) {
+                serverIP = serverIP.substring(0, portDivider);
+            }
+            serverIP = serverIP.replace("[", "").replace("]", "");
+            serverIP = serverIP.replaceAll(":", ".");
+            while (serverIP.endsWith(".")) {
+                serverIP = serverIP.substring(0, serverIP.length() - 1);
+            }
+            if (serverIP.isEmpty()) {
+                serverIP = "Empty Address";
+            }
+        } else {
+            // 单机游戏或局域网游戏模式
+            // 检查是否是单机游戏
+            if (mc.hasSingleplayerServer()) {
+                serverIP = "Singleplayer";
+                LOGGER.debug("Singleplayer mode detected");
+            } else {
+                // 局域网游戏：尝试从连接信息获取
+                // 局域网服务器通常使用 localhost 或 LAN
+                serverIP = "LAN";
+                LOGGER.debug("LAN mode detected");
+            }
+        }
+
         Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
         Path dimDir = serverDir.resolve("null");
 
+        // 如果目录不存在，尝试查找已存在的 Xaero 目录
+        if (!dimDir.toFile().exists()) {
+            // 尝试扫描 world-map 目录找到匹配的服务器目录
+            try {
+                if (worldMapDir.toFile().exists() && worldMapDir.toFile().isDirectory()) {
+                    Files.list(worldMapDir)
+                        .filter(p -> p.getFileName().toString().startsWith("Multiplayer_"))
+                        .filter(p -> Files.isDirectory(p))
+                        .forEach(p -> {
+                            Path candidateDim = p.resolve("null");
+                            if (candidateDim.toFile().exists()) {
+                                LOGGER.debug("Found existing Xaero directory: {}", candidateDim);
+                            }
+                        });
+                }
+            } catch (IOException e) {
+                LOGGER.debug("Failed to scan world-map directory: {}", e.getMessage());
+            }
+
+            // 单机游戏模式下，自动创建目录（首次同步）
+            if (serverIP.equals("Singleplayer") || serverIP.equals("LAN")) {
+                LOGGER.info("Creating Xaero directory for {} mode: {}", serverIP, dimDir);
+                try {
+                    Files.createDirectories(dimDir);
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to create Xaero directory: {}", e.getMessage());
+                }
+            }
+        }
+
+        LOGGER.debug("Server base directory: {}", dimDir);
         return dimDir;
     }
 

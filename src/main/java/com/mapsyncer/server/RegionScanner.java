@@ -16,6 +16,15 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Region 文件扫描器
+ *
+ * 支持 Minecraft 26.1+ 新格式和传统格式：
+ * - 新格式：dimensions/<namespace>/<dimension_name>/region/
+ * - 传统格式：region/, DIM-1/region/, DIM1/region/, DIM{id}/region/
+ *
+ * 自动检测实际使用的格式，优先检查新格式。
+ */
 public class RegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RegionScanner.class);
@@ -30,6 +39,9 @@ public class RegionScanner {
     public record DimensionRegions(net.minecraft.resources.ResourceKey<Level> dimension, List<RegionCoords> regions, int skippedEmptyCount) {
     }
 
+    /**
+     * 扫描服务器所有维度的 region 文件
+     */
     public static List<DimensionRegions> scanAllDimensions(MinecraftServer server) {
         List<DimensionNames> dimNames = new ArrayList<>();
         for (ServerLevel level : server.getAllLevels()) {
@@ -47,13 +59,26 @@ public class RegionScanner {
         return result;
     }
 
+    /**
+     * 扫描指定维度的 region 文件
+     */
     public static RegionScanResult scanDimension(ServerLevel level) {
         Path worldRoot = level.getServer().getWorldPath(LevelResource.ROOT);
         return scanRegionDir(worldRoot, level.dimension());
     }
 
     /**
-     * 获取指定维度的region目录路径
+     * 获取指定维度的 region 目录路径
+     *
+     * 自动检测实际使用的格式（新格式优先）：
+     * 1. 新格式（26.1+）：dimensions/<namespace>/<dimension_name>/region/
+     * 2. 传统格式：region/（主世界）、DIM-1/region/（地狱）、DIM1/region/（末地）
+     * 3. Mod 预设：DIM{id}/region/
+     *
+     * 检测结果会被缓存到 DimensionPathMapping 中。
+     *
+     * @param level 服务端维度实例
+     * @return region 目录路径，如果未找到返回 null
      */
     public static Path getRegionDir(ServerLevel level) {
         try {
@@ -62,38 +87,47 @@ public class RegionScanner {
             worldRoot = worldRoot.toRealPath();
 
             DimensionPathMapping mapping = DimensionPathMapping.getInstance();
-            String dimFolder = mapping.getFolderName(level.dimension());
-            Path regionDir = mapping.isOverworld(level.dimension().location().getPath())
-                ? worldRoot.resolve("region")
-                : worldRoot.resolve(dimFolder).resolve("region");
+            String dimId = level.dimension().location().toString();
 
-            if (!Files.exists(regionDir)) {
-                LOGGER.warn("Region directory not found for dimension {} (folder: {})",
-                    level.dimension().location(), dimFolder);
-                return null;
+            // 使用统一的检测方法（优先新格式，回退传统格式）
+            Path regionDir = mapping.detectRegionDir(worldRoot, dimId);
+
+            if (regionDir != null && Files.exists(regionDir)) {
+                return regionDir.toRealPath();
             }
-            return regionDir.toRealPath();
+
+            LOGGER.warn("Region directory not found for dimension {} after detection", dimId);
+            return null;
         } catch (IOException e) {
             LOGGER.error("Failed to get region directory", e);
             return null;
         }
     }
 
+    /**
+     * 扫描维度目录中的 region 文件
+     */
     private static RegionScanResult scanRegionDir(Path worldRoot, net.minecraft.resources.ResourceKey<Level> dimensionKey) {
         DimensionPathMapping mapping = DimensionPathMapping.getInstance();
-        String dimPath = dimensionKey.location().getPath();
-        String dimFolder = mapping.getFolderName(dimensionKey);
-        Path regionDir = mapping.isOverworld(dimPath)
-            ? worldRoot.resolve("region")
-            : worldRoot.resolve(dimFolder).resolve("region");
+        String dimId = dimensionKey.location().toString();
 
-        if (!Files.exists(regionDir)) {
-            LOGGER.warn("Region directory not found for dimension: {} (folder: {})", dimPath, dimFolder);
+        // 使用统一的检测方法
+        Path regionDir = mapping.detectRegionDir(worldRoot, dimId);
+
+        if (regionDir == null || !Files.exists(regionDir)) {
+            LOGGER.warn("Region directory not found for dimension: {}", dimId);
             return new RegionScanResult(List.of(), 0);
         }
+
         return scanRegionDirectory(regionDir);
     }
 
+    /**
+     * 扫描 region 目录中的所有 MCA 文件
+     *
+     * @param regionDir region 目录路径
+     * @return 扫描结果（包含 region 坐标列表和跳过的空文件数量）
+     */
     public static RegionScanResult scanRegionDirectory(Path regionDir) {
         List<RegionCoords> regions = new ArrayList<>();
         if (!Files.exists(regionDir)) {
