@@ -209,13 +209,23 @@ public class ConversionOrchestrator {
         currentDimension = dimRegions.dimension();
         // 使用服务端维度名作为缓存 key（便于客户端识别）
         String dimPath = dimRegions.dimension().location().getPath();
-        // 使用 Xaero 格式的目录名存储文件（与客户端保持一致）
-        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
+
+        // 获取 Xaero 格式的目录名
+        // 优先使用配置中的 xaeroFolder，否则使用默认映射
+        String xaeroDimName;
+        String configXaeroFolder = scanConfig.xaeroFolder();
+        if (configXaeroFolder != null && !configXaeroFolder.isEmpty()) {
+            xaeroDimName = configXaeroFolder;
+            LOGGER.info("Using configured xaero_folder: {}", xaeroDimName);
+        } else {
+            xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+            LOGGER.info("Using default dimension mapping: {} -> {}", dimPath, xaeroDimName);
+        }
 
         // 计算输出目录（包含 caves/<layer> 子目录）
         Path baseOutputDir = CACHE_DIR.resolve(xaeroDimName);

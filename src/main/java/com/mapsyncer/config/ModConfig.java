@@ -72,8 +72,13 @@ public class ModConfig {
 
     /**
      * 维度扫描配置记录
+     *
+     * @param dimension 维度 ID（如 "minecraft:the_nether"）
+     * @param xaeroFolder Xaero 文件夹名称（如 "DIM-1"），若为空则使用默认映射
+     * @param scanMode 扫描模式
+     * @param caveStart 洞穴起始高度（SURFACE 模式忽略）
      */
-    public record DimensionScanConfig(String dimension, ScanMode scanMode, int caveStart) {
+    public record DimensionScanConfig(String dimension, String xaeroFolder, ScanMode scanMode, int caveStart) {
         /**
          * 计算洞穴层号
          * 参考 Xaero MapProcessor.getCaveLayer():
@@ -146,7 +151,8 @@ public class ModConfig {
 
             dimensionConfigs = builder
                     .comment("Per-dimension scan configuration list",
-                             "Each entry should have: dimension (string), scan_mode (SURFACE/CAVE), cave_start (int)")
+                             "Each entry should have: dimension (string), xaero_folder (string, optional), scan_mode (SURFACE/CAVE), cave_start (int)",
+                             "xaero_folder overrides default mapping (e.g., 'DIM-1' for nether)")
                     .defineList("dimension_configs", List.of(),
                         obj -> obj instanceof Map);
 
@@ -162,11 +168,12 @@ public class ModConfig {
             for (Object entry : dimensionConfigs.get()) {
                 Map<String, Object> map = (Map<String, Object>) entry;
                 String dim = (String) map.getOrDefault("dimension", "overworld");
+                String xaeroFolder = (String) map.getOrDefault("xaero_folder", "");
                 String modeStr = (String) map.getOrDefault("scan_mode", "SURFACE");
                 ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
                 Object caveStartObj = map.getOrDefault("cave_start", 63);
                 int caveStart = caveStartObj instanceof Number ? ((Number) caveStartObj).intValue() : 63;
-                result.add(new DimensionScanConfig(dim, mode, caveStart));
+                result.add(new DimensionScanConfig(dim, xaeroFolder, mode, caveStart));
             }
             return result;
         }
@@ -186,8 +193,8 @@ public class ModConfig {
                     return config;
                 }
             }
-            // 未匹配则返回默认配置
-            return new DimensionScanConfig(dimensionPath, defaultScanMode.get(), defaultCaveStart.get());
+            // 未匹配则返回默认配置（xaeroFolder 为空，使用默认映射）
+            return new DimensionScanConfig(dimensionPath, "", defaultScanMode.get(), defaultCaveStart.get());
         }
     }
 }

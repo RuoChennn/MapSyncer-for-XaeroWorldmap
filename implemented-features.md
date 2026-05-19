@@ -381,13 +381,15 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
   - 新增 `ScanMode` 枚举：SURFACE（地表模式）/ CAVE（洞穴模式）
   - 新增 `DimensionScanConfig` record：维度扫描配置记录
   - 配置文件支持维度列表配置，每个维度可指定 scan_mode 和 cave_start
+  - **新增 `xaero_folder` 字段**：可覆盖默认的维度文件夹名称
   - SURFACE 模式时 cave_start 被忽略
   - 配置示例：
     ```toml
     [[dimension_scan.dimension_configs]]
         dimension = "minecraft:the_nether"
+        xaero_folder = "DIM-1"      # 可选：覆盖默认文件夹名称
         scan_mode = "CAVE"
-        cave_start = 90
+        cave_start = 120            # 基岩天花板
     ```
 
 - 🧪 feat(protocol): **网络协议扩展支持洞穴层信息**
@@ -416,6 +418,15 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
   - 时间戳缓存路径格式与服务端 GenerationCache 一致
 
 **配置文件位置**: `config/mapsyncer-server.toml`
+
+**配置示例**（新增 `xaero_folder` 字段）:
+```toml
+[[dimension_scan.dimension_configs]]
+    dimension = "minecraft:the_nether"
+    xaero_folder = "DIM-1"      # 可选：覆盖默认文件夹名称
+    scan_mode = "CAVE"
+    cave_start = 120            # 从 Y=120 向下扫描，找到基岩天花板
+```
 
 **文件夹结构变更**:
 ```
