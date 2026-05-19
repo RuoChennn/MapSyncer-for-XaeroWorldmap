@@ -487,6 +487,9 @@ public class RegionConverterStandalone {
                                     int rz = baseZ + bz;
 
                                     if (!data.hasData[rx][rz]) {
+                                        // 空白像素：只写入高度参数
+                                        // 参考 Xaero: prepareForWriting 设置 state=AIR, biome=null, height=defaultHeight
+                                        // biome=null 时不设置 0x100000 标志，客户端默认使用 the_void biome 的颜色
                                         int emptyHeight = minBuildHeight;
                                         int emptyParams = encodeHeightToParams(emptyHeight);
                                         dos.writeInt(emptyParams);
