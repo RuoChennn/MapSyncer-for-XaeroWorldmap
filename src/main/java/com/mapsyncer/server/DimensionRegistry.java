@@ -94,8 +94,8 @@ public class DimensionRegistry {
         mapping.scanAndRegisterDimensions(worldRoot);
 
         // 获取当前配置列表
-        ConfigValue<List<? extends Map<String, Object>>> configValue = ModConfig.SERVER.dimensionConfigs;
-        List<? extends Map<String, Object>> currentConfigs = configValue.get();
+        ConfigValue<List<? extends String>> configValue = ModConfig.SERVER.dimensionConfigs;
+        List<? extends String> currentConfigs = configValue.get();
 
         // 解析为 DimensionScanConfig 对象便于匹配
         Set<String> configuredDimensions = new HashSet<>();
@@ -127,10 +127,7 @@ public class DimensionRegistry {
         }
 
         // 创建新的配置列表（保留原有配置 + 新增配置）
-        List<Map<String, Object>> updatedConfigs = new ArrayList<>();
-        for (Map<String, Object> existing : currentConfigs) {
-            updatedConfigs.add(existing);
-        }
+        List<String> updatedConfigs = new ArrayList<>(currentConfigs);
 
         // 添加新发现的维度（使用检测到的 region_folder）
         for (String dimId : newDimensions) {
@@ -148,8 +145,8 @@ public class DimensionRegistry {
                     preset.caveStart()
             );
 
-            Map<String, Object> configMap = configToMap(finalConfig);
-            updatedConfigs.add(configMap);
+            String configStr = configToString(finalConfig);
+            updatedConfigs.add(configStr);
             LOGGER.info("Added dimension config: {} (region_folder={}, scan_mode={})",
                     dimId, detectedFolder, finalConfig.scanMode());
         }
@@ -225,15 +222,11 @@ public class DimensionRegistry {
     }
 
     /**
-     * 将 DimensionScanConfig 转换为 Map 格式（用于配置文件）
+     * 将 DimensionScanConfig 转换为字符串格式（用于配置文件）
+     * 格式：dimension|region_folder|scan_mode|cave_start
      */
-    private static Map<String, Object> configToMap(DimensionScanConfig config) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("dimension", config.dimension());
-        map.put("region_folder", config.regionFolder());
-        map.put("scan_mode", config.scanMode().name());
-        map.put("cave_start", config.caveStart());
-        return map;
+    private static String configToString(DimensionScanConfig config) {
+        return config.dimension() + "|" + config.regionFolder() + "|" + config.scanMode().name() + "|" + config.caveStart();
     }
 
     /**

@@ -18,34 +18,21 @@ public class ModConfig {
 
     /**
      * 原版维度的默认配置（系统预设）
-     * 在配置文件首次生成时写入
+     * 使用字符串格式避免 NightConfig 序列化问题
+     * 格式："dimension|region_folder|scan_mode|cave_start"
+     * 例如："minecraft:the_nether|DIM-1|CAVE|63"
      */
-    private static List<Map<String, Object>> getDefaultDimensionConfigs() {
-        List<Map<String, Object>> defaults = new ArrayList<>();
+    private static List<String> getDefaultDimensionConfigStrings() {
+        List<String> defaults = new ArrayList<>();
 
         // 主世界：地表模式
-        Map<String, Object> overworld = new LinkedHashMap<>();
-        overworld.put("dimension", "minecraft:overworld");
-        overworld.put("region_folder", "");
-        overworld.put("scan_mode", "SURFACE");
-        overworld.put("cave_start", 63);
-        defaults.add(overworld);
+        defaults.add("minecraft:overworld||SURFACE|63");
 
         // 地狱：洞穴模式（地狱 ceiling=128，从 Y=63 开始扫描）
-        Map<String, Object> nether = new LinkedHashMap<>();
-        nether.put("dimension", "minecraft:the_nether");
-        nether.put("region_folder", "DIM-1");
-        nether.put("scan_mode", "CAVE");
-        nether.put("cave_start", 63);
-        defaults.add(nether);
+        defaults.add("minecraft:the_nether|DIM-1|CAVE|63");
 
         // 末地：地表模式
-        Map<String, Object> theEnd = new LinkedHashMap<>();
-        theEnd.put("dimension", "minecraft:the_end");
-        theEnd.put("region_folder", "DIM1");
-        theEnd.put("scan_mode", "SURFACE");
-        theEnd.put("cave_start", 63);
-        defaults.add(theEnd);
+        defaults.add("minecraft:the_end|DIM1|SURFACE|63");
 
         return defaults;
     }
@@ -125,7 +112,7 @@ public class ModConfig {
         // 维度扫描配置
         public final EnumValue<ScanMode> defaultScanMode;
         public final IntValue defaultCaveStart;
-        public final ConfigValue<List<? extends Map<String, Object>>> dimensionConfigs;
+        public final ConfigValue<List<? extends String>> dimensionConfigs;
 
         public ServerConfig(ModConfigSpec.Builder builder) {
             builder.push("general");
@@ -193,37 +180,61 @@ public class ModConfig {
                     .defineInRange("default_cave_start", 63, -512, 512);
 
             dimensionConfigs = builder
-                    .comment("Per-dimension scan configuration list",
-                             "Each entry should have: dimension (string), region_folder (string, optional), scan_mode (SURFACE/CAVE), cave_start (int)",
-                             "region_folder specifies where MCA files are stored (e.g., 'DIM-1' for nether), defaults to standard Minecraft dimension path",
-                             "System presets: overworld (SURFACE), nether (CAVE, cave_start=63), the_end (SURFACE)",
-                             "维度扫描配置列表",
-                             "每个配置项包含：dimension（字符串），region_folder（字符串，可选），scan_mode（SURFACE/CAVE），cave_start（整数）",
-                             "region_folder 指定 MCA 文件存放目录（如地狱用 'DIM-1'），默认使用标准 Minecraft 维度路径",
-                             "系统预设：主世界（SURFACE），地狱（CAVE，cave_start=63），末地（SURFACE）")
-                    .defineList("dimension_configs", getDefaultDimensionConfigs(),
-                        obj -> obj instanceof Map);
+                    .comment("Per-dimension scan configuration list (string format)",
+                             "Format: \"dimension|region_folder|scan_mode|cave_start\"",
+                             "Example: \"minecraft:the_nether|DIM-1|CAVE|63\"",
+                             "region_folder specifies where MCA files are stored, empty means default path",
+                             "维度扫描配置列表（字符串格式）",
+                             "格式：\"dimension|region_folder|scan_mode|cave_start\"",
+                             "例如：\"minecraft:the_nether|DIM-1|CAVE|63\"",
+                             "region_folder 指定 MCA 文件存放目录，空表示使用默认路径")
+                    .defineList("dimension_configs", getDefaultDimensionConfigStrings(),
+                        obj -> obj instanceof String);
 
             builder.pop();
         }
 
         /**
          * 解析维度配置列表为 DimensionScanConfig 对象
+         * 字符串格式：dimension|region_folder|scan_mode|cave_start
          */
-        @SuppressWarnings("unchecked")
         public List<DimensionScanConfig> parseDimensionConfigs() {
             List<DimensionScanConfig> result = new ArrayList<>();
-            for (Object entry : dimensionConfigs.get()) {
-                Map<String, Object> map = (Map<String, Object>) entry;
-                String dim = (String) map.getOrDefault("dimension", "overworld");
-                String regionFolder = (String) map.getOrDefault("region_folder", "");
-                String modeStr = (String) map.getOrDefault("scan_mode", "SURFACE");
-                ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
-                Object caveStartObj = map.getOrDefault("cave_start", 63);
-                int caveStart = caveStartObj instanceof Number ? ((Number) caveStartObj).intValue() : 63;
-                result.add(new DimensionScanConfig(dim, regionFolder, mode, caveStart));
+            for (String configStr : dimensionConfigs.get()) {
+                DimensionScanConfig config = parseConfigString(configStr);
+                if (config != null) {
+                    result.add(config);
+                }
             }
             return result;
+        }
+
+        /**
+         * 解析单个配置字符串
+         * 格式：dimension|region_folder|scan_mode|cave_start
+         */
+        private DimensionScanConfig parseConfigString(String configStr) {
+            if (configStr == null || configStr.isEmpty()) {
+                return null;
+            }
+
+            String[] parts = configStr.split("\\|");
+            if (parts.length < 1) {
+                return null;
+            }
+
+            String dimension = parts[0];
+            String regionFolder = parts.length > 1 ? parts[1] : "";
+            String modeStr = parts.length > 2 ? parts[2] : "SURFACE";
+            int caveStart = parts.length > 3 ? Integer.parseInt(parts[3]) : 63;
+
+            try {
+                ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
+                return new DimensionScanConfig(dimension, regionFolder, mode, caveStart);
+            } catch (IllegalArgumentException e) {
+                // 无效的扫描模式，使用默认值
+                return new DimensionScanConfig(dimension, regionFolder, ScanMode.SURFACE, caveStart);
+            }
         }
 
         /**

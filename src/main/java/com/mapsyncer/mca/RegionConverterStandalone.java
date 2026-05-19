@@ -17,6 +17,11 @@ public class RegionConverterStandalone {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RegionConverterStandalone.class);
 
+    // 默认值：用于没有数据的空白像素（如末地虚空区域）
+    // 使用 air + the_void 以正确显示虚空区域为深紫色
+    private static final String DEFAULT_BLOCK = "minecraft:air";
+    private static final String DEFAULT_BIOME = "minecraft:the_void";
+
     public static final int REGION_SIZE_BLOCKS = 512;
     public static final int CHUNKS_PER_REGION = 32;
     public static final int BLOCKS_PER_TILE_CHUNK = 64;
@@ -489,11 +494,12 @@ public class RegionConverterStandalone {
                                     }
 
                                     String blockName = data.blockNames[rx][rz];
-                                    if (blockName == null) blockName = "minecraft:grass_block";
+                                    if (blockName == null) blockName = DEFAULT_BLOCK;
                                     int height = data.heightMap[rx][rz];
                                     int topY = data.topBlockY[rx][rz];
                                     int topHeight = (topY >= 0) ? topY : height;
                                     String biomeName = data.biomeNames[rx][rz];
+                                    if (biomeName == null) biomeName = DEFAULT_BIOME;
                                     int light = data.lightMap[rx][rz];
                                     List<OverlayData> overlays = data.overlays[rx][rz];
                                     boolean hasOverlays = overlays != null && !overlays.isEmpty();
