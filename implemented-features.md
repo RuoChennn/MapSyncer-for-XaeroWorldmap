@@ -372,3 +372,65 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
   - 便于排查地图目录获取失败问题
 
 **注意**: 此次更新后，旧的 `server_map_cache/` 目录结构不再兼容，需要删除旧缓存并重新运行 `/mapsyncer generate`
+
+---
+
+### 🧪 2026-05-19 更新（未测试）- 洞穴模式配置系统
+
+- 🧪 feat(config): **维度扫描模式配置系统**
+  - 新增 `ScanMode` 枚举：SURFACE（地表模式）/ CAVE（洞穴模式）
+  - 新增 `DimensionScanConfig` record：维度扫描配置记录
+  - 配置文件支持维度列表配置，每个维度可指定 scan_mode 和 cave_start
+  - SURFACE 模式时 cave_start 被忽略
+  - 配置示例：
+    ```toml
+    [[dimension_scan.dimension_configs]]
+        dimension = "minecraft:the_nether"
+        scan_mode = "CAVE"
+        cave_start = 90
+    ```
+
+- 🧪 feat(protocol): **网络协议扩展支持洞穴层信息**
+  - ChunkMapData 新增 `caveLayer` 字段（Integer.MAX_VALUE 表示地表）
+  - encode/decode 使用标记位实现向后兼容
+  - 旧客户端缺少 caveLayer 字段时默认为地表层
+
+- 🧪 feat(storage): **服务端 caves/<layer> 目录结构支持**
+  - ConversionOrchestrator 从配置读取维度扫描配置
+  - 洞穴模式地图存放至 `caves/<layer>/` 子目录
+  - layer 计算：caveStart >> 4（支持负高度，如 -64 → layer -4）
+  - GenerationCache relativePath 格式包含 caves 层信息
+
+- 🧪 feat(sync): **服务端同步解析洞穴层路径**
+  - ServerSyncHandler 解析 `dim/caves/layer/regionX_regionZ` 格式路径
+  - 发送 ChunkMapData 包含正确的 caveLayer 信息
+
+- 🧪 feat(client): **客户端 caves/<layer> 目录写入支持**
+  - XaeroMapIntegrator 根据 caveLayer 写入正确目录
+  - 地表：`mw$<worldId>/<regionX_regionZ>.zip`
+  - 洞穴：`mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip`
+  - RegionCoord record 新增 caveLayer 字段
+
+- 🧪 feat(cache): **客户端缓存路径解析支持 caves 层**
+  - ClientHashManager.buildRelativePath 处理 `caves/<layer>` 目录
+  - 时间戳缓存路径格式与服务端 GenerationCache 一致
+
+**配置文件位置**: `config/mapsyncer-server.toml`
+
+**文件夹结构变更**:
+```
+服务端 (server_map_cache/):
+  DIM-1/
+    └── caves/
+        └── 5/            ← caveStart=90 → layer=5
+            └── 0_0.zip
+
+客户端 (xaero/world-map/Multiplayer_<server>/):
+  DIM-1/
+    └── mw$<worldId>/
+        └── caves/
+            └── 5/
+                └── 0_0.zip
+```
+
+**注意**: 需要在配置文件中为地狱维度设置 CAVE 模式才能生成洞穴地图

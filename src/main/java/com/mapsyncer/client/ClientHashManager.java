@@ -194,14 +194,18 @@ public class ClientHashManager {
     }
 
     /**
-     * Build relative path in server format: dimension/regionX_regionZ
+     * Build relative path in server format.
      * Converts Xaero's dimension names to Minecraft dimension names.
      * Removes mw$worldId directory level.
      *
+     * 支持 caves/<layer> 目录结构：
+     * - 地表：xaero_dim/regionX_regionZ
+     * - 洞穴：xaero_dim/caves/layer/regionX_regionZ
+     *
      * @param zipPath the zip file path
      * @param serverDir the Multiplayer_<server> directory
-     * @return relative path in Xaero format (without .zip extension)
-     *         Format: xaero_dim/regionX_regionZ (e.g., "null/-1_-1", "DIM-1/-1_-1")
+     * @return relative path in server format (without .zip extension)
+     *         Format matches server's GenerationCache: dim/regionX_regionZ or dim/caves/layer/regionX_regionZ
      */
     private static String buildRelativePath(Path zipPath, Path serverDir) {
         // Get relative path from server directory
@@ -213,7 +217,9 @@ public class ClientHashManager {
             relative = relative.substring(0, relative.length() - 4);
         }
 
-        // Parse path components: dimension/mw$worldId/regionX_regionZ
+        // Parse path components
+        // 地表格式：dimension/mw$worldId/regionX_regionZ
+        // 洞穴格式：dimension/mw$worldId/caves/layer/regionX_regionZ
         String[] parts = relative.split("/");
         if (parts.length < 3) {
             LOGGER.warn("Unexpected path format: {}", relative);
@@ -223,8 +229,25 @@ public class ClientHashManager {
         String xaeroDim = parts[0];
         String regionCoords = parts[parts.length - 1];  // Last part is regionX_regionZ
 
-        // Keep Xaero dimension format (server cache now uses Xaero format directories)
-        // Build Xaero format: xaero_dim/regionX_regionZ
-        return xaeroDim + "/" + regionCoords;
+        // 检查是否有 caves 层
+        // 格式：dimension/mw$worldId/caves/layer/regionX_regionZ
+        // parts.length >= 5 时可能有 caves 层
+        int caveLayer = Integer.MAX_VALUE;
+        if (parts.length >= 5 && parts[2].equals("caves")) {
+            try {
+                caveLayer = Integer.parseInt(parts[3]);
+            } catch (NumberFormatException e) {
+                LOGGER.warn("Invalid cave layer in path: {}", relative);
+            }
+        }
+
+        // Build path in server format
+        if (caveLayer == Integer.MAX_VALUE) {
+            // 地表层：xaero_dim/regionX_regionZ
+            return xaeroDim + "/" + regionCoords;
+        } else {
+            // 洞穴层：xaero_dim/caves/layer/regionX_regionZ
+            return xaeroDim + "/caves/" + caveLayer + "/" + regionCoords;
+        }
     }
 }

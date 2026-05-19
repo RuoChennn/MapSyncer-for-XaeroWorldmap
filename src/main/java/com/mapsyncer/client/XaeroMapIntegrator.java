@@ -39,9 +39,22 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Region coordinate record for tracking which regions were updated
+     * Region coordinate record for tracking which regions were updated.
+     * 包含 caveLayer 信息，用于区分地表层和洞穴层。
      */
-    public record RegionCoord(int x, int z) {}
+    public record RegionCoord(int x, int z, int caveLayer) {
+        // 兼容旧代码的构造器（默认地表层）
+        public RegionCoord(int x, int z) {
+            this(x, z, Integer.MAX_VALUE);
+        }
+
+        /**
+         * 判断是否为地表层
+         */
+        public boolean isSurfaceLayer() {
+            return caveLayer == Integer.MAX_VALUE;
+        }
+    }
 
     /**
      * Disable Xaero's chunk update processing during sync.
@@ -101,6 +114,7 @@ public class XaeroMapIntegrator {
     /**
      * Record regions that were updated during sync.
      * These will be selectively reset during reload.
+     * 包含 caveLayer 信息，用于区分地表层和洞穴层。
      */
     public static void recordUpdatedRegions(List<ChunkMapData> chunks) {
         // Clear existing set first to prevent memory leak
@@ -108,7 +122,7 @@ public class XaeroMapIntegrator {
         updatedRegions.clear();
 
         for (ChunkMapData chunk : chunks) {
-            updatedRegions.add(new RegionCoord(chunk.regionX, chunk.regionZ));
+            updatedRegions.add(new RegionCoord(chunk.regionX, chunk.regionZ, chunk.caveLayer));
         }
         LOGGER.debug("Recorded {} updated regions for selective reset", updatedRegions.size());
     }
@@ -803,12 +817,23 @@ public class XaeroMapIntegrator {
 
     /**
      * Build relative path for timestamp cache in server format.
-     * Format: dimension/regionX_regionZ (matching server's generation_cache format)
+     *
+     * 格式：
+     * - 地表：dimension/regionX_regionZ
+     * - 洞穴：dimension/caves/layer/regionX_regionZ
+     * （匹配服务端 GenerationCache 格式）
      */
     private static String buildRelativePathForCache(ChunkMapData chunk) {
         // Convert dimension to server format using unified mapping
         String serverDim = DimensionPathMapping.getInstance().toServerDimension(chunk.dimension);
-        return serverDim + "/" + chunk.regionX + "_" + chunk.regionZ;
+
+        if (chunk.caveLayer == Integer.MAX_VALUE) {
+            // 地表层
+            return serverDim + "/" + chunk.regionX + "_" + chunk.regionZ;
+        } else {
+            // 洞穴层
+            return serverDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
+        }
     }
 
     /**
@@ -846,22 +871,37 @@ public class XaeroMapIntegrator {
     /**
      * Convert server dimension name to Xaero's directory name.
      * Xaero uses "null" for the overworld dimension.
+     *
+     * 支持 caves/<layer> 目录结构：
+     * - 地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip
+     * - 洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip
      */
     private static Path writeChunkDataAndGetDir(ChunkMapData chunk, Path serverDir, int worldId) {
-        // Path: Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip
         String xaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(chunk.dimension);
         Path dimDir = serverDir.resolve(xaeroDim);
         Path mwDir = dimDir.resolve("mw$" + worldId);
-        Path outputFile = mwDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip");
-        Path tempFile = mwDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip.temp");
+
+        // 根据 caveLayer 决定最终目录
+        Path targetDir;
+        if (chunk.caveLayer == Integer.MAX_VALUE) {
+            // 地表层：直接在 mw$<worldId> 目录
+            targetDir = mwDir;
+        } else {
+            // 洞穴层：存放到 caves/<layer> 子目录
+            targetDir = mwDir.resolve("caves").resolve(String.valueOf(chunk.caveLayer));
+        }
+
+        Path outputFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip");
+        Path tempFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip.temp");
 
         try {
-            Files.createDirectories(mwDir);
+            Files.createDirectories(targetDir);
 
             // Direct write: replace existing file with server data (no incremental merge)
             Files.write(tempFile, chunk.data);
             Files.move(tempFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
-            LOGGER.debug("Wrote map file: {} ({} bytes)", outputFile, chunk.data.length);
+            LOGGER.debug("Wrote map file: {} (layer={}, {} bytes)", outputFile,
+                chunk.isSurfaceLayer() ? "surface" : chunk.caveLayer, chunk.data.length);
         } catch (IOException e) {
             LOGGER.error("Failed to write map file: {}", outputFile, e);
         }

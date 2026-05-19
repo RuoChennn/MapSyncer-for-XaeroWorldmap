@@ -444,20 +444,42 @@ public class ServerSyncHandler {
 
     /**
      * Helper to add chunk data from zip file.
+     *
+     * 路径格式解析：
+     * - 地表：dim/regionX_regionZ
+     * - 洞穴：dim/caves/layer/regionX_regionZ
      */
     private static void addChunkData(List<ChunkMapData> diffs, Path zipPath, String normalizedPath, long timestampSeconds) {
         try {
             byte[] data = Files.readAllBytes(zipPath);
-            // Parse dimension and coordinates from path
+            // Parse dimension, caveLayer, and coordinates from path
             String[] parts = normalizedPath.split("[/\\\\]");
-            String fileName = parts[parts.length - 1];
+
+            // 解析维度名、洞穴层和坐标
+            String dimension;
+            int caveLayer = Integer.MAX_VALUE;  // 默认地表
+            String fileName;
+
+            if (parts.length >= 4 && parts[1].equals("caves")) {
+                // 洞穴层格式：dim/caves/layer/regionX_regionZ
+                dimension = parts[0];
+                caveLayer = Integer.parseInt(parts[2]);
+                fileName = parts[3];
+            } else {
+                // 地表格式：dim/regionX_regionZ
+                dimension = parts[0];
+                fileName = parts[parts.length - 1];
+            }
+
             String[] coords = fileName.split("_");
             int regionX = Integer.parseInt(coords[0]);
             int regionZ = Integer.parseInt(coords[1]);
-            String dimension = parts.length > 1 ? parts[parts.length - 2] : "null";
-            diffs.add(new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds));
+
+            diffs.add(new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer));
         } catch (IOException e) {
             LOGGER.error("Failed to read zip file: {}", zipPath, e);
+        } catch (NumberFormatException e) {
+            LOGGER.error("Failed to parse path: {}", normalizedPath, e);
         }
     }
 

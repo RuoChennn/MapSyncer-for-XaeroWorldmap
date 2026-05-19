@@ -1,5 +1,8 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.config.ModConfig;
+import com.mapsyncer.config.ModConfig.DimensionScanConfig;
+import com.mapsyncer.config.ModConfig.ScanMode;
 import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.RegionConverterStandalone;
 import com.mapsyncer.mca.RegionConverterStandalone.CaveModeParams;
@@ -208,7 +211,22 @@ public class ConversionOrchestrator {
         String dimPath = dimRegions.dimension().location().getPath();
         // 使用 Xaero 格式的目录名存储文件（与客户端保持一致）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
-        Path outputDir = CACHE_DIR.resolve(xaeroDimName);
+
+        // 从配置获取维度扫描配置
+        DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+        ScanMode scanMode = scanConfig.scanMode();
+        int caveLayer = scanConfig.getCaveLayer();
+
+        // 计算输出目录（包含 caves/<layer> 子目录）
+        Path baseOutputDir = CACHE_DIR.resolve(xaeroDimName);
+        Path outputDir;
+        if (caveLayer == Integer.MAX_VALUE) {
+            // 地表模式：直接在维度目录
+            outputDir = baseOutputDir;
+        } else {
+            // 洞穴模式：存放到 caves/<layer> 子目录
+            outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
+        }
 
         try { Files.createDirectories(outputDir); } catch (IOException e) {
             LOGGER.error("Failed to create output directory: {}", outputDir, e);
@@ -226,21 +244,19 @@ public class ConversionOrchestrator {
         int minBuildHeight = level.getMinBuildHeight();
         int worldTopY = level.getMaxBuildHeight();
 
-        // 根据维度类型选择光照模式和洞穴参数
-        // 地狱使用分层洞穴模式，起始高度 Y=90，深度覆盖到世界底部
-        // 其他维度使用地表模式
+        // 根据配置选择光照模式和和洞穴参数
         LightMode lightMode;
         CaveModeParams caveParams;
-        if (dimRegions.dimension() == Level.NETHER) {
+        if (scanMode == ScanMode.CAVE) {
             lightMode = LightMode.CAVE;
-            // 地狱分层模式：起始高度90，深度覆盖整个世界高度范围
-            // 地狱世界高度通常是 0-128，所以深度设为 90 即可覆盖到底部
-            int caveDepth = Math.max(30, 90 - minBuildHeight);  // 确保覆盖到世界底部
-            caveParams = new CaveModeParams(90, caveDepth);
-            LOGGER.info("Nether dimension: using CAVE mode with caveStart=90, caveDepth={}", caveDepth);
+            int caveDepth = scanConfig.getCaveDepth(minBuildHeight);
+            caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
+            LOGGER.info("Dimension {}: using CAVE mode with caveStart={}, caveLayer={}, caveDepth={}",
+                xaeroDimName, scanConfig.caveStart(), caveLayer, caveDepth);
         } else {
             lightMode = LightMode.SURFACE;
             caveParams = CaveModeParams.NONE;
+            LOGGER.info("Dimension {}: using SURFACE mode", xaeroDimName);
         }
 
         // 使用时间戳缓存检测需要更新的区域
@@ -273,8 +289,14 @@ public class ConversionOrchestrator {
                 try {
                     Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                     mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                    // Update generation cache with timestamp and hash (使用 Xaero 格式的键)
-                    String relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
+                    // Update generation cache with timestamp and hash
+                    // relativePath 格式：xaeroDim/regionX_regionZ（地表）或 xaeroDim/caves/layer/regionX_regionZ（洞穴）
+                    String relativePath;
+                    if (caveLayer == Integer.MAX_VALUE) {
+                        relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
+                    } else {
+                        relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
+                    }
                     genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
                 } catch (IOException e) {
                     LOGGER.error("Failed to write region file", e);
@@ -306,15 +328,22 @@ public class ConversionOrchestrator {
                 currentStatus = "Generating new region (" + coords.x() + ", " + coords.z() + ")";
                 Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
+                // 使用当前维度的扫描配置
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY);
+                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY, lightMode, caveParams);
 
                 if (converted != null) {
                     try {
                         Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                         mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                        // Update generation cache with timestamp and hash (使用 Xaero 格式的键)
-                        String relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
+                        // Update generation cache with timestamp and hash
+                        // relativePath 格式：xaeroDim/regionX_regionZ（地表）或 xaeroDim/caves/layer/regionX_regionZ（洞穴）
+                        String relativePath;
+                        if (caveLayer == Integer.MAX_VALUE) {
+                            relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
+                        } else {
+                            relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
+                        }
                         genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
                     } catch (IOException e) {
                         LOGGER.error("Failed to write region file", e);
