@@ -53,3 +53,7 @@ gradle-8.9-bin.zip
 
 # Deployment scripts (local environment specific)
 deploy.bat
+
+# Utility scripts (local environment specific)
+crc32.bat
+crc32.ps1
