@@ -7,7 +7,18 @@ import java.util.*;
 /**
  * 方块判断器 - 基于字符串匹配的方块属性判断
  * 替代 Minecraft 的 BlockState 方法调用
+ *
+ * @deprecated 此类为备用功能，暂未使用。
+ *             当前项目主要在服务器运行时工作，推荐使用 BlockPropertyResolver，
+ *             它通过 Minecraft API 动态解析方块属性，支持 mod 方块。
+ *             BlockClassifier 保留用于以下潜在场景：
+ *             1. 离线/预生成模式（无 Minecraft 运行环境）
+ *             2. BlockPropertyResolver 不可用时作为 fallback
+ *             3. 需要快速判断且不需要 mod 方块支持的场景
+ *
+ * @see com.mapsyncer.server.BlockPropertyResolver 运行时方块属性解析（推荐）
  */
+@Deprecated(since = "2026-05-21", forRemoval = false)
 public class BlockClassifier {
 
     // 空气方块集合
