@@ -404,11 +404,22 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ### 历史更新记录
 
+**2026-05-20 更新 (v3.7)**:
+
+- ✅ **客户端 sync 命令参数解析修复**: 解决 Mod 维度 ID 冒号解析问题
+  - 问题：`StringArgumentType.string()` 遇到冒号会截断，导致 `twilightforest:twilight_forest` 解析失败
+  - 问题：`DimensionArgument.dimension()` 在客户端命令中抛出 `UnsupportedOperationException`
+  - 修复：使用 `StringArgumentType.greedyString()` 读取完整参数
+  - 修复：从 `Registries.DIMENSION_TYPE` 注册表推断维度 ID（移除 `_type` 后缀）
+  - 效果：客户端命令 `/mapsyncer sync twilightforest:twilight_forest` 正常工作
+  - 命令建议：显示原版简化名称 + Mod 维度完整 ID + 已同步过的维度
+
 **2026-05-20 更新 (v3.6)**:
 
 - ✅ **客户端 sync 命令 Mod 维度建议修复**: 从客户端注册表获取 Mod 维度
   - 问题：之前仅扫描 Xaero 目录获取维度建议，无法获取未同步过的 Mod 维度
-  - 修复：连接服务器后从 `Registries.DIMENSION` 注册表获取所有已知维度
+  - 问题：代码使用了 `Registries.DIMENSION`，但该字段在 Minecraft 1.21 中不存在
+  - 修复：使用 `Registries.LEVEL_STEM`（维度模板注册表）获取所有已知维度
   - 效果：客户端加载了暮光森林 mod，即使未同步过也能显示 `twilightforest:twilight_forest` 建议
   - 原版维度（minecraft 前缀）跳过，已单独建议简化名称
 
