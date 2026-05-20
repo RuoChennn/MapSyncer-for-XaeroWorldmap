@@ -38,7 +38,9 @@ public class ClientHashManager {
      * Uses parallel processing with limited concurrency (2 threads) to avoid
      * blocking the game while computing hashes for many regions.
      *
-     * @param mapDir the base directory (Multiplayer_<server>/null) or mw$worldId directory
+     * @param mapDir the directory to scan:
+     *               - mw$worldId directory for single dimension sync
+     *               - Multiplayer_<server> directory for all dimensions sync
      * @return map of relative path -> ClientMeta (timestamp in seconds + hash)
      */
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
@@ -49,7 +51,7 @@ public class ClientHashManager {
             return metaMap;
         }
 
-        // Determine the server directory (Multiplayer_<server>)
+        // Determine the server directory (Multiplayer_<server>) for cache lookup
         Path serverDir = findServerDir(mapDir);
         if (serverDir == null) {
             LOGGER.warn("Could not find server directory from {}", mapDir);
@@ -61,9 +63,9 @@ public class ClientHashManager {
         Map<String, ClientTimestampCache.CacheEntry> cachedTimestamps = tsCache.getAll();
         LOGGER.info("Loaded {} cached timestamps from previous sync", cachedTimestamps.size());
 
-        // Collect all zip files first
+        // Collect all zip files from the specified directory (not entire server)
         java.util.List<Path> zipFiles;
-        try (Stream<Path> walk = Files.walk(serverDir)) {
+        try (Stream<Path> walk = Files.walk(mapDir)) {
             zipFiles = walk.filter(p -> p.toString().endsWith(".zip"))
                     .toList();
         } catch (IOException e) {
@@ -71,7 +73,7 @@ public class ClientHashManager {
             return metaMap;
         }
 
-        LOGGER.info("Computing hashes for {} region files (parallel=2)", zipFiles.size());
+        LOGGER.info("Computing hashes for {} region files in {} (parallel=2)", zipFiles.size(), mapDir);
 
         // Process with limited parallelism (2 threads) to avoid blocking game
         ForkJoinPool limitedPool = new ForkJoinPool(2);
@@ -84,7 +86,8 @@ public class ClientHashManager {
                                     String fileName = zipPath.getFileName().toString();
                                     if (!fileName.endsWith(".zip")) return;
 
-                                    // Build relative path in server format
+                                    // Build relative path in server format (using serverDir as base)
+                                    // This ensures path format matches server's GenerationCache
                                     String relativePath = buildRelativePath(zipPath, serverDir);
 
                                     // Compute CRC32 hash
