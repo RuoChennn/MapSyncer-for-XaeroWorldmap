@@ -114,23 +114,6 @@ public class SyncProgressTracker {
         return tracking;
     }
 
-    public static int getProcessed() {
-        return processed;
-    }
-
-    public static int getTotal() {
-        return total;
-    }
-
-    public static String getStatus() {
-        return status;
-    }
-
-    public static float getProgress() {
-        if (total <= 0) return 0;
-        return (float) processed / total;
-    }
-
     public static long getElapsedSeconds() {
         return (System.currentTimeMillis() - startTime) / 1000;
     }
