@@ -228,6 +228,9 @@ public class RegionConverterStandalone {
         int chunkX = chunk.chunkX();
         int chunkZ = chunk.chunkZ();
 
+        // 标记该区块已存在（区分区块未生成和区块内虚空区域）
+        data.chunkExists[chunkX][chunkZ] = true;
+
         // 洞穴模式参数
         int caveStart = caveParams.caveStart();
         int caveDepth = caveParams.caveDepth();
@@ -524,6 +527,15 @@ public class RegionConverterStandalone {
 
     /**
      * 序列化为 Xaero 格式
+     *
+     * 重要区分：
+     * - 区块存在但像素为虚空区域 → 写入 AIR + void（渲染深紫色）
+     * - 区块不存在（尚未生成） → 写入空 Tile（tileMarker = -1），客户端跳过渲染
+     *
+     * 坐标映射：
+     * - 一个 Tile 对应一个 Minecraft 区块（都是 16x16 块）
+     * - chunkX = tileChunkO * 4 + tileI
+     * - chunkZ = tileChunkP * 4 + tileJ
      */
     static byte[] serializeToXaeroFormat(MapRegionData data, int minBuildHeight) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -543,54 +555,47 @@ public class RegionConverterStandalone {
                     // 4x4 Tiles
                     for (int tileI = 0; tileI < TILES_PER_TILE_CHUNK; tileI++) {
                         for (int tileJ = 0; tileJ < TILES_PER_TILE_CHUNK; tileJ++) {
-                            int baseX = tileChunkO * BLOCKS_PER_TILE_CHUNK + tileI * BLOCKS_PER_TILE;
-                            int baseZ = tileChunkP * BLOCKS_PER_TILE_CHUNK + tileJ * BLOCKS_PER_TILE;
+                            // 计算该 Tile 对应的区块坐标
+                            // 一个 Tile 是 16x16 块，正好对应一个 Minecraft 区块
+                            int chunkX = tileChunkO * 4 + tileI;
+                            int chunkZ = tileChunkP * 4 + tileJ;
 
-                            // 检查 tile 是否有任何有效数据（非空白像素）
-                            // 注意：空白像素（AIR + null biome）也需要写入，这样才能正确渲染虚空区域
-                            // 参考 Xaero：空白像素写入 AIR 方块，渲染时使用 VOID_COLOR（深紫色）
-                            boolean hasAnyValidData = false;
-                            for (int bx = 0; bx < BLOCKS_PER_TILE && !hasAnyValidData; bx++) {
-                                for (int bz = 0; bz < BLOCKS_PER_TILE && !hasAnyValidData; bz++) {
-                                    if (data.hasData[baseX + bx][baseZ + bz]) hasAnyValidData = true;
-                                }
+                            // 计算像素基础坐标（用于访问像素数据）
+                            int baseX = chunkX * 16;  // 区块起始 X
+                            int baseZ = chunkZ * 16;  // 区块起始 Z
+
+                            // 检查该区块是否存在
+                            if (!data.chunkExists[chunkX][chunkZ]) {
+                                // 区块不存在（尚未生成）：写入空 Tile 标记
+                                // 参考 Xaero 格式：空 Tile 用 tileMarker = -1 表示
+                                dos.writeInt(-1);
+                                continue;
                             }
 
-                            // 即使没有有效数据，也要写入空白 Tile（AIR 方块组成的虚空区域）
-                            // 这样客户端才能正确渲染虚空为深紫色（VOID_COLOR）
-                            // 参考 Xaero WorldDataReader：空白区域写入 AIR 方块，height=minBuildHeight
-
-                            // 16x16 pixels
+                            // 区块存在：写入 Tile 数据（16x16 块 = 16x16 像素）
+                            // 第一个像素的 params 作为 tileMarker（不能是 -1）
                             for (int bx = 0; bx < BLOCKS_PER_TILE; bx++) {
                                 for (int bz = 0; bz < BLOCKS_PER_TILE; bz++) {
                                     int rx = baseX + bx;
                                     int rz = baseZ + bz;
 
                                     if (!data.hasData[rx][rz]) {
-                                        // 空白像素：写入 AIR 方块 + null biome（参考 Xaero prepareForWriting）
-                                        // prepareForWriting 设置 state=AIR, biome=null, height=defaultHeight
-                                        // MapBlock.getParametres() 会设置 params |= 1（非 grass）
-                                        // 当 biome=null 时，不设置 0x100000 标志，客户端使用默认虚空颜色
+                                        // 区块存在但像素为虚空：写入 AIR 方块 + null biome
+                                        // 参考 Xaero prepareForWriting：state=AIR, biome=null, height=defaultHeight
                                         String emptyBlockName = "minecraft:air";
                                         int emptyHeight = minBuildHeight;
                                         int emptyParams = 0;
 
-                                        // 非 grass 方块标志
-                                        emptyParams |= 1;
-                                        // light = 0
-                                        emptyParams |= 0 << 8;
-                                        // height 编码
+                                        emptyParams |= 1;  // 非 grass
+                                        emptyParams |= 0 << 8;  // light = 0
                                         emptyParams |= encodeHeightToParams(emptyHeight);
-                                        // biome = null，不设置 0x100000
-                                        // topHeight == height，不设置 0x1000000
-                                        // 新 palette 条目标志
+
                                         if (!blockPalette.containsKey(emptyBlockName)) {
                                             emptyParams |= 0x200000;
                                         }
 
                                         dos.writeInt(emptyParams);
 
-                                        // 写入方块状态 NBT（仅当不在 palette 中时）
                                         if (!blockPalette.containsKey(emptyBlockName)) {
                                             writeBlockStateNbt(emptyBlockName, dos);
                                             blockPalette.put(emptyBlockName, blockPalette.size());
@@ -601,6 +606,7 @@ public class RegionConverterStandalone {
                                         continue;
                                     }
 
+                                    // 正常像素数据
                                     String blockName = data.blockNames[rx][rz];
                                     if (blockName == null) blockName = DEFAULT_BLOCK;
                                     int height = data.heightMap[rx][rz];
@@ -646,7 +652,6 @@ public class RegionConverterStandalone {
 
                                     // Overlay data
                                     if (hasOverlays) {
-                                        // overlays 已经在 addOverlay 中完成了累加，无需再合并
                                         dos.writeByte(overlays.size());
                                         for (OverlayData overlay : overlays) {
                                             serializeOverlay(overlay, dos, blockPalette);
@@ -790,6 +795,7 @@ public class RegionConverterStandalone {
         final int[][] heightMap;
         final byte[][] lightMap;
         final boolean[][] hasData;
+        final boolean[][] chunkExists;  // 追踪哪些区块实际被读取过（32x32）
         final List<OverlayData>[][] overlays;
         final int minBuildHeight;
         final LightMode lightMode;  // 光照模式（用于调试/统计）
@@ -810,6 +816,7 @@ public class RegionConverterStandalone {
             }
             lightMap = new byte[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
             hasData = new boolean[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            chunkExists = new boolean[CHUNKS_PER_REGION][CHUNKS_PER_REGION];  // 32x32 区块存在性追踪
             overlays = new ArrayList[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
         }
     }
