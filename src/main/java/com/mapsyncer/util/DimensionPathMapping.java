@@ -17,35 +17,30 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * 统一管理维度的各种名称映射关系：
  * - ResourceLocation path (the_nether, the_end, overworld)
- * - 文件系统目录名（支持新旧两种格式）
+ * - 文件系统目录名
  * - Xaero 目录名 (DIM-1, DIM1, null)
  *
- * Minecraft 26.1 (1.21.x) 维度路径格式变化：
+ * Minecraft 1.21.X 维度路径格式：
  * ┌─────────────────────────────────────────────────────────────────────┐
- * │ Minecraft 26.1+ 新格式（所有维度统一使用 dimensions/ 目录）：        │
- * │   主世界: world/dimensions/minecraft/overworld/region/              │
- * │   地狱:   world/dimensions/minecraft/the_nether/region/             │
- * │   末地:   world/dimensions/minecraft/the_end/region/                │
- * │   Mod 维度: world/dimensions/<namespace>/<dimension_name>/region/   │
- * │   例如: world/dimensions/twilightforest/twilight_forest/region/     │
- * ├─────────────────────────────────────────────────────────────────────┤
- * │ 传统格式（旧版本 Minecraft 或部分 mod 使用）：                       │
+ * │ 原版维度（始终使用传统格式）：                                       │
  * │   主世界: world/region/                                             │
  * │   地狱:   world/DIM-1/region/                                       │
  * │   末地:   world/DIM1/region/                                        │
- * │   Mod 维度: world/DIM{id}/region/  例如 DIM7, DIM-17               │
- * └─────────────────────────────────────────────────────────────────────┤
+ * ├─────────────────────────────────────────────────────────────────────┤
+ * │ Mod 维度（使用 dimensions/ 新格式）：                               │
+ * │   格式: world/dimensions/<namespace>/<dimension_name>/region/       │
+ * │   例如: world/dimensions/twilightforest/twilight_forest/region/     │
+ * └─────────────────────────────────────────────────────────────────────┘
  *
- * 本类同时支持新旧两种格式，优先检测新格式，找不到时回退到传统格式。
- * 首次运行时会自动检测实际使用的格式并缓存到配置文件。
+ * 本类根据维度类型自动选择正确的路径格式。
  *
  * 示例：
- * | ResourceLocation | 新格式目录 | 传统格式目录 | Xaero 目录 |
- * |------------------|-----------|-------------|------------|
- * | overworld        | dimensions/minecraft/overworld | . | null |
- * | the_nether       | dimensions/minecraft/the_nether | DIM-1 | DIM-1 |
- * | the_end          | dimensions/minecraft/the_end | DIM1 | DIM1 |
- * | twilightforest:twilight_forest | dimensions/twilightforest/twilight_forest | DIM7 | DIM7 |
+ * | ResourceLocation | 文件系统目录 | Xaero 目录 |
+ * |------------------|-------------|------------|
+ * | minecraft:overworld | . (根目录) | null |
+ * | minecraft:the_nether | DIM-1 | DIM-1 |
+ * | minecraft:the_end | DIM1 | DIM1 |
+ * | twilightforest:twilight_forest | dimensions/twilightforest/twilight_forest | twilightforest$twilight_forest |
  */
 public class DimensionPathMapping {
 
@@ -68,37 +63,23 @@ public class DimensionPathMapping {
 
     // ========== 预设映射 ==========
 
-    // 原版维度 - 新格式（Minecraft 26.1+）
-    private static final Map<String, String> VANILLA_NEW_FORMAT = new LinkedHashMap<>();
-
-    // 原版维度 - 传统格式
-    private static final Map<String, String> VANILLA_LEGACY_FORMAT = new LinkedHashMap<>();
+    // 原版维度 - 传统格式（1.21.X 原版维度始终使用此格式）
+    private static final Map<String, String> VANILLA_FORMAT = new LinkedHashMap<>();
 
     // 原版维度 - Xaero 目录映射（固定）
     private static final Map<String, String> VANILLA_XAERO_MAPPINGS = new LinkedHashMap<>();
 
-    // Mod 维度预设映射 - 已移除
-// 原因：预设 DIM{id} 映射会导致新格式路径被强制转换为旧格式
-// 现在统一使用动态检测的 namespace$path 格式（如 twilightforest$twilight_forest）
-// private static final Map<String, String> MOD_LEGACY_MAPPINGS = new LinkedHashMap<>();
-// private static final Map<String, String> MOD_XAERO_MAPPINGS = new LinkedHashMap<>();
-
     static {
-        // 原版维度 - 新格式（26.1+）
-        VANILLA_NEW_FORMAT.put("overworld", "dimensions/minecraft/overworld");
-        VANILLA_NEW_FORMAT.put("minecraft:overworld", "dimensions/minecraft/overworld");
-        VANILLA_NEW_FORMAT.put("the_nether", "dimensions/minecraft/the_nether");
-        VANILLA_NEW_FORMAT.put("minecraft:the_nether", "dimensions/minecraft/the_nether");
-        VANILLA_NEW_FORMAT.put("the_end", "dimensions/minecraft/the_end");
-        VANILLA_NEW_FORMAT.put("minecraft:the_end", "dimensions/minecraft/the_end");
-
-        // 原版维度 - 传统格式
-        VANILLA_LEGACY_FORMAT.put("overworld", ".");
-        VANILLA_LEGACY_FORMAT.put("minecraft:overworld", ".");
-        VANILLA_LEGACY_FORMAT.put("the_nether", "DIM-1");
-        VANILLA_LEGACY_FORMAT.put("minecraft:the_nether", "DIM-1");
-        VANILLA_LEGACY_FORMAT.put("the_end", "DIM1");
-        VANILLA_LEGACY_FORMAT.put("minecraft:the_end", "DIM1");
+        // 原版维度 - 传统格式（Minecraft 1.21.X 实际格式）
+        // 主世界: region/ 目录（根目录）
+        VANILLA_FORMAT.put("overworld", ".");
+        VANILLA_FORMAT.put("minecraft:overworld", ".");
+        // 地狱: DIM-1/region/
+        VANILLA_FORMAT.put("the_nether", "DIM-1");
+        VANILLA_FORMAT.put("minecraft:the_nether", "DIM-1");
+        // 末地: DIM1/region/
+        VANILLA_FORMAT.put("the_end", "DIM1");
+        VANILLA_FORMAT.put("minecraft:the_end", "DIM1");
 
         // Xaero 目录映射 - 原版维度（固定格式）
         VANILLA_XAERO_MAPPINGS.put("overworld", "null");
@@ -108,9 +89,8 @@ public class DimensionPathMapping {
         VANILLA_XAERO_MAPPINGS.put("the_end", "DIM1");
         VANILLA_XAERO_MAPPINGS.put("minecraft:the_end", "DIM1");
 
-        // Mod 维度不再预设 DIM{id} 映射
-        // 统一使用动态检测的 namespace$path 格式
-        // 例如：twilightforest:twilight_forest → twilightforest$twilight_forest
+        // Mod 维度使用 dimensions/<namespace>/<path>/ 格式
+        // 统一使用动态检测的 namespace$path 格式（如 twilightforest$twilight_forest）
     }
 
     private DimensionPathMapping() {
@@ -165,8 +145,9 @@ public class DimensionPathMapping {
     /**
      * 检测维度的实际 region 目录路径
      *
-     * 优先检测新格式（dimensions/...），找不到时回退到传统格式。
-     * 检测结果会被缓存到 pathToFolder 映射中。
+     * 根据维度类型选择正确的检测顺序：
+     * - 原版维度：直接使用传统格式（region/, DIM-1/, DIM1/）
+     * - Mod 维度：先尝试 dimensions/<namespace>/<path>/，失败则尝试 DIM{id}
      *
      * @param worldRoot 世界根目录
      * @param dimPath 维度 path（如 "overworld", "the_nether", "twilightforest:twilight_forest"）
@@ -188,30 +169,48 @@ public class DimensionPathMapping {
             }
         }
 
-        // 2. 尝试新格式（dimensions/<namespace>/<path>/region）
-        String newFormatFolder = getNewFormatFolder(normalized);
-        Path newRegionDir = resolveRegionDir(worldRoot, newFormatFolder);
-        if (Files.exists(newRegionDir)) {
-            LOGGER.info("Detected new format for dimension {}: {}", normalized, newFormatFolder);
-            pathToFolder.put(normalized, newFormatFolder);
-            rebuildReverseMappings();
-            return newRegionDir;
+        // 2. 原版维度：直接使用传统格式
+        if (isVanillaDimension(normalized)) {
+            String vanillaFolder = VANILLA_FORMAT.get(normalized);
+            if (vanillaFolder != null) {
+                Path regionDir = resolveRegionDir(worldRoot, vanillaFolder);
+                if (Files.exists(regionDir)) {
+                    LOGGER.info("Detected vanilla dimension {}: {}", normalized, vanillaFolder);
+                    pathToFolder.put(normalized, vanillaFolder);
+                    rebuildReverseMappings();
+                    return regionDir;
+                }
+            }
         }
 
-        // 3. 尝试传统格式
-        String legacyFolder = getLegacyFormatFolder(normalized);
-        Path legacyRegionDir = resolveRegionDir(worldRoot, legacyFolder);
-        if (Files.exists(legacyRegionDir)) {
-            LOGGER.info("Detected legacy format for dimension {}: {}", normalized, legacyFolder);
-            pathToFolder.put(normalized, legacyFolder);
-            rebuildReverseMappings();
-            return legacyRegionDir;
+        // 3. Mod 维度：先尝试 dimensions/<namespace>/<path>/ 新格式
+        if (normalized.contains(":")) {
+            String[] parts = normalized.split(":");
+            if (parts.length == 2) {
+                String newFormatFolder = "dimensions/" + parts[0] + "/" + parts[1];
+                Path regionDir = resolveRegionDir(worldRoot, newFormatFolder);
+                if (Files.exists(regionDir)) {
+                    LOGGER.info("Detected Mod dimension {} (new format): {}", normalized, newFormatFolder);
+                    pathToFolder.put(normalized, newFormatFolder);
+                    rebuildReverseMappings();
+                    return regionDir;
+                }
+            }
         }
 
-        // 不再使用预设 DIM{id} 映射，统一依赖动态检测
+        // 4. Mod 维度：尝试传统 DIM{id} 格式（部分旧 mod 可能使用）
+        // 动态检测，不预设映射
 
         LOGGER.warn("Could not detect region directory for dimension: {}", normalized);
         return null;
+    }
+
+    /**
+     * 判断是否为原版维度
+     */
+    private boolean isVanillaDimension(String dimPath) {
+        return "overworld".equals(dimPath) || "the_nether".equals(dimPath) || "the_end".equals(dimPath) ||
+               VANILLA_FORMAT.containsKey(dimPath);
     }
 
     /**
@@ -224,49 +223,12 @@ public class DimensionPathMapping {
         return worldRoot.resolve(folder).resolve("region");
     }
 
-    /**
-     * 获取新格式目录名（dimensions/<namespace>/<path>）
-     */
-    private String getNewFormatFolder(String dimPath) {
-        // 原版维度
-        if (VANILLA_NEW_FORMAT.containsKey(dimPath)) {
-            return VANILLA_NEW_FORMAT.get(dimPath);
-        }
-
-        // 带命名空间的维度（如 minecraft:overworld）
-        if (dimPath.contains(":")) {
-            String[] parts = dimPath.split(":");
-            if (parts.length == 2) {
-                return "dimensions/" + parts[0] + "/" + parts[1];
-            }
-        }
-
-        // 无命名空间的维度，假设为 minecraft
-        return "dimensions/minecraft/" + dimPath;
-    }
-
-    /**
-     * 获取传统格式目录名（DIM-1, DIM1, .）
-     */
-    private String getLegacyFormatFolder(String dimPath) {
-        // 原版维度
-        if (VANILLA_LEGACY_FORMAT.containsKey(dimPath)) {
-            return VANILLA_LEGACY_FORMAT.get(dimPath);
-        }
-
-        // Mod 维度不再预设 DIM{id} 映射
-        // 返回 null（表示没有传统格式，依赖动态检测）
-
-        return null;
-    }
-
     // ========== 文件系统目录映射 ==========
 
     /**
      * 根据维度 ResourceLocation path 获取文件系统目录名
      *
-     * 如果已检测并缓存，返回缓存值；
-     * 否则返回新格式作为默认值。
+     * 原版维度返回传统格式，Mod 维度返回 dimensions/ 新格式。
      *
      * @param dimPath 维度 path（如 "the_nether", "my_mod:custom_dim"）
      * @return 文件系统目录名
@@ -278,15 +240,31 @@ public class DimensionPathMapping {
             return cached;
         }
 
-        // 未缓存时返回新格式作为默认
-        return getNewFormatFolder(normalizeDimPath(dimPath));
+        String normalized = normalizeDimPath(dimPath);
+
+        // 原版维度：返回传统格式
+        if (isVanillaDimension(normalized)) {
+            String vanillaFolder = VANILLA_FORMAT.get(normalized);
+            return vanillaFolder != null ? vanillaFolder : ".";
+        }
+
+        // Mod 维度：返回 dimensions/<namespace>/<path> 新格式
+        if (normalized.contains(":")) {
+            String[] parts = normalized.split(":");
+            if (parts.length == 2) {
+                return "dimensions/" + parts[0] + "/" + parts[1];
+            }
+        }
+
+        // 默认返回新格式
+        return "dimensions/minecraft/" + normalized;
     }
 
     /**
      * 根据维度 ResourceKey 获取文件系统目录名
      */
     public String getFolderName(ResourceKey<Level> dimensionKey) {
-        return getFolderName(dimensionKey.location().getPath());
+        return getFolderName(dimensionKey.location().toString());
     }
 
     /**
@@ -308,7 +286,7 @@ public class DimensionPathMapping {
             return remaining;
         }
 
-        // 传统格式反向映射
+        // 传统格式反向映射（原版维度）
         if (".".equals(folderName) || "region".equals(folderName)) return "overworld";
         if ("DIM-1".equals(folderName)) return "the_nether";
         if ("DIM1".equals(folderName)) return "the_end";
@@ -326,42 +304,29 @@ public class DimensionPathMapping {
     /**
      * 根据维度 ResourceLocation path 获取 Xaero 目录名
      *
-     * 优先级：
-     * 1. 已检测并注册的映射（新格式优先）
-     * 2. 原版维度预设映射
-     * 3. Mod 预设映射
-     * 4. 自动计算（namespace$path 格式）
+     * 原版维度返回固定格式（null, DIM-1, DIM1），
+     * Mod 维度返回 namespace$path 格式。
      */
     public String getXaeroFolder(String dimPath) {
         String normalized = normalizeDimPath(dimPath);
 
-        // 优先检查已注册的 Xaero 映射（可能来自自动检测）
-        String registered = pathToXaero.get(normalized);
-        if (registered != null) {
-            return registered;
-        }
-
-        // 检查已检测到的文件系统路径
-        // 如果检测到新格式路径，则计算对应的 namespace$path 格式
-        String detectedFolder = pathToFolder.get(normalized);
-        if (detectedFolder != null) {
-            return computeXaeroFolderFromFolderName(normalized, detectedFolder);
-        }
-
-        // 原版维度预设映射
+        // 原版维度：使用固定映射
         String vanillaXaero = VANILLA_XAERO_MAPPINGS.get(normalized);
         if (vanillaXaero != null) {
             return vanillaXaero;
         }
 
-        // Mod 维度不再预设 DIM{id} 映射
-        // 直接使用 namespace$path 格式（Xaero 新格式）
+        // 检查已注册的映射（Mod 维度动态检测）
+        String registered = pathToXaero.get(normalized);
+        if (registered != null) {
+            return registered;
+        }
 
-        // 无预设时，使用 namespace$path 格式（Xaero 新格式）
+        // Mod 维度：使用 namespace$path 格式
         if (normalized.contains(":")) {
             String[] parts = normalized.split(":");
             if (parts.length == 2) {
-                return parts[0] + "$" + parts[1]; // Xaero 兼容格式
+                return parts[0] + "$" + parts[1];
             }
         }
 
@@ -377,12 +342,12 @@ public class DimensionPathMapping {
             return registered;
         }
 
-        // Xaero 特殊值
+        // Xaero 原版维度特殊值
         if ("null".equals(xaeroFolder)) return "overworld";
         if ("DIM-1".equals(xaeroFolder)) return "the_nether";
         if ("DIM1".equals(xaeroFolder)) return "the_end";
 
-        // Xaero 兼容格式：namespace$path → namespace:path
+        // Mod 维度：namespace$path → namespace:path
         if (xaeroFolder.contains("$")) {
             return xaeroFolder.replace('$', ':');
         }
@@ -402,7 +367,7 @@ public class DimensionPathMapping {
 
         String normalized = normalizeDimPath(clientDim);
 
-        // Xaero 格式转换
+        // Xaero 原版维度转换
         if ("null".equals(normalized)) return "overworld";
         if ("DIM-1".equals(normalized)) return "the_nether";
         if ("DIM1".equals(normalized)) return "the_end";
@@ -418,13 +383,6 @@ public class DimensionPathMapping {
 
     /**
      * 将服务端维度名转换为 Xaero 格式
-     *
-     * 输入可能是以下格式：
-     * 1. 完整维度 ID：如 "twilightforest:twilight_forest"
-     * 2. 维度 path：如 "twilight_forest"
-     * 3. 已经是 Xaero 格式：如 "twilightforest$twilight_forest" 或 "DIM-1"
-     *
-     * 如果输入已经是 Xaero 格式，直接返回。
      */
     public String toXaeroDimension(String serverDim) {
         if (serverDim == null || serverDim.isEmpty()) {
@@ -432,21 +390,17 @@ public class DimensionPathMapping {
         }
 
         // 检查是否已经是 Xaero 格式
-        // Xaero 格式特征：
-        // - 原版：null, DIM-1, DIM1
-        // - Mod 新格式：namespace$path（包含 $ 符号）
-        // - Mod 传统格式：DIM{id}（如 DIM7, DIM-17）
         if (serverDim.equals("null") || serverDim.equals("DIM-1") || serverDim.equals("DIM1")) {
-            return serverDim; // 原版 Xaero 格式，直接返回
+            return serverDim;
         }
         if (serverDim.contains("$")) {
-            return serverDim; // Mod 新格式 namespace$path，直接返回
+            return serverDim;
         }
-        if (serverDim.startsWith("DIM") || serverDim.startsWith("DIM-")) {
-            return serverDim; // Mod 传统格式 DIM{id}，直接返回
+        if (serverDim.startsWith("DIM")) {
+            return serverDim;
         }
 
-        // 不是 Xaero 格式，需要转换
+        // 转换为 Xaero 格式
         return getXaeroFolder(normalizeDimPath(serverDim));
     }
 
@@ -523,23 +477,16 @@ public class DimensionPathMapping {
 
     /**
      * 注册维度路径映射
-     *
-     * @param dimPath 维度 path（如 "twilightforest:twilight_forest"）
-     * @param folderName 文件系统目录名（如 "dimensions/twilightforest/twilight_forest" 或 "DIM7"）
-     * @param xaeroFolder Xaero 目录名（如 "twilightforest$twilight_forest" 或 "DIM7"）
      */
     public void registerMapping(String dimPath, String folderName, String xaeroFolder) {
         pathToFolder.put(dimPath, folderName);
         pathToXaero.put(dimPath, xaeroFolder);
         rebuildReverseMappings();
-        LOGGER.info("Registered dimension mapping: {} → folder={}, xaero={}", dimPath, folderName, xaeroFolder);
+        LOGGER.info("Registered dimension mapping: {} -> folder={}, xaero={}", dimPath, folderName, xaeroFolder);
     }
 
     /**
      * 注册维度路径映射（自动计算 Xaero 目录名）
-     *
-     * 当检测到新格式路径时，使用 namespace$path 格式作为 Xaero 目录名；
-     * 当检测到传统格式路径时，使用 DIM{id} 格式或预设值。
      */
     public void registerMapping(String dimPath, String folderName) {
         String xaeroFolder = computeXaeroFolderFromFolderName(dimPath, folderName);
@@ -548,38 +495,28 @@ public class DimensionPathMapping {
 
     /**
      * 根据文件系统目录名计算正确的 Xaero 目录名
-     *
-     * 关键逻辑：
-     * - 新格式（dimensions/...）：始终使用 namespace$path 格式，忽略预设映射
-     * - 传统格式（DIM{id}）：使用预设映射或 DIM{id} 本身
-     *
-     * 这确保了当 mod 使用新规范路径时，Xaero 目录名也同步使用新格式，
-     * 与客户端期望的路径一致。
      */
     private String computeXaeroFolderFromFolderName(String dimPath, String folderName) {
         // 新格式路径：dimensions/<namespace>/<path>
-        // → 始终使用 namespace$path 格式作为 Xaero 目录名（忽略预设映射）
-        // 这是关键修复：当 mod 使用新规范路径时，不再使用旧的 DIM{id} 格式
+        // -> 使用 namespace$path 格式
         if (folderName.startsWith("dimensions/")) {
-            String remaining = folderName.substring(11); // 移除 "dimensions/"
+            String remaining = folderName.substring(11);
             String[] parts = remaining.split("/");
             if (parts.length == 2) {
-                String namespace = parts[0];
-                String path = parts[1];
-                String newXaeroFormat = namespace + "$" + path; // Xaero 新格式：namespace$path
-                LOGGER.debug("New format detected for {}: using Xaero folder {} (instead of preset)",
-                    dimPath, newXaeroFormat);
-                return newXaeroFormat;
+                return parts[0] + "$" + parts[1];
             }
         }
 
-        // 传统格式路径：不再检查预设映射
-        // 如果文件夹名已经是 DIM 格式，直接使用
-        if (folderName.startsWith("DIM") || folderName.startsWith("DIM-")) {
+        // 传统格式 DIM{id}：直接使用
+        if (folderName.startsWith("DIM") || ".".equals(folderName)) {
+            // 原版维度使用预设映射
+            String vanillaXaero = VANILLA_XAERO_MAPPINGS.get(normalizeDimPath(dimPath));
+            if (vanillaXaero != null) {
+                return vanillaXaero;
+            }
             return folderName;
         }
 
-        // 默认：使用路径部分作为 Xaero 目录名
         return getXaeroFolder(dimPath);
     }
 
@@ -598,6 +535,9 @@ public class DimensionPathMapping {
      */
     public void clearDetectedMappings() {
         pathToFolder.clear();
+        // 保留原版维度 Xaero 映射
+        pathToXaero.clear();
+        pathToXaero.putAll(VANILLA_XAERO_MAPPINGS);
         rebuildReverseMappings();
         LOGGER.info("Cleared all detected dimension mappings");
     }
@@ -616,7 +556,7 @@ public class DimensionPathMapping {
     // ========== 自动搜索方法 ==========
 
     /**
-     * 自动搜索维度 region 目录（兼容新旧两种格式）
+     * 自动搜索维度 region 目录
      */
     public Path autoSearchRegionDir(Path worldRoot, String dimId) {
         return detectRegionDir(worldRoot, dimId);
@@ -630,15 +570,19 @@ public class DimensionPathMapping {
             return 0;
         }
 
-        int newCount = 0;
         try {
-            // 1. 扫描 dimensions/ 目录（新格式）
+            // 1. 扫描 dimensions/ 目录（Mod 维度新格式）
             Path dimensionsDir = worldRoot.resolve("dimensions");
             if (Files.exists(dimensionsDir)) {
                 Files.list(dimensionsDir)
                     .filter(Files::isDirectory)
                     .forEach(namespaceDir -> {
                         String namespace = namespaceDir.getFileName().toString();
+                        // 跳过 minecraft（原版维度不使用此格式）
+                        if ("minecraft".equals(namespace)) {
+                            LOGGER.debug("Skipping minecraft namespace in dimensions/ (vanilla dims use traditional format)");
+                            return;
+                        }
                         try {
                             Files.list(namespaceDir)
                                 .filter(Files::isDirectory)
@@ -649,7 +593,7 @@ public class DimensionPathMapping {
                                         String dimPath = namespace + ":" + dimName;
                                         if (!pathToFolder.containsKey(dimPath)) {
                                             registerMapping(dimPath, "dimensions/" + namespace + "/" + dimName);
-                                            LOGGER.info("Auto-registered dimension (new format): {} → dimensions/{}/{}", dimPath, namespace, dimName);
+                                            LOGGER.info("Auto-registered Mod dimension: {} -> dimensions/{}/{}", dimPath, namespace, dimName);
                                         }
                                     }
                                 });
@@ -659,28 +603,29 @@ public class DimensionPathMapping {
                     });
             }
 
-            // 2. 扫描 DIM{id} 格式目录（传统格式）
+            // 2. 扫描 DIM{id} 格式目录（传统格式 - 可能是部分旧 Mod）
             Files.list(worldRoot)
                 .filter(Files::isDirectory)
                 .forEach(dir -> {
                     String dirName = dir.getFileName().toString();
                     if (dirName.startsWith("DIM") || dirName.startsWith("DIM-")) {
+                        // 跳过原版维度（已在预设映射中）
+                        if ("DIM-1".equals(dirName) || "DIM1".equals(dirName)) {
+                            return;
+                        }
                         Path regionDir = dir.resolve("region");
                         if (Files.exists(regionDir)) {
-                            String dimPath = parseDimFolderName(dirName);
-                            if (dimPath != null && !pathToFolder.containsKey(dimPath)) {
-                                registerMapping(dimPath, dirName);
-                                LOGGER.info("Auto-registered dimension (legacy format): {} → {}", dimPath, dirName);
-                            }
+                            // 未知 DIM{id} 格式，记录但不注册（无法确定维度 ID）
+                            LOGGER.info("Found unknown DIM directory: {} (cannot determine dimension ID)", dirName);
                         }
                     }
                 });
 
-            // 3. 检查主世界（region/ 或 dimensions/minecraft/overworld/region）
+            // 3. 检查主世界（region/ 目录）
             Path overworldRegion = worldRoot.resolve("region");
-            if (Files.exists(overworldRegion) && !pathToFolder.containsKey("overworld")) {
-                registerMapping("overworld", ".");
-                LOGGER.info("Auto-registered overworld (legacy format: region/)");
+            if (Files.exists(overworldRegion)) {
+                pathToFolder.put("overworld", ".");
+                LOGGER.info("Confirmed overworld using traditional format: region/");
             }
 
         } catch (Exception e) {
@@ -688,30 +633,6 @@ public class DimensionPathMapping {
         }
 
         return pathToFolder.size();
-    }
-
-    /**
-     * 解析 DIM 文件夹名称为维度 path
-     */
-    private String parseDimFolderName(String folderName) {
-        // 原版维度
-        if ("DIM-1".equals(folderName)) return "the_nether";
-        if ("DIM1".equals(folderName)) return "the_end";
-        if (".".equals(folderName) || "region".equals(folderName)) return "overworld";
-
-        // DIM{id} 格式 → 尝试从反向映射查找
-        String reverseMapped = folderToPath.get(folderName);
-        if (reverseMapped != null) {
-            return reverseMapped;
-        }
-
-        // 不再从预设映射查找
-        // 未知的 DIM{id} 格式，返回原始
-        if (folderName.startsWith("DIM")) {
-            return folderName;
-        }
-
-        return folderName;
     }
 
     /**
