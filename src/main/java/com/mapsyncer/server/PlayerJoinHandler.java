@@ -12,11 +12,27 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 玩家登录事件处理器 - 处理玩家加入/离开事件和服务器停止清理
+ *
+ * 功能：
+ * - 玩家加入时启动增量更新处理器（如果未运行且配置启用）
+ * - 玩家离开时中断该玩家的同步任务
+ * - 服务器停止时清理所有单例缓存，防止内存泄漏
+ */
 @EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
 public class PlayerJoinHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PlayerJoinHandler.class);
 
+    /**
+     * 玩家登录事件处理
+     *
+     * 当玩家登录时，如果增量更新处理器未运行且配置未禁用，
+     * 则启动增量更新处理器开始定时扫描。
+     *
+     * @param event 玩家登录事件
+     */
     @SubscribeEvent
     public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
         ServerPlayer player = (ServerPlayer) event.getEntity();
@@ -29,15 +45,27 @@ public class PlayerJoinHandler {
         }
     }
 
+    /**
+     * 玩家离开事件处理
+     *
+     * 中断正在进行的该玩家的地图同步任务。
+     *
+     * @param event 玩家离开事件
+     */
     @SubscribeEvent
     public static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-        // Abort any ongoing sync for this player
+        // 中断该玩家的任何正在进行的同步任务
         ServerSyncHandler.onPlayerDisconnect(event.getEntity().getUUID());
     }
 
     /**
-     * Clean up singleton instances when server stops to prevent memory leaks.
-     * This is important for dedicated servers that may restart without JVM restart.
+     * 服务器停止事件处理
+     *
+     * 清理所有单例缓存实例，防止专用服务器重启时的内存泄漏。
+     * 对于专用服务器，可能在不重启JVM的情况下重启服务器，
+     * 因此必须正确清理缓存。
+     *
+     * @param event 服务器停止事件
      */
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {

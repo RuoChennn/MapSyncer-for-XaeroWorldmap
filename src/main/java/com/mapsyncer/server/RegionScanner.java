@@ -17,30 +17,55 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Region 文件扫描器
+ * Region文件扫描器 - 扫描Minecraft世界中的区域文件
  *
  * 支持 Minecraft 26.1+ 新格式和传统格式：
  * - 新格式：dimensions/<namespace>/<dimension_name>/region/
  * - 传统格式：region/, DIM-1/region/, DIM1/region/, DIM{id}/region/
  *
  * 自动检测实际使用的格式，优先检查新格式。
+ * 跳过空的MCA文件（0字节），避免处理无数据的区域。
  */
 public class RegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RegionScanner.class);
+
+    /** MCA/MCR文件名匹配正则表达式 */
     private static final Pattern REGION_PATTERN = Pattern.compile("^r\\.(-?[0-9]+)\\.(-?[0-9]+)\\.mc[ar]$");
 
+    /**
+     * 区域坐标记录
+     *
+     * @param x 区域X坐标
+     * @param z 区域Z坐标
+     */
     public record RegionCoords(int x, int z) {
     }
 
+    /**
+     * 区域扫描结果
+     *
+     * @param regions 扫描到的区域坐标列表
+     * @param skippedEmptyCount 跳过的空文件数量
+     */
     public record RegionScanResult(List<RegionCoords> regions, int skippedEmptyCount) {
     }
 
+    /**
+     * 维度区域数据
+     *
+     * @param dimension 维度ResourceKey
+     * @param regions 区域坐标列表
+     * @param skippedEmptyCount 跳过的空文件数量
+     */
     public record DimensionRegions(net.minecraft.resources.ResourceKey<Level> dimension, List<RegionCoords> regions, int skippedEmptyCount) {
     }
 
     /**
-     * 扫描服务器所有维度的 region 文件
+     * 扫描服务器所有维度的region文件
+     *
+     * @param server Minecraft服务器实例
+     * @return 所有维度的区域数据列表
      */
     public static List<DimensionRegions> scanAllDimensions(MinecraftServer server) {
         List<DimensionNames> dimNames = new ArrayList<>();
@@ -60,7 +85,10 @@ public class RegionScanner {
     }
 
     /**
-     * 扫描指定维度的 region 文件
+     * 扫描指定维度的region文件
+     *
+     * @param level 服务端维度实例
+     * @return 该维度的扫描结果
      */
     public static RegionScanResult scanDimension(ServerLevel level) {
         Path worldRoot = level.getServer().getWorldPath(LevelResource.ROOT);
@@ -68,17 +96,17 @@ public class RegionScanner {
     }
 
     /**
-     * 获取指定维度的 region 目录路径
+     * 获取指定维度的region目录路径
      *
      * 自动检测实际使用的格式（新格式优先）：
      * 1. 新格式（26.1+）：dimensions/<namespace>/<dimension_name>/region/
      * 2. 传统格式：region/（主世界）、DIM-1/region/（地狱）、DIM1/region/（末地）
-     * 3. Mod 预设：DIM{id}/region/
+     * 3. Mod预设：DIM{id}/region/
      *
-     * 检测结果会被缓存到 DimensionPathMapping 中。
+     * 检测结果会被缓存到DimensionPathMapping中。
      *
      * @param level 服务端维度实例
-     * @return region 目录路径，如果未找到返回 null
+     * @return region目录路径，如果未找到返回null
      */
     public static Path getRegionDir(ServerLevel level) {
         try {
@@ -105,7 +133,13 @@ public class RegionScanner {
     }
 
     /**
-     * 扫描维度目录中的 region 文件
+     * 扫描维度目录中的region文件
+     *
+     * 使用DimensionPathMapping检测region目录位置。
+     *
+     * @param worldRoot 世界根目录
+     * @param dimensionKey 维度ResourceKey
+     * @return 扫描结果
      */
     private static RegionScanResult scanRegionDir(Path worldRoot, net.minecraft.resources.ResourceKey<Level> dimensionKey) {
         DimensionPathMapping mapping = DimensionPathMapping.getInstance();
@@ -123,10 +157,12 @@ public class RegionScanner {
     }
 
     /**
-     * 扫描 region 目录中的所有 MCA 文件
+     * 扫描region目录中的所有MCA文件
      *
-     * @param regionDir region 目录路径
-     * @return 扫描结果（包含 region 坐标列表和跳过的空文件数量）
+     * 解析文件名提取区域坐标，跳过空文件（0字节）。
+     *
+     * @param regionDir region目录路径
+     * @return 扫描结果（包含region坐标列表和跳过的空文件数量）
      */
     public static RegionScanResult scanRegionDirectory(Path regionDir) {
         List<RegionCoords> regions = new ArrayList<>();
@@ -169,5 +205,11 @@ public class RegionScanner {
         return new RegionScanResult(regions, skippedEmpty);
     }
 
+    /**
+     * 维度名称内部记录
+     *
+     * @param name 维度名称
+     * @param key 维度ResourceKey
+     */
     private record DimensionNames(String name, net.minecraft.resources.ResourceKey<Level> key) {}
 }

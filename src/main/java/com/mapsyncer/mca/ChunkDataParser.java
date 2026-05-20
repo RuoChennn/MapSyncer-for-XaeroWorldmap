@@ -10,24 +10,40 @@ import java.util.Set;
 
 /**
  * Chunk数据解析器
- * 解析完整的chunk NBT数据，包括高度图和sections
+ *
+ * <p>解析完整的chunk NBT数据，包括:</p>
+ * <ul>
+ *   <li>高度图数据（用于地表模式扫描）</li>
+ *   <li>区块状态验证（只处理已生成地形的区块）</li>
+ *   <li>所有Section的方块和生物群系数据</li>
+ *   <li>光照数据的查询和计算</li>
+ * </ul>
+ *
+ * <p>支持1.18+格式（flat root）和旧格式（nested under "Level"）</p>
+ *
+ * @see ChunkSectionParser 用于解析单个Section的数据
+ * @see ChunkInfo Chunk数据信息记录
+ * @see LightStats 光照统计信息记录
  */
 public class ChunkDataParser {
 
     /**
      * 可接受的区块状态集合
-     * 参考 Xaero WorldDataReader: 接受 >= FEATURES 状态的区块
      *
-     * ChunkStatus 顺序：
-     * empty -> structure_starts -> structure_references -> biomes -> noise -> surface -> features -> light -> spawn -> heightmaps -> full
+     * <p>参考 Xaero WorldDataReader: 接受 >= FEATURES 状态的区块</p>
      *
-     * Xaero 在 WorldDataReader.java 第333-340行：
-     * - chunkStatusIndex < BIOMES.getIndex() → return false（跳过）
-     * - handleChunkBiomes() 处理生物群系数据
-     * - chunkStatusIndex < FEATURES.getIndex() → return false（跳过）
+     * <p>ChunkStatus 顺序:</p>
+     * <pre>empty -> structure_starts -> structure_references -> biomes -> noise -> surface -> features -> light -> spawn -> heightmaps -> full</pre>
      *
-     * 所以 Xaero 接受 >= FEATURES 的状态，包括：
-     * features, light, spawn, heightmaps, full
+     * <p>Xaero 在 WorldDataReader.java 第333-340行:</p>
+     * <ul>
+     *   <li>chunkStatusIndex < BIOMES.getIndex() → return false（跳过）</li>
+     *   <li>handleChunkBiomes() 处理生物群系数据</li>
+     *   <li>chunkStatusIndex < FEATURES.getIndex() → return false（跳过）</li>
+     * </ul>
+     *
+     * <p>所以 Xaero 接受 >= FEATURES 的状态，包括:</p>
+     * <ul>features, light, spawn, heightmaps, full</ul>
      */
     private static final Set<String> ACCEPTABLE_STATUSES = Set.of(
         "minecraft:features",
@@ -45,9 +61,11 @@ public class ChunkDataParser {
 
     /**
      * 判断区块状态是否应该跳过
-     * 参考 Xaero WorldDataReader: 接受 >= FEATURES 状态的区块
+     *
+     * <p>参考 Xaero WorldDataReader: 接受 >= FEATURES 状态的区块</p>
+     *
      * @param status 区块状态字符串
-     * @return true 表示跳过该区块
+     * @return true 表示跳过该区块，false 表示保留该区块
      */
     private static boolean shouldSkipChunk(String status) {
         if (status == null || status.isEmpty()) {
@@ -62,7 +80,17 @@ public class ChunkDataParser {
     }
 
     /**
-     * Chunk数据
+     * Chunk数据信息记录
+     *
+     * <p>存储解析后的完整Chunk数据</p>
+     *
+     * @param chunkX Chunk的局部坐标 (0-31)
+     * @param chunkZ Chunk的局部坐标 (0-31)
+     * @param yPos Chunk底部Y坐标参数（yPos * 16 = chunkBottomY）
+     * @param chunkBottomY Chunk底部世界Y坐标
+     * @param status Chunk状态字符串（如 "minecraft:full"）
+     * @param heightmap 高度图数组（16x16，存储世界绝对Y坐标）
+     * @param sections 所有Section数据列表（按Y坐标从高到低排序）
      */
     public record ChunkInfo(
         int chunkX,                 // Chunk的局部坐标 (0-31)
@@ -76,12 +104,21 @@ public class ChunkDataParser {
 
     /**
      * 解析chunk NBT数据
-     * 支持1.18+格式（flat root）和旧格式（nested under "Level"）
      *
-     * @param localX chunk本地X坐标
-     * @param localZ chunk本地Z坐标
+     * <p>支持1.18+格式（flat root）和旧格式（nested under "Level"）</p>
+     *
+     * <p>处理流程:</p>
+     * <ol>
+     *   <li>检查区块状态，跳过未生成地形的区块</li>
+     *   <li>解析高度图数据</li>
+     *   <li>解析所有Section数据并按Y坐标排序</li>
+     * </ol>
+     *
+     * @param localX chunk本地X坐标 (0-31)
+     * @param localZ chunk本地Z坐标 (0-31)
      * @param chunkNbt chunk NBT数据
      * @param worldHeightRange 维度高度范围（worldTopY - minBuildHeight）
+     * @return ChunkInfo对象，如果区块无效则返回null
      */
     public static ChunkInfo parseChunk(int localX, int localZ, Tag.Compound chunkNbt, int worldHeightRange) {
         // 检查chunk状态 - 只处理已生成地形的区块
@@ -130,19 +167,35 @@ public class ChunkDataParser {
     }
 
     /**
-     * 解析chunk NBT数据（默认维度高度范围384，适用于主世界）
+     * 解析chunk NBT数据（默认维度高度范围384）
+     *
+     * <p>适用于主世界（高度范围 -64 到 320）</p>
+     *
+     * @param localX chunk本地X坐标 (0-31)
+     * @param localZ chunk本地Z坐标 (0-31)
+     * @param chunkNbt chunk NBT数据
+     * @return ChunkInfo对象
      */
     public static ChunkInfo parseChunk(int localX, int localZ, Tag.Compound chunkNbt) {
         return parseChunk(localX, localZ, chunkNbt, 384); // 默认主世界高度范围（-64到320）
     }
 
     /**
-     * 解析高度图
-     * 支持1.18+ WORLD_SURFACE (LongArray) 和旧版 HeightMap (IntArray)
+     * 解析高度图数据
      *
-     * @param rootTag chunk根NBT
+     * <p>支持多种格式:</p>
+     * <ul>
+     *   <li>1.18+ WORLD_SURFACE (LongArray)</li>
+     *   <li>MOTION_BLOCKING_NO_LEAVES（包括水方块）</li>
+     *   <li>旧版 HeightMap (IntArray)</li>
+     * </ul>
+     *
+     * <p>优先使用 MOTION_BLOCKING_NO_LEAVES，能正确检测上方的水方块</p>
+     *
+     * @param rootTag chunk根NBT数据
      * @param chunkBottomY chunk最低Y坐标
      * @param worldHeightRange 维度高度范围（用于计算bitsPerHeight）
+     * @return 16x16的高度图数组（存储世界绝对Y坐标）
      */
     private static int[][] parseHeightmap(Tag.Compound rootTag, int chunkBottomY, int worldHeightRange) {
         int[][] heightmap = new int[16][16];
@@ -192,18 +245,18 @@ public class ChunkDataParser {
 
     /**
      * 计算高度图的bitsPerEntry
-     * 根据Wiki：数组长度 l = ceil(256/u)，其中 u = floor(64/b)
-     * 反推：从数组长度计算 b
      *
-     * Wiki公式：
-     * - h = 最高高度 - 最低建筑高度（维度高度范围）
-     * - b = ceil(log2(h))
-     * - u = floor(64/b)
-     * - l = ceil(256/u)
+     * <p>根据Wiki公式反推:</p>
+     * <ul>
+     *   <li>h = 最高高度 - 最低建筑高度（维度高度范围）</li>
+     *   <li>b = ceil(log2(h))</li>
+     *   <li>u = floor(64/b)</li>
+     *   <li>l = ceil(256/u)</li>
+     * </ul>
      *
-     * 反推公式：
-     * - u = ceil(256/l)（近似）
-     * - b = floor(64/u)（近似）
+     * @param longArrayLength LongArray的长度
+     * @param worldHeightRange 维度高度范围
+     * @return 每个高度值的位数b
      */
     private static int calculateBitsPerHeight(int longArrayLength, int worldHeightRange) {
         // 优先使用维度高度范围计算（更准确）
@@ -222,15 +275,18 @@ public class ChunkDataParser {
 
     /**
      * 解码LongArray高度图（Wiki规范）
-     * 存储的是相对于维度最低建筑高度的偏移量
      *
-     * Wiki公式：
-     * - 编码序号 i = x + 16*z
-     * - 值 = (data[i/u] >> ((i%u)*b)) & ((1L<<b)-1L) + low
+     * <p>存储的是相对于维度最低建筑高度的偏移量</p>
+     *
+     * <p>Wiki公式:</p>
+     * <ul>
+     *   <li>编码序号 i = x + 16*z</li>
+     *   <li>值 = (data[i/u] >> ((i%u)*b)) & ((1L<<b)-1L) + low</li>
+     * </ul>
      *
      * @param data long数组
      * @param bitsPerHeight 每个高度值的位数b
-     * @param chunkBottomY chunk的最低Y（作为基线）
+     * @param chunkBottomY chunk的最低Y坐标（作为基线）
      * @param heightmap 输出高度图数组
      */
     private static void decodeHeightmapLongArray(long[] data, int bitsPerHeight, int chunkBottomY, int[][] heightmap) {
@@ -265,10 +321,12 @@ public class ChunkDataParser {
 
     /**
      * 从chunk sections中获取指定位置的方块状态（完整信息）
+     *
      * @param chunk Chunk数据
-     * @param x 局部X (0-15)
+     * @param x 局部X坐标 (0-15)
      * @param worldY 世界Y坐标
-     * @param z 局部Z (0-15)
+     * @param z 局部Z坐标 (0-15)
+     * @return 方块状态对象
      */
     public static ChunkSectionParser.BlockState getBlockStateAt(ChunkInfo chunk, int x, int worldY, int z) {
         int sectionY = worldY >> 4;
@@ -285,10 +343,12 @@ public class ChunkDataParser {
 
     /**
      * 从chunk sections中获取指定位置的方块名称
+     *
      * @param chunk Chunk数据
-     * @param x 局部X (0-15)
+     * @param x 局部X坐标 (0-15)
      * @param worldY 世界Y坐标
-     * @param z 局部Z (0-15)
+     * @param z 局部Z坐标 (0-15)
+     * @return 方块名称字符串
      */
     public static String getBlockAt(ChunkInfo chunk, int x, int worldY, int z) {
         return getBlockStateAt(chunk, x, worldY, z).name();
@@ -296,19 +356,26 @@ public class ChunkDataParser {
 
     /**
      * 从chunk sections中获取指定位置的生物群系（默认启用边界平滑）
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X坐标 (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z坐标 (0-15)
+     * @return 生物群系名称字符串
      */
     public static String getBiomeAt(ChunkInfo chunk, int x, int worldY, int z) {
         return getBiomeAt(chunk, x, worldY, z, true);
     }
 
     /**
-     * 从chunk sections中获取指定位置的生物群系
+     * 从chunk sections中获取指定位置的生物群系（可选择是否启用边界平滑）
      *
      * @param chunk Chunk数据
-     * @param x 局部X (0-15)
+     * @param x 局部X坐标 (0-15)
      * @param worldY 世界Y坐标
-     * @param z 局部Z (0-15)
+     * @param z 局部Z坐标 (0-15)
      * @param smoothBoundary 是否启用voxel边界平滑
+     * @return 生物群系名称字符串
      */
     public static String getBiomeAt(ChunkInfo chunk, int x, int worldY, int z, boolean smoothBoundary) {
         int sectionY = worldY >> 4;
@@ -325,6 +392,12 @@ public class ChunkDataParser {
 
     /**
      * 获取chunk中指定位置的方块光照
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X坐标 (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z坐标 (0-15)
+     * @return 方块光照值 (0-15)
      */
     public static byte getBlockLightAt(ChunkInfo chunk, int x, int worldY, int z) {
         int sectionY = worldY >> 4;
@@ -341,6 +414,12 @@ public class ChunkDataParser {
 
     /**
      * 获取chunk中指定位置的天空光照
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X坐标 (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z坐标 (0-15)
+     * @return 天空光照值 (0-15)
      */
     public static byte getSkyLightAt(ChunkInfo chunk, int x, int worldY, int z) {
         int sectionY = worldY >> 4;
@@ -357,7 +436,14 @@ public class ChunkDataParser {
 
     /**
      * 判断指定位置是否有天空访问（用于光照计算）
-     * 基于高度图判断：如果worldY >= heightmap[x][z]，则有天空访问
+     *
+     * <p>基于高度图判断：如果worldY >= heightmap[x][z]，则有天空访问</p>
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X坐标 (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z坐标 (0-15)
+     * @return 如果位置高于高度图则返回true
      */
     public static boolean hasSkyAccess(ChunkInfo chunk, int x, int worldY, int z) {
         int surfaceY = chunk.heightmap()[x][z];
@@ -365,8 +451,15 @@ public class ChunkDataParser {
     }
 
     /**
-     * 获取有效光照值
-     * 有天空访问时使用天空光照(默认15)，否则使用方块光照
+     * 获取有效光照值（简单版本）
+     *
+     * <p>有天空访问时使用天空光照（默认15），否则使用方块光照</p>
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X坐标 (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z坐标 (0-15)
+     * @return 有效光照值 (0-15)
      */
     public static byte getEffectiveLight(ChunkInfo chunk, int x, int worldY, int z) {
         if (hasSkyAccess(chunk, x, worldY, z)) {
@@ -380,13 +473,16 @@ public class ChunkDataParser {
     /**
      * 获取有效光照值（支持光照模式）
      *
+     * <p>根据光照模式和维度属性计算最终的有效光照</p>
+     *
      * @param chunk Chunk数据
-     * @param x 局部X (0-15)
+     * @param x 局部X坐标 (0-15)
      * @param worldY 世界Y坐标
-     * @param z 局部Z (0-15)
+     * @param z 局部Z坐标 (0-15)
      * @param lightMode 光照模式（SURFACE 或 CAVE）
      * @param hasOverlay 是否有覆盖层（水、玻璃等透明方块）
      * @param worldHasSkylight 维度是否有天空光照
+     * @return 有效光照值 (0-15)
      */
     public static byte getEffectiveLight(ChunkInfo chunk, int x, int worldY, int z,
                                           LightMode lightMode, boolean hasOverlay,
@@ -400,7 +496,14 @@ public class ChunkDataParser {
 
     /**
      * 获取地表模式有效光照
-     * 只使用 BlockLight，忽略 SkyLight
+     *
+     * <p>只使用 BlockLight，忽略 SkyLight</p>
+     *
+     * @param chunk Chunk数据
+     * @param x 局部X坐标 (0-15)
+     * @param worldY 世界Y坐标
+     * @param z 局部Z坐标 (0-15)
+     * @return 方块光照值
      */
     public static byte getEffectiveLightSurface(ChunkInfo chunk, int x, int worldY, int z) {
         return getBlockLightAt(chunk, x, worldY, z);
@@ -408,17 +511,21 @@ public class ChunkDataParser {
 
     /**
      * 获取洞穴模式有效光照
-     * 参考 Xaero WorldDataReader 的洞穴模式光照逻辑：
-     * - BlockLight >= 15 时直接返回
-     * - 有天空访问且无 overlay 时返回 15（直接日照）
-     * - 无 overlay 时取 max(BlockLight, SkyLight)
-     * - 有 overlay 时使用 BlockLight（水下场景）
+     *
+     * <p>参考 Xaero WorldDataReader 的洞穴模式光照逻辑:</p>
+     * <ul>
+     *   <li>BlockLight >= 15 时直接返回（发光方块）</li>
+     *   <li>有天空访问且无 overlay 时返回 15（直接日照）</li>
+     *   <li>无 overlay 时取 max(BlockLight, SkyLight)</li>
+     *   <li>有 overlay 时使用 BlockLight（水下场景）</li>
+     * </ul>
      *
      * @param chunk Chunk数据
-     * @param x 局部X (0-15)
+     * @param x 局部X坐标 (0-15)
      * @param worldY 世界Y坐标
-     * @param z 局部Z (0-15)
+     * @param z 局部Z坐标 (0-15)
      * @param hasOverlay 是否有覆盖层
+     * @return 有效光照值 (0-15)
      */
     public static byte getEffectiveLightCave(ChunkInfo chunk, int x, int worldY, int z,
                                               boolean hasOverlay) {
@@ -448,7 +555,11 @@ public class ChunkDataParser {
 
     /**
      * 解析chunk中所有section的光照数据
-     * 返回按sectionY排序的光照数据列表
+     *
+     * <p>返回按sectionY排序的光照数据列表</p>
+     *
+     * @param chunk Chunk数据
+     * @return 光照数据列表
      */
     public static List<ChunkSectionParser.LightData> parseAllLightData(ChunkInfo chunk) {
         List<ChunkSectionParser.LightData> lightDataList = new ArrayList<>();
@@ -464,7 +575,15 @@ public class ChunkDataParser {
     }
 
     /**
-     * Chunk光照统计信息
+     * Chunk光照统计信息记录
+     *
+     * <p>存储chunk的整体光照统计数据</p>
+     *
+     * @param sectionsWithLight 有光照数据的section数量
+     * @param totalBlockLightSum 方块光照总和
+     * @param totalSkyLightSum 天空光照总和
+     * @param avgBlockLight 平均方块光照
+     * @param avgSkyLight 平均天空光照
      */
     public record LightStats(
         int sectionsWithLight,      // 有光照数据的section数量
@@ -476,6 +595,11 @@ public class ChunkDataParser {
 
     /**
      * 计算chunk的光照统计信息
+     *
+     * <p>遍历所有section，统计光照数据的平均值</p>
+     *
+     * @param chunk Chunk数据
+     * @return LightStats对象，包含光照统计数据
      */
     public static LightStats calculateLightStats(ChunkInfo chunk) {
         int sectionsWithLight = 0;
@@ -513,10 +637,14 @@ public class ChunkDataParser {
 
     /**
      * 获取高度图值（带+3容差）
+     *
+     * <p>+3容差用于覆盖草方块上的草/花/雪层等装饰方块</p>
+     *
      * @param chunk Chunk数据
-     * @param x 局部X (0-15)
-     * @param z 局部Z (0-15)
+     * @param x 局部X坐标 (0-15)
+     * @param z 局部Z坐标 (0-15)
      * @param worldTopY 世界顶部Y坐标限制
+     * @return 扫描起始高度（不超过世界顶部）
      */
     public static int getHeightmapStartY(ChunkInfo chunk, int x, int z, int worldTopY) {
         int heightMapValue = chunk.heightmap()[x][z];

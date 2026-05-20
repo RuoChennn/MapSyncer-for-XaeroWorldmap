@@ -23,7 +23,12 @@ public final class PropertiesCacheIO {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PropertiesCacheIO.class);
 
-    private PropertiesCacheIO() {}
+    /**
+     * 私有构造方法，防止实例化
+     */
+    private PropertiesCacheIO() {
+        // 工具类不允许实例化
+    }
 
     /**
      * 从 Properties 文件加载缓存

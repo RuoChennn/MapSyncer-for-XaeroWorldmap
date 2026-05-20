@@ -29,7 +29,12 @@ public final class ChatUtils {
     /** 标题颜色（黄色） */
     public static final int HEADER_COLOR = 0xFFFF55;
 
-    private ChatUtils() {}
+    /**
+     * 私有构造方法，防止实例化
+     */
+    private ChatUtils() {
+        // 工具类不允许实例化
+    }
 
     /**
      * 创建带颜色的模组前缀组件

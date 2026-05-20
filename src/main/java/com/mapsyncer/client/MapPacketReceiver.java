@@ -15,30 +15,50 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 地图数据包接收器。
+ * 处理从服务端接收的地图同步数据包，并负责写入到 Xaero 地图目录。
+ *
+ * <p>主要功能：</p>
+ * <ul>
+ *   <li>注册数据包处理器，处理同步请求、响应和进度更新</li>
+ *   <li>管理同步过程中的区块更新暂停和恢复</li>
+ *   <li>清除 Xaero 缓存文件并触发地图重新加载</li>
+ *   <li>检测超时和陈旧的同步请求，防止内存泄漏</li>
+ * </ul>
+ *
+ * <p>注意：此类在主模类中通过 modBus.addListener() 手动注册，
+ * 因为 RegisterPayloadHandlersEvent 是 MOD bus 事件。不要在此添加 @EventBusSubscriber。</p>
+ */
 // Note: This class is manually registered in the main mod class via modBus.addListener()
 // because RegisterPayloadHandlersEvent is a MOD bus event. Do not add @EventBusSubscriber here.
 public class MapPacketReceiver {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapPacketReceiver.class);
 
-    // Track if sync is in progress to coordinate chunk update disabling
+    /** 同步是否正在进行中，用于协调区块更新的禁用 */
     private static volatile boolean syncInProgress = false;
 
-    // Store the last written mw directory for cache clearing
+    /** 最后写入的 mw 目录，用于缓存清除 */
     private static volatile Path lastMwDir = null;
 
-    // Track sync start time to detect stale syncs (prevent memory leak)
+    /** 同步开始时间，用于检测陈旧的同步（防止内存泄漏） */
     private static volatile long syncStartTime = 0;
-    private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
-    // Accumulate all chunks received during sync for selective reset
-    // IMPORTANT: This is cleared on sync start, completion, and stale detection
-    // to prevent memory leaks. Each chunk is ~10-50KB, so we must ensure cleanup.
+    /** 陈旧同步超时时间（10分钟） */
+    private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
+
+    /** 同步期间接收的所有区块数据，用于选择性重置。
+     * 重要：在同步开始、完成和陈旧检测时清空，防止内存泄漏。
+     * 每个区块约 10-50KB，必须确保清理。
+     */
     private static volatile List<ChunkMapData> allReceivedChunks = new ArrayList<>();
 
     /**
-     * Check if current sync is stale (running too long).
-     * Stale syncs may indicate interrupted connection, so we clear data.
+     * 检查当前同步是否陈旧（运行时间过长）。
+     * 陈旧的同步可能表示连接中断，需要清除数据。
+     *
+     * @return 如果同步陈旧返回 true；否则返回 false
      */
     public static boolean isSyncStale() {
         if (!syncInProgress || syncStartTime == 0) {
@@ -48,8 +68,8 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Clear all accumulated sync data to prevent memory leaks.
-     * Called when sync is interrupted or becomes stale.
+     * 清除所有累积的同步数据，防止内存泄漏。
+     * 在同步中断或变得陈旧时调用。
      */
     public static void clearSyncData() {
         syncInProgress = false;
@@ -62,8 +82,10 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Get estimated memory usage of accumulated chunks.
-     * Used for monitoring potential memory issues.
+     * 获取累积区块的估计内存使用量。
+     * 用于监控潜在的内存问题。
+     *
+     * @return 估计的内存使用量（字节）
      */
     public static long getEstimatedMemoryUsage() {
         if (allReceivedChunks == null || allReceivedChunks.isEmpty()) {
@@ -78,6 +100,12 @@ public class MapPacketReceiver {
         return total;
     }
 
+    /**
+     * 注册数据包处理器。
+     * 处理同步请求（客户端发送）、同步响应（服务端返回）和进度更新。
+     *
+     * @param event 注册数据包处理器事件
+     */
     public static void register(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar("1").optional();
 
@@ -115,6 +143,13 @@ public class MapPacketReceiver {
         );
     }
 
+    /**
+     * 处理服务端返回的同步响应数据包。
+     * 将接收到的区块数据写入地图目录，并在同步完成时触发重新加载。
+     *
+     * @param payload 同步响应数据包
+     * @param context 数据包上下文
+     */
     private static void handleSyncResponse(PacketHandler.SyncResponsePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             // Check for stale sync (running too long) and clear if needed
@@ -162,14 +197,21 @@ public class MapPacketReceiver {
         });
     }
 
+    /**
+     * 处理服务端发送的进度更新数据包。
+     * 更新同步进度追踪器的状态。
+     *
+     * @param payload 进度更新数据包
+     * @param context 数据包上下文
+     */
     private static void handleProgressUpdate(PacketHandler.SyncProgressPayload payload, IPayloadContext context) {
         SyncProgressTracker.update(payload.processed(), payload.total(), payload.status());
     }
 
     /**
-     * Trigger Xaero World Map reload for regions that need it.
-     * Only reloads regions where cache was not found (new regions from server).
-     * Uses direct requestLoad instead of startFullMapReload for better precision.
+     * 触发 Xaero World Map 重新加载需要更新的区域。
+     * 仅重新加载未找到缓存（服务端新区域）的区域。
+     * 使用 requestLoad 而非 startFullMapReload 以获得更好的精确度。
      */
     private static void triggerXaeroReloadAndResume() {
         try {
@@ -288,7 +330,8 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Resume chunk updates after sync completes.
+     * 同步完成后恢复区块更新。
+     * 重新启用 Xaero 的区块处理，允许地图继续更新。
      */
     private static void resumeChunkUpdates() {
         syncInProgress = false;
@@ -297,10 +340,10 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Clear Xaero cache files selectively for updated regions.
-     * Only clears cache for regions that were synced from server.
-     * If cache doesn't exist for a region, mark it for reload.
-     * @return Set of regions that need reload (no cache found)
+     * 选择性清除 Xaero 缓存文件，仅清除已更新的区域。
+     * 如果某区域的缓存不存在，将其标记为需要重新加载。
+     *
+     * @return 需要重新加载的区域集合（未找到缓存）
      */
     private static java.util.Set<XaeroMapIntegrator.RegionCoord> clearXaeroCacheSelective() {
         java.util.Set<XaeroMapIntegrator.RegionCoord> regionsToReload = new java.util.HashSet<>();
@@ -375,8 +418,11 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Find all cache directories in mw directory.
-     * Cache directories are named: cache, cache_1, cache_<version>
+     * 在 mw 目录下查找所有缓存目录。
+     * 缓存目录命名格式：cache、cache_1、cache_<version>。
+     *
+     * @param mwDir mw 目录路径
+     * @return 缓存目录列表
      */
     private static java.util.List<Path> findCacheDirectories(Path mwDir) {
         java.util.List<Path> cacheDirs = new java.util.ArrayList<>();
@@ -411,7 +457,10 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Delete a cache directory and all .xwmc files inside.
+     * 删除缓存目录及其中的所有 .xwmc 文件。
+     * 递归遍历目录，删除所有缓存文件。
+     *
+     * @param cacheDir 缓存目录路径
      */
     private static void deleteCacheDirectory(Path cacheDir) {
         if (cacheDir == null || !cacheDir.toFile().exists()) {

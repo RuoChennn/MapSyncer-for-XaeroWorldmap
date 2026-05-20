@@ -17,32 +17,55 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Stream;
 
+/**
+ * 客户端哈希管理器。
+ * 用于计算和管理客户端区域文件的哈希值和时间戳信息，
+ * 以便与服务端的生成缓存进行比较，决定同步策略。
+ *
+ * <p>主要功能：</p>
+ * <ul>
+ *   <li>扫描客户端地图目录，计算所有区域文件的CRC32哈希</li>
+ *   <li>使用缓存的时间戳避免文件修改时间变化导致的误同步</li>
+ *   <li>使用并行处理提高大量区域文件的哈希计算效率</li>
+ * </ul>
+ *
+ * <p>同步逻辑：</p>
+ * <ul>
+ *   <li>哈希匹配 → 跳过同步（文件内容相同）</li>
+ *   <li>哈希不匹配 + 客户端时间戳较旧 → 同步</li>
+ * </ul>
+ */
 public class ClientHashManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientHashManager.class);
 
     /**
-     * Region客户端元数据：时间戳(秒) + CRC32哈希
+     * 客户端元数据记录：时间戳(秒) + CRC32哈希。
+     *
+     * @param timestampSeconds 区域文件的时间戳（秒）
+     * @param hash 区域文件的CRC32哈希值（8位十六进制）
      */
     public record ClientMeta(long timestampSeconds, String hash) {}
 
     /**
-     * Collect modification timestamps and hashes for all regions.
-     * Used to compare with server generation cache.
-     * Sync logic:
-     * - Hash match → skip sync (file content identical)
-     * - Hash mismatch + client timestamp older → sync
+     * 收集所有区域的修改时间戳和哈希值。
+     * 用于与服务端的生成缓存进行比较。
      *
-     * Uses cached timestamps from previous sync (stored in sync_timestamps.cache)
-     * to avoid issues where file modification time changes after write.
+     * <p>同步逻辑：</p>
+     * <ul>
+     *   <li>哈希匹配 → 跳过同步（文件内容相同）</li>
+     *   <li>哈希不匹配 + 客户端时间戳较旧 → 同步</li>
+     * </ul>
      *
-     * Uses parallel processing with limited concurrency (2 threads) to avoid
-     * blocking the game while computing hashes for many regions.
+     * <p>使用上次同步时缓存的（存储在 sync_timestamps.cache 中）
+     * 时间戳，避免文件写入后修改时间变化导致的问题。</p>
      *
-     * @param mapDir the directory to scan:
-     *               - mw$worldId directory for single dimension sync
-     *               - Multiplayer_<server> directory for all dimensions sync
-     * @return map of relative path -> ClientMeta (timestamp in seconds + hash)
+     * <p>使用并行处理（限制2个线程）避免在计算大量区域哈希时阻塞游戏。</p>
+     *
+     * @param mapDir 要扫描的目录：
+     *               - 单维度同步时使用 mw$worldId 目录
+     *               - 全维度同步时使用 Multiplayer_<server> 目录
+     * @return 相对路径到 ClientMeta（时间戳秒 + 哈希）的映射
      */
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
         Map<String, ClientMeta> metaMap = new ConcurrentHashMap<>();
@@ -129,8 +152,11 @@ public class ClientHashManager {
     }
 
     /**
-     * Find the server directory (Multiplayer_<server>) from a given path.
-     * Works with both base directory and mw$worldId directory.
+     * 从给定路径查找服务器目录（Multiplayer_<server>）。
+     * 适用于基础目录和 mw$worldId 目录两种情况。
+     *
+     * @param mapDir 起始目录路径
+     * @return 服务器目录路径，如果未找到返回 null
      */
     private static Path findServerDir(Path mapDir) {
         Path current = mapDir;
@@ -148,7 +174,10 @@ public class ClientHashManager {
     }
 
     /**
-     * Get file modification time in milliseconds.
+     * 获取文件修改时间（毫秒）。
+     *
+     * @param path 文件路径
+     * @return 修改时间（毫秒），如果获取失败返回 0
      */
     private static long getFileModificationTime(Path path) {
         try {
@@ -162,19 +191,20 @@ public class ClientHashManager {
     }
 
     /**
-     * Compute CRC32 hash of file content (uses HashUtils).
-     * @param filePath file path
-     * @return CRC32 hash (8 hex digits)
+     * 计算文件内容的 CRC32 哈希值（使用 HashUtils）。
+     *
+     * @param filePath 文件路径
+     * @return CRC32 哈希值（8位十六进制字符串）
      */
     private static String computeFileHash(Path filePath) {
         return HashUtils.computeFileHash(filePath);
     }
 
     /**
-     * Get detailed information about missing chunks for a region.
+     * 获取区域缺失区块的详细信息。
      *
-     * @param regionFile the region zip file
-     * @return set of missing chunk coordinates (0-63)
+     * @param regionFile 区域 zip 文件路径
+     * @return 缺失区块坐标集合（0-63）
      */
     public static Set<Integer> getMissingChunksInfo(Path regionFile) {
         try {
@@ -186,23 +216,27 @@ public class ClientHashManager {
     }
 
     /**
-     * Build relative path in server format.
-     * Converts Xaero's dimension names to Minecraft dimension names.
-     * Removes mw$worldId directory level.
+     * 构建服务器格式的相对路径。
+     * 将 Xaero 的维度名称转换为 Minecraft 维度名称。
+     * 移除 mw$worldId 目录层级。
      *
-     * 支持 caves/<layer> 目录结构：
-     * - 地表：xaero_dim/regionX_regionZ
-     * - 洞穴：xaero_dim/caves/layer/regionX_regionZ
+     * <p>支持 caves/<layer> 目录结构：</p>
+     * <ul>
+     *   <li>地表：xaero_dim/regionX_regionZ</li>
+     *   <li>洞穴：xaero_dim/caves/layer/regionX_regionZ</li>
+     * </ul>
      *
-     * 重要修复：确保 xaeroDim 使用正确的 Xaero 格式（namespace$path）
-     * - 如果目录名包含 $，说明已经是正确格式
-     * - 如果不包含，尝试从缓存反向查找正确格式
-     * - 使用 DimensionPathMapping 进行转换
+     * <p>重要修复：确保 xaeroDim 使用正确的 Xaero 格式（namespace$path）：</p>
+     * <ul>
+     *   <li>如果目录名包含 $，说明已经是正确格式</li>
+     *   <li>如果不包含，尝试从缓存反向查找正确格式</li>
+     *   <li>使用 DimensionPathMapping 进行转换</li>
+     * </ul>
      *
-     * @param zipPath the zip file path
-     * @param serverDir the Multiplayer_<server> directory
-     * @return relative path in server format (without .zip extension)
-     *         Format matches server's GenerationCache: dim/regionX_regionZ or dim/caves/layer/regionX_regionZ
+     * @param zipPath zip 文件路径
+     * @param serverDir Multiplayer_<server> 目录
+     * @return 服务器格式的相对路径（不含 .zip 扩展名）
+     *         格式匹配服务端 GenerationCache：dim/regionX_regionZ 或 dim/caves/layer/regionX_regionZ
      */
     private static String buildRelativePath(Path zipPath, Path serverDir) {
         // Get relative path from server directory
@@ -271,7 +305,13 @@ public class ClientHashManager {
     }
 
     /**
-     * 确保维度名使用正确的 Xaero 格式
+     * 确保维度名使用正确的 Xaero 格式。
+     * 处理以下情况：
+     * <ul>
+     *   <li>原版维度（null、DIM-1、DIM1）直接返回</li>
+     *   <li>已包含 $ 的正确格式直接返回</li>
+     *   <li>错误的格式尝试从缓存或映射表转换</li>
+     * </ul>
      *
      * @param dirName 目录名（可能是正确的 Xaero 格式，也可能是错误的）
      * @param serverDir 服务器目录（用于查找缓存）

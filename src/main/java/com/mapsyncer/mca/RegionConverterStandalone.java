@@ -11,45 +11,120 @@ import java.util.*;
 
 /**
  * 独立的区域转换器 - 不依赖 Minecraft 库
- * 使用自研 MCA 解析器读取 .mca 文件，转换为 Xaero 格式
+ *
+ * <p>使用自研 MCA 解析器读取 .mca 文件，转换为 Xaero WorldMap 格式。</p>
+ *
+ * <p>核心功能:</p>
+ * <ul>
+ *   <li>读取和解析 MCA 区域文件</li>
+ *   <li>处理方块状态、生物群系和光照数据</li>
+ *   <li>支持地表模式和洞穴模式的扫描</li>
+ *   <li>生成符合 Xaero 格式的地图数据</li>
+ * </ul>
+ *
+ * <p>参考 Xaero WorldDataReader 的实现逻辑</p>
+ *
+ * @see McaReader 用于读取 MCA 文件
+ * @see ChunkDataParser 用于解析 Chunk 数据
+ * @see ChunkSectionParser 用于解析 Section 数据
+ * @see LightMode 光照模式枚举
+ * @see DimensionTypeInfo 维度类型信息
  */
 public class RegionConverterStandalone {
 
+    /**
+     * SLF4J 日志记录器
+     */
     private static final Logger LOGGER = LoggerFactory.getLogger(RegionConverterStandalone.class);
 
-    // 默认值：用于没有数据的空白像素（如末地虚空区域）
-    // 使用 air + the_void 以正确显示虚空区域为深紫色
+    /**
+     * 默认方块名称（用于空白像素）
+     *
+     * <p>用于没有数据的空白像素（如末地虚空区域）</p>
+     */
     private static final String DEFAULT_BLOCK = "minecraft:air";
+
+    /**
+     * 默认生物群系名称（用于虚空区域）
+     *
+     * <p>使用 air + the_void 以正确显示虚空区域为深紫色</p>
+     */
     private static final String DEFAULT_BIOME = "minecraft:the_void";
 
+    /**
+     * 区域大小（块数）- 512x512 块
+     */
     public static final int REGION_SIZE_BLOCKS = 512;
+
+    /**
+     * 每个区域的区块数量 - 32x32 区块
+     */
     public static final int CHUNKS_PER_REGION = 32;
+
+    /**
+     * 每个 Tile Chunk 的块数 - 64x64 块
+     */
     public static final int BLOCKS_PER_TILE_CHUNK = 64;
+
+    /**
+     * 每个 Tile 的块数 - 16x16 块（对应一个 Minecraft 区块）
+     */
     public static final int BLOCKS_PER_TILE = 16;
+
+    /**
+     * 每个 Tile Chunk 的 Tile 数量 - 4x4 Tile
+     */
     public static final int TILES_PER_TILE_CHUNK = 4;
+
+    /**
+     * 每个区域的 Tile Chunk 数量 - 8x8 Tile Chunk
+     */
     public static final int TILE_CHUNKS_PER_REGION = 8;
+
+    /**
+     * Xaero 格式主版本号
+     */
     public static final int MAJOR_VERSION = 6;
+
+    /**
+     * Xaero 格式次版本号
+     */
     public static final int MINOR_VERSION = 8;
 
+    /**
+     * 转换后的区域数据记录
+     *
+     * @param regionX 区域 X 坐标
+     * @param regionZ 区域 Z 坐标
+     * @param xaeroData Xaero 格式的地图数据字节数组
+     */
     public record ConvertedRegion(int regionX, int regionZ, byte[] xaeroData) {}
 
     /**
-     * 洞穴模式参数
-     * 用于洞穴模式下的深度检测和光照计算
+     * 洞穴模式参数记录
+     *
+     * <p>用于洞穴模式下的深度检测和光照计算</p>
+     *
+     * @param caveStart 洞穴开始高度（世界Y坐标）
+     * @param caveDepth 洞穴深度（从 caveStart 向下的范围）
      */
     public record CaveModeParams(
         int caveStart,      // 洞穴开始高度（世界Y坐标）
         int caveDepth       // 洞穴深度（从 caveStart 向下的范围）
     ) {
         /**
-         * 默认洞穴参数（无洞穴模式）
+         * 无洞穴模式参数（默认值）
+         *
+         * <p>caveStart = Integer.MAX_VALUE 表示不使用洞穴模式</p>
          */
         public static final CaveModeParams NONE = new CaveModeParams(Integer.MAX_VALUE, 0);
 
         /**
          * 创建默认洞穴参数
+         *
          * @param worldTopY 世界顶部高度
          * @param defaultDepth 默认深度（通常为63，用于下界等）
+         * @return CaveModeParams 实例
          */
         public static CaveModeParams createDefault(int worldTopY, int defaultDepth) {
             return new CaveModeParams(worldTopY, defaultDepth);
@@ -58,6 +133,15 @@ public class RegionConverterStandalone {
 
     /**
      * 转换单个区域文件（默认地表模式）
+     *
+     * <p>使用默认的地表模式参数转换区域文件</p>
+     *
+     * @param mcaPath .mca 文件路径
+     * @param regionX 区域 X 坐标
+     * @param regionZ 区域 Z 坐标
+     * @param minBuildHeight 世界最低建筑高度（通常是 -64）
+     * @param worldTopY 世界最高高度（通常是 320）
+     * @return ConvertedRegion 对象，如果文件不存在或转换失败则返回 null
      */
     public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
                                                   int minBuildHeight, int worldTopY) {
@@ -68,17 +152,18 @@ public class RegionConverterStandalone {
     /**
      * 转换单个区域文件（完整参数）
      *
-     * 参考 Xaero WorldDataReader.java 第186行：
-     * worldHasSkylight = serverWorld.dimensionType().hasSkyLight()
+     * <p>参考 Xaero WorldDataReader.java 第186行:</p>
+     * <p>worldHasSkylight = serverWorld.dimensionType().hasSkyLight()</p>
      *
      * @param mcaPath .mca 文件路径
      * @param regionX 区域 X 坐标
      * @param regionZ 区域 Z 坐标
-     * @param minBuildHeight 世界最低建筑高度 (通常是 -64)
-     * @param worldTopY 世界最高高度 (通常是 320)
+     * @param minBuildHeight 世界最低建筑高度（通常是 -64）
+     * @param worldTopY 世界最高高度（通常是 320）
      * @param lightMode 光照模式（SURFACE 或 CAVE）
      * @param caveParams 洞穴模式参数（仅洞穴模式使用）
      * @param worldHasSkylight 维度是否有天空光照（末地为 false）
+     * @return ConvertedRegion 对象，如果转换失败则返回 null
      */
     public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
                                                   int minBuildHeight, int worldTopY,
@@ -104,11 +189,13 @@ public class RegionConverterStandalone {
     /**
      * 转换单个区域文件（使用 DimensionTypeInfo）
      *
-     * DimensionTypeInfo 包含维度的所有核心属性：
-     * - minY: 最低建筑高度
-     * - height: 维度总高度（maxY = minY + height）
-     * - hasSkylight: 是否有天空光照
-     * - hasCeiling: 是否有顶棚
+     * <p>DimensionTypeInfo 包含维度的所有核心属性:</p>
+     * <ul>
+     *   <li>minY: 最低建筑高度</li>
+     *   <li>height: 维度总高度（maxY = minY + height）</li>
+     *   <li>hasSkylight: 是否有天空光照</li>
+     *   <li>hasCeiling: 是否有顶棚</li>
+     * </ul>
      *
      * @param mcaPath .mca 文件路径
      * @param regionX 区域 X 坐标
@@ -116,6 +203,7 @@ public class RegionConverterStandalone {
      * @param dimTypeInfo 维度类型信息
      * @param lightMode 光照模式（SURFACE 或 CAVE）
      * @param caveParams 洞穴模式参数（仅洞穴模式使用）
+     * @return ConvertedRegion 对象
      */
     public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
                                                   DimensionTypeInfo dimTypeInfo,
@@ -128,6 +216,14 @@ public class RegionConverterStandalone {
 
     /**
      * 使用独立 MCA 解析器读取区域文件（默认地表模式）
+     *
+     * <p>遍历所有区块，解析方块和光照数据</p>
+     *
+     * @param mcaPath MCA 文件路径
+     * @param minBuildHeight 世界最低建筑高度
+     * @param worldTopY 世界最高高度
+     * @return MapRegionData 区域数据对象
+     * @throws IOException 如果读取失败
      */
     static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY) throws IOException {
         return readMcaFile(mcaPath, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE, true);
@@ -136,7 +232,16 @@ public class RegionConverterStandalone {
     /**
      * 使用独立 MCA 解析器读取区域文件（完整参数）
      *
-     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
+     * <p>支持地表模式和洞穴模式的数据读取</p>
+     *
+     * @param mcaPath MCA 文件路径
+     * @param minBuildHeight 世界最低建筑高度
+     * @param worldTopY 世界最高高度
+     * @param lightMode 光照模式
+     * @param caveParams 洞穴模式参数
+     * @param worldHasSkylight 维度是否有天空光照
+     * @return MapRegionData 区域数据对象
+     * @throws IOException 如果读取失败
      */
     static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY,
                                        LightMode lightMode, CaveModeParams caveParams,
@@ -161,6 +266,13 @@ public class RegionConverterStandalone {
 
     /**
      * 处理单个 Chunk 的数据（默认地表模式）
+     *
+     * <p>扫描区块内的所有方块，提取表面数据</p>
+     *
+     * @param data 区域数据对象
+     * @param chunk Chunk 信息
+     * @param minBuildHeight 世界最低建筑高度
+     * @param worldTopY 世界最高高度
      */
     private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
                                        int minBuildHeight, int worldTopY) {
@@ -170,22 +282,31 @@ public class RegionConverterStandalone {
     /**
      * 处理单个 Chunk 的数据（完整参数）
      *
-     * 光照计算逻辑：
+     * <p>光照计算逻辑:</p>
      *
-     * 地表模式 (SURFACE):
-     * - 只使用 BlockLight
-     * - SkyLight 完全忽略
-     * - 所有区域使用方块光照值
+     * <p>地表模式 (SURFACE):</p>
+     * <ul>
+     *   <li>只使用 BlockLight</li>
+     *   <li>SkyLight 完全忽略</li>
+     *   <li>所有区域使用方块光照值</li>
+     * </ul>
      *
-     * 洞穴模式 (CAVE):
-     * - 同时使用 BlockLight 和 SkyLight
-     * - 露天区域（高于高度图）：SkyLight = 15（仅当 worldHasSkylight=true）
-     * - 末地维度：worldHasSkylight=false，不使用 SkyLight = 15
-     * - 水下区域：使用 BlockLight
-     * - 其他地下区域：取 max(BlockLight, SkyLight)
-     * - 检测洞穴开始位置和深度
+     * <p>洞穴模式 (CAVE):</p>
+     * <ul>
+     *   <li>同时使用 BlockLight 和 SkyLight</li>
+     *   <li>露天区域（高于高度图）：SkyLight = 15（仅当 worldHasSkylight=true）</li>
+     *   <li>末地维度：worldHasSkylight=false，不使用 SkyLight = 15</li>
+     *   <li>水下区域：使用 BlockLight</li>
+     *   <li>其他地下区域：取 max(BlockLight, SkyLight)</li>
+     * </ul>
      *
-     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
+     * @param data 区域数据对象
+     * @param chunk Chunk 信息
+     * @param minBuildHeight 世界最低建筑高度
+     * @param worldTopY 世界最高高度
+     * @param lightMode 光照模式
+     * @param caveParams 洞穴模式参数
+     * @param worldHasSkylight 维度是否有天空光照
      */
     private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
                                        int minBuildHeight, int worldTopY,
@@ -452,19 +573,21 @@ public class RegionConverterStandalone {
     /**
      * 计算表面有效光照值
      *
-     * 参考 Xaero WorldDataReader.java 第557-559行：
-     * - cave && dataLight < 15 && worldHasSkylight 时才更新 skyLightLevels
-     * - 末地维度 worldHasSkylight=false，不会使用 SkyLight
+     * <p>参考 Xaero WorldDataReader.java 第557-559行:</p>
+     * <ul>
+     *   <li>cave && dataLight < 15 && worldHasSkylight 时才更新 skyLightLevels</li>
+     *   <li>末地维度 worldHasSkylight=false，不会使用 SkyLight</li>
+     * </ul>
      *
      * @param section Section 数据
-     * @param lx 局部 X
-     * @param ly 局部 Y
-     * @param lz 局部 Z
+     * @param lx 局部 X 坐标
+     * @param ly 局部 Y 坐标
+     * @param lz 局部 Z 坐标
      * @param worldY 世界 Y 坐标
      * @param heightMapValue 高度图值
      * @param overlayList overlay 列表
      * @param lightMode 光照模式
-     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
+     * @param worldHasSkylight 维度是否有天空光照
      * @return 有效光照值 (0-15)
      */
     private static byte calculateSurfaceLight(ChunkSectionParser.SectionData section,
@@ -494,14 +617,23 @@ public class RegionConverterStandalone {
     /**
      * 序列化为 Xaero 格式
      *
-     * 重要区分：
-     * - 区块存在但像素为虚空区域 → 写入 AIR + void（渲染深紫色）
-     * - 区块不存在（尚未生成） → 写入空 Tile（tileMarker = -1），客户端跳过渲染
+     * <p>重要区分:</p>
+     * <ul>
+     *   <li>区块存在但像素为虚空区域 → 写入 AIR + void（渲染深紫色）</li>
+     *   <li>区块不存在（尚未生成） → 写入空 Tile（tileMarker = -1），客户端跳过渲染</li>
+     * </ul>
      *
-     * 坐标映射：
-     * - 一个 Tile 对应一个 Minecraft 区块（都是 16x16 块）
-     * - chunkX = tileChunkO * 4 + tileI
-     * - chunkZ = tileChunkP * 4 + tileJ
+     * <p>坐标映射:</p>
+     * <ul>
+     *   <li>一个 Tile 对应一个 Minecraft 区块（都是 16x16 块）</li>
+     *   <li>chunkX = tileChunkO * 4 + tileI</li>
+     *   <li>chunkZ = tileChunkP * 4 + tileJ</li>
+     * </ul>
+     *
+     * @param data 区域数据对象
+     * @param minBuildHeight 世界最低建筑高度
+     * @return Xaero 格式的字节数组
+     * @throws IOException 如果序列化失败
      */
     static byte[] serializeToXaeroFormat(MapRegionData data, int minBuildHeight) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -648,10 +780,23 @@ public class RegionConverterStandalone {
         return baos.toByteArray();
     }
 
+    /**
+     * 将高度编码到 params 参数中
+     *
+     * @param height 高度值
+     * @return 编码后的 params 值
+     */
     private static int encodeHeightToParams(int height) {
         return (height & 0xFF) << 12 | ((height >> 8) & 0xF) << 25;
     }
 
+    /**
+     * 将方块状态 NBT 写入到输出流
+     *
+     * @param blockName 方块名称
+     * @param dos 数据输出流
+     * @throws IOException 如果写入失败
+     */
     private static void writeBlockStateNbt(String blockName, DataOutputStream dos) throws IOException {
         ByteArrayOutputStream nbtBaos = new ByteArrayOutputStream();
         try (DataOutputStream nbtDos = new DataOutputStream(nbtBaos)) {
@@ -665,6 +810,14 @@ public class RegionConverterStandalone {
         dos.write(nbtBaos.toByteArray());
     }
 
+    /**
+     * 序列化 overlay 数据到输出流
+     *
+     * @param overlay Overlay 数据
+     * @param dos 数据输出流
+     * @param blockPalette 方块调色板
+     * @throws IOException 如果写入失败
+     */
     private static void serializeOverlay(OverlayData overlay, DataOutputStream dos,
                                           Map<String, Integer> blockPalette) throws IOException {
         boolean isWater = BlockPropertyResolver.isWater(overlay.blockName);
@@ -740,12 +893,40 @@ public class RegionConverterStandalone {
         }
     }
 
+    /**
+     * Overlay 数据结构
+     *
+     * <p>存储透明方块覆盖层的信息</p>
+     */
     static class OverlayData {
+        /**
+         * 方块名称
+         */
         final String blockName;
+
+        /**
+         * Y 坐标
+         */
         final int y;
-        int opacity;  // 可修改，用于累加
+
+        /**
+         * 不透明度（可修改，用于累加）
+         */
+        int opacity;
+
+        /**
+         * 光照值
+         */
         final int light;
 
+        /**
+         * 构造 Overlay 数据
+         *
+         * @param blockName 方块名称
+         * @param y Y 坐标
+         * @param opacity 不透明度
+         * @param light 光照值
+         */
         OverlayData(String blockName, int y, int opacity, int light) {
             this.blockName = blockName;
             this.y = y;
@@ -754,18 +935,68 @@ public class RegionConverterStandalone {
         }
     }
 
+    /**
+     * 区域地图数据结构
+     *
+     * <p>存储解析后的所有区域数据</p>
+     */
     static class MapRegionData {
+        /**
+         * 方块名称数组 (512x512)
+         */
         final String[][] blockNames;
-        final int[][] topBlockY;
-        final String[][] biomeNames;
-        final int[][] heightMap;
-        final byte[][] lightMap;
-        final boolean[][] hasData;
-        final boolean[][] chunkExists;  // 追踪哪些区块实际被读取过（32x32）
-        final List<OverlayData>[][] overlays;
-        final int minBuildHeight;
-        final LightMode lightMode;  // 光照模式（用于调试/统计）
 
+        /**
+         * 最高方块 Y 坐标数组 (512x512)
+         */
+        final int[][] topBlockY;
+
+        /**
+         * 生物群系名称数组 (512x512)
+         */
+        final String[][] biomeNames;
+
+        /**
+         * 高度图数组 (512x512)
+         */
+        final int[][] heightMap;
+
+        /**
+         * 光照图数组 (512x512)
+         */
+        final byte[][] lightMap;
+
+        /**
+         * 数据存在标记数组 (512x512)
+         */
+        final boolean[][] hasData;
+
+        /**
+         * 区块存在标记数组 (32x32)
+         */
+        final boolean[][] chunkExists;
+
+        /**
+         * Overlay 数据数组 (512x512)
+         */
+        final List<OverlayData>[][] overlays;
+
+        /**
+         * 世界最低建筑高度
+         */
+        final int minBuildHeight;
+
+        /**
+         * 光照模式（用于调试/统计）
+         */
+        final LightMode lightMode;
+
+        /**
+         * 构造区域数据对象
+         *
+         * @param minBuildHeight 世界最低建筑高度
+         * @param lightMode 光照模式
+         */
         @SuppressWarnings("unchecked")
         MapRegionData(int minBuildHeight, LightMode lightMode) {
             this.minBuildHeight = minBuildHeight;

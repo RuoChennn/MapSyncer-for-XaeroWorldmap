@@ -13,16 +13,21 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Handles incremental merging of Xaero region files at chunk level.
- * Merges server data with existing client data, only adding chunks that don't exist locally.
+ * 处理 Xaero 区域文件在区块级别的增量合并。
+ * 将服务端数据与现有客户端数据合并，仅添加客户端不存在的新区块。
  *
- * @deprecated 此类为备用功能，当前未使用。
- *             当前同步逻辑直接覆盖写入服务端数据（XaeroMapIntegrator.writeMapData），
- *             不进行区块级合并。保留用于以下潜在场景：
- *             1. 需要保护客户端探索的新内容不被覆盖
- *             2. 需要增量合并而非全量覆盖的场景
- *             3. 需要检测缺失区块进行选择性同步
+ * <p>此类为备用功能，当前未使用。</p>
  *
+ * <p>当前同步逻辑直接覆盖写入服务端数据（XaeroMapIntegrator.writeMapData），
+ * 不进行区块级合并。保留用于以下潜在场景：</p>
+ * <ul>
+ *   <li>需要保护客户端探索的新内容不被覆盖</li>
+ *   <li>需要增量合并而非全量覆盖的场景</li>
+ *   <li>需要检测缺失区块进行选择性同步</li>
+ * </ul>
+ *
+ * @deprecated 当前同步逻辑直接覆盖写入，不进行区块级合并。
+ *             保留用于潜在的未来需求。参见 XaeroMapIntegrator.writeMapData。
  * @see XaeroMapIntegrator.writeMapData 当前使用的直接写入方式
  */
 @Deprecated(since = "2026-05-21", forRemoval = false)
@@ -30,19 +35,38 @@ public class RegionMerger {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RegionMerger.class);
 
-    // Xaero file format constants
+    /** Xaero 文件格式常量：版本标记 */
     private static final int VERSION_MARKER = 0xFF;
-    private static final int FULL_VERSION = 393224; // major=6, minor=8
+
+    /** Xaero 文件格式常量：完整版本号（major=6, minor=8） */
+    private static final int FULL_VERSION = 393224;
 
     /**
-     * Result of a merge operation.
+     * 合并操作的结果。
+     *
+     * @param clientChunks 客户端原有区块数量
+     * @param serverChunks 服务端区块数量
+     * @param newChunksAdded 新增的区块数量
+     * @param fileChanged 文件是否发生变化
      */
     public static class MergeResult {
+        /** 客户端原有区块数量 */
         public final int clientChunks;
+        /** 服务端区块数量 */
         public final int serverChunks;
+        /** 新增的区块数量 */
         public final int newChunksAdded;
+        /** 文件是否发生变化 */
         public final boolean fileChanged;
 
+        /**
+         * 构造合并结果。
+         *
+         * @param clientChunks 客户端原有区块数量
+         * @param serverChunks 服务端区块数量
+         * @param newChunksAdded 新增的区块数量
+         * @param fileChanged 文件是否发生变化
+         */
         public MergeResult(int clientChunks, int serverChunks, int newChunksAdded, boolean fileChanged) {
             this.clientChunks = clientChunks;
             this.serverChunks = serverChunks;
@@ -52,13 +76,27 @@ public class RegionMerger {
     }
 
     /**
-     * Result of completeness check.
+     * 完整性检查结果。
+     *
+     * @param totalChunks 总区块数（固定为64）
+     * @param chunksWithData 有数据的区块数量
+     * @param isComplete 是否完整（所有区块都有数据）
      */
     public static class CompletenessResult {
+        /** 总区块数（固定为64） */
         public final int totalChunks;
+        /** 有数据的区块数量 */
         public final int chunksWithData;
+        /** 是否完整 */
         public final boolean isComplete;
 
+        /**
+         * 构造完整性检查结果。
+         *
+         * @param totalChunks 总区块数
+         * @param chunksWithData 有数据的区块数量
+         * @param isComplete 是否完整
+         */
         public CompletenessResult(int totalChunks, int chunksWithData, boolean isComplete) {
             this.totalChunks = totalChunks;
             this.chunksWithData = chunksWithData;
@@ -67,15 +105,16 @@ public class RegionMerger {
     }
 
     /**
-     * Check if a region file is completely generated (all 64 chunks have data).
-     * A complete region won't need any additional chunks from the server.
+     * 检查区域文件是否已完全生成（所有64个区块都有数据）。
+     * 完整的区域将不需要从服务器获取任何额外的区块。
      *
-     * Simplified approach: since server cache files are generated from complete world data,
-     * we assume files with reasonable size (>2KB) are complete.
-     * The complex Xaero pixel format parsing is unreliable due to dynamic parametres flags.
+     * <p>简化方法：由于服务器缓存文件是从完整世界数据生成的，
+     * 我们假设具有合理大小（>2KB）的文件是完整的。
+     * 复杂的 Xaero 像素格式解析由于动态参数标志而不可靠。</p>
      *
-     * @param regionFile the region zip file to check
-     * @return completeness result with statistics
+     * @param regionFile 要检查的区域 zip 文件
+     * @return 包含统计信息的完整性检查结果
+     * @throws IOException 如果读取文件失败
      */
     public static CompletenessResult checkCompleteness(Path regionFile) throws IOException {
         if (regionFile == null || !Files.exists(regionFile)) {
@@ -105,11 +144,12 @@ public class RegionMerger {
     }
 
     /**
-     * Find missing chunks in a region file.
-     * A chunk is considered missing if it doesn't exist or all 16 tiles have tileMarker == -1.
+     * 查找区域文件中的缺失区块。
+     * 区块被认为缺失的条件：不存在或所有16个图块都有 tileMarker == -1。
      *
-     * @param regionFile the region zip file to check
-     * @return set of missing chunk coordinates (0-63)
+     * @param regionFile 要检查的区域 zip 文件
+     * @return 缺失区块坐标集合（0-63）
+     * @throws IOException 如果读取文件失败
      */
     public static Set<Integer> findMissingChunks(Path regionFile) throws IOException {
         if (regionFile == null || !Files.exists(regionFile)) {
@@ -145,10 +185,10 @@ public class RegionMerger {
     }
 
     /**
-     * Check if a chunk is empty (all 16 tiles have tileMarker == -1).
+     * 检查区块是否为空（所有16个图块都有 tileMarker == -1）。
      *
-     * @param chunk the chunk data to check
-     * @return true if all tiles are empty
+     * @param chunk 要检查的区块数据
+     * @return 如果所有图块都为空返回 true；否则返回 false
      */
     private static boolean isChunkEmpty(ChunkData chunk) {
         if (chunk == null || chunk.rawData == null) {
@@ -188,14 +228,15 @@ public class RegionMerger {
     }
 
     /**
-     * Merge server region data into existing client file.
-     * Keeps client chunks that have data, only adds missing chunks from server.
-     * If server also doesn't have a chunk, it remains empty.
+     * 将服务端区域数据合并到现有客户端文件中。
+     * 保留客户端有数据的区块，仅从服务端添加缺失的区块。
+     * 如果服务端也没有某个区块，则保持为空。
      *
-     * @param clientFile existing client region file
-     * @param serverData raw zip data from server (complete region)
-     * @param outputFile where to write merged result (can be same as clientFile)
-     * @return merge result with statistics
+     * @param clientFile 现有客户端区域文件
+     * @param serverData 服务端原始 zip 数据（完整区域）
+     * @param outputFile 合并结果的写入位置（可以与 clientFile 相同）
+     * @return 包含统计信息的合并结果
+     * @throws IOException 如果读写文件失败
      */
     public static MergeResult mergeRegionData(Path clientFile, byte[] serverData, Path outputFile) throws IOException {
         LOGGER.info("Starting merge: client={}, serverData size={} bytes, output={}",
@@ -261,13 +302,14 @@ public class RegionMerger {
     }
 
     /**
-     * Merge server region data with existing client file.
-     * Only adds chunks that don't exist in client file.
+     * 将服务端区域数据与现有客户端文件合并。
+     * 仅添加客户端文件中不存在的区块。
      *
-     * @param clientFile existing client region file (may not exist)
-     * @param serverData raw zip data from server
-     * @param outputFile where to write merged result
-     * @return merge result with statistics
+     * @param clientFile 现有客户端区域文件（可能不存在）
+     * @param serverData 服务端原始 zip 数据
+     * @param outputFile 合并结果的写入位置
+     * @return 包含统计信息的合并结果
+     * @throws IOException 如果读写文件失败
      */
     public static MergeResult mergeRegion(Path clientFile, byte[] serverData, Path outputFile) throws IOException {
         // Parse existing client chunks
@@ -306,12 +348,20 @@ public class RegionMerger {
     }
 
     /**
-     * Represents raw chunk data from region file.
+     * 表示区域文件中的原始区块数据。
      */
     private static class ChunkData {
-        final int chunkCoord; // o << 4 | p (0-63)
-        final byte[] rawData; // Raw bytes including chunkCoord and all tile data
+        /** 区块坐标 (o << 4 | p)，范围 0-63 */
+        final int chunkCoord;
+        /** 原始字节数据，包含 chunkCoord 和所有图块数据 */
+        final byte[] rawData;
 
+        /**
+         * 构造区块数据。
+         *
+         * @param chunkCoord 区块坐标（0-63）
+         * @param rawData 原始字节数据
+         */
         ChunkData(int chunkCoord, byte[] rawData) {
             this.chunkCoord = chunkCoord;
             this.rawData = rawData;
@@ -319,7 +369,11 @@ public class RegionMerger {
     }
 
     /**
-     * Parse a region zip file and extract chunk data.
+     * 解析区域 zip 文件并提取区块数据。
+     *
+     * @param file 区域文件路径，如果不存在返回空 Map
+     * @return 区块坐标到区块数据的映射
+     * @throws IOException 如果读取文件失败
      */
     private static Map<Integer, ChunkData> parseRegionFile(Path file) throws IOException {
         if (file == null || !Files.exists(file)) {
@@ -329,8 +383,12 @@ public class RegionMerger {
     }
 
     /**
-     * Parse region data from raw zip bytes.
-     * Uses a streaming approach to track chunk boundaries.
+     * 从原始 zip 字节数据解析区域数据。
+     * 使用流式方法跟踪区块边界。
+     *
+     * @param zipData 原始 zip 字节数据
+     * @return 区块坐标到区块数据的映射
+     * @throws IOException 如果解析失败
      */
     private static Map<Integer, ChunkData> parseRegionData(byte[] zipData) throws IOException {
         Map<Integer, ChunkData> chunks = new LinkedHashMap<>();
@@ -420,8 +478,13 @@ public class RegionMerger {
     }
 
     /**
-     * Read tile pixel data based on format flags.
-     * The tileMarker contains flags that determine how much data follows.
+     * 根据格式标志读取图块像素数据。
+     * tileMarker 包含决定后续数据量的标志。
+     *
+     * @param in 数据输入流
+     * @param out 数据输出流（用于复制数据）
+     * @param tileMarker 图块标记（包含格式标志）
+     * @throws IOException 如果读取失败
      */
     private static void readTileData(DataInputStream in, ByteArrayOutputStream out, int tileMarker) throws IOException {
         // Each tile has 16x16 = 256 pixels
@@ -467,8 +530,13 @@ public class RegionMerger {
     }
 
     /**
-     * Read pixel data based on parametres flags.
-     * Format from Xaero's loadPixel method.
+     * 根据参数标志读取像素数据。
+     * 格式来自 Xaero 的 loadPixel 方法。
+     *
+     * @param in 数据输入流
+     * @param out 数据输出流
+     * @param parametres 参数标志
+     * @throws IOException 如果读取失败
      */
     private static void readPixelData(DataInputStream in, ByteArrayOutputStream out, int parametres) throws IOException {
         // bit 0: has blockstate (int for old format, or palette index/NBT)
@@ -553,8 +621,12 @@ public class RegionMerger {
     }
 
     /**
-     * Read NBT compound tag data from stream.
-     * NBT format: byte type + string name + content, ending with TAG_End (0).
+     * 从流中读取 NBT 复合标签数据。
+     * NBT 格式：字节类型 + 字符串名称 + 内容，以 TAG_End (0) 结束。
+     *
+     * @param in 数据输入流
+     * @param out 数据输出流
+     * @throws IOException 如果读取失败
      */
     private static void readNBTData(DataInputStream in, ByteArrayOutputStream out) throws IOException {
         // Read NBT compound tag
@@ -580,7 +652,12 @@ public class RegionMerger {
     }
 
     /**
-     * Read NBT content based on tag type.
+     * 根据标签类型读取 NBT 内容。
+     *
+     * @param in 数据输入流
+     * @param out 数据输出流
+     * @param tagType NBT 标签类型
+     * @throws IOException 如果读取失败
      */
     private static void readNBTContent(DataInputStream in, ByteArrayOutputStream out, byte tagType) throws IOException {
         switch (tagType) {
@@ -699,7 +776,11 @@ public class RegionMerger {
     }
 
     /**
-     * Write merged chunks to a new region file.
+     * 将合并的区块写入新的区域文件。
+     *
+     * @param outputFile 输出文件路径
+     * @param chunks 合并的区块数据映射
+     * @throws IOException 如果写入失败
      */
     private static void writeRegionFile(Path outputFile, Map<Integer, ChunkData> chunks) throws IOException {
         Files.createDirectories(outputFile.getParent());

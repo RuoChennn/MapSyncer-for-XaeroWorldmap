@@ -34,11 +34,36 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
+/**
+ * 地图同步命令处理器。
+ * 注册客户端命令 `/mapsyncer`，提供地图同步功能。
+ *
+ * <p>命令结构：</p>
+ * <ul>
+ *   <li>/mapsyncer - 显示帮助信息</li>
+ *   <li>/mapsyncer help - 显示帮助信息</li>
+ *   <li>/mapsyncer sync - 同步当前维度</li>
+ *   <li>/mapsyncer sync all - 同步所有维度</li>
+ *   <li>/mapsyncer sync &lt;dimension&gt; - 同步指定维度</li>
+ * </ul>
+ *
+ * <p>维度参数支持：</p>
+ * <ul>
+ *   <li>原版维度：overworld、the_nether、the_end</li>
+ *   <li>模组维度：使用完整的维度ID（如 twilightforest:twilight_forest）</li>
+ * </ul>
+ */
 @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
 public class MapSyncerCommand {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapSyncerCommand.class);
 
+    /**
+     * 注册客户端命令。
+     * 使用 Brigadier 命令系统注册 /mapsyncer 命令及其子命令。
+     *
+     * @param event 注册客户端命令事件
+     */
     @SubscribeEvent
     public static void registerClientCommands(RegisterClientCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
@@ -58,6 +83,12 @@ public class MapSyncerCommand {
         );
     }
 
+    /**
+     * 显示命令帮助信息。
+     *
+     * @param context 命令上下文
+     * @return 命令执行结果
+     */
     private static int showHelp(CommandContext<CommandSourceStack> context) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
@@ -71,7 +102,12 @@ public class MapSyncerCommand {
     }
 
     /**
-     * 维度名称建议
+     * 提供维度名称建议。
+     * 包括原版维度、模组维度以及已存在的 Xaero 目录维度。
+     *
+     * @param context 命令上下文
+     * @param builder 建议构建器
+     * @return 建议结果的 CompletableFuture
      */
     private static CompletableFuture<Suggestions> suggestDimensions(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
         builder.suggest("overworld");
@@ -144,7 +180,11 @@ public class MapSyncerCommand {
     }
 
     /**
-     * Xaero 目录名转换为维度 ID
+     * 将 Xaero 目录名转换为维度 ID。
+     * 处理原版维度和模组维度的转换。
+     *
+     * @param dirName Xaero 目录名
+     * @return 维度 ID，如果无法转换返回空字符串
      */
     private static String xaeroDirToDimensionId(String dirName) {
         if ("null".equals(dirName)) return "overworld";
@@ -156,7 +196,11 @@ public class MapSyncerCommand {
     }
 
     /**
-     * 同步指定维度（字符串参数）
+     * 同步指定维度（字符串参数）。
+     * 支持维度名称简写和完整 ID。
+     *
+     * @param context 命令上下文
+     * @return 命令执行结果
      */
     private static int executeSyncDimension(CommandContext<CommandSourceStack> context) {
         String dimInput = StringArgumentType.getString(context, "dimension");
@@ -178,7 +222,11 @@ public class MapSyncerCommand {
     }
 
     /**
-     * 同步所有维度
+     * 同步所有维度。
+     * 向服务端请求所有维度的地图数据。
+     *
+     * @param context 命令上下文
+     * @return 命令执行结果
      */
     private static int executeSyncAll(CommandContext<CommandSourceStack> context) {
         Minecraft mc = Minecraft.getInstance();
@@ -192,7 +240,11 @@ public class MapSyncerCommand {
     }
 
     /**
-     * 同步当前维度
+     * 同步当前维度。
+     * 自动检测玩家当前所在维度并发送同步请求。
+     *
+     * @param context 命令上下文
+     * @return 命令执行结果
      */
     private static int executeSyncCurrentDim(CommandContext<CommandSourceStack> context) {
         Minecraft mc = Minecraft.getInstance();
@@ -209,7 +261,12 @@ public class MapSyncerCommand {
     }
 
     /**
-     * 解析用户输入的维度名称为完整维度 ID
+     * 解析用户输入的维度名称为完整维度 ID。
+     * 支持简写（如 overworld）和完整 ID（如 minecraft:overworld）。
+     *
+     * @param input 用户输入的维度名称
+     * @param level 客户端世界实例
+     * @return 完整的维度 ID
      */
     private static String resolveDimensionId(String input, ClientLevel level) {
         switch (input.toLowerCase()) {
@@ -239,7 +296,12 @@ public class MapSyncerCommand {
 
 
     /**
-     * 发送同步请求
+     * 发送同步请求到服务端。
+     * 计算客户端区域哈希，构建同步请求包并发送。
+     *
+     * @param mc Minecraft 客户端实例
+     * @param dimensionId 维度 ID，如果是同步所有维度使用 "all"
+     * @param syncAll 是否同步所有维度
      */
     private static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
         Map<String, ClientMeta> metaMap;
@@ -291,6 +353,13 @@ public class MapSyncerCommand {
         SyncProgressTracker.startTracking();
     }
 
+    /**
+     * 在维度目录下查找 mw$worldId 目录。
+     * Xaero 使用 mw$worldId 格式存储地图数据。
+     *
+     * @param dimDir 维度目录路径
+     * @return mw$ 目录路径，如果未找到返回 null
+     */
     private static Path findMwDir(Path dimDir) {
         if (dimDir == null || !dimDir.toFile().exists()) return null;
         try {

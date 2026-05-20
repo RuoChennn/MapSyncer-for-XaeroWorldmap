@@ -8,20 +8,42 @@ import java.util.Map;
 
 /**
  * NBT读取器 - 零依赖实现
- * 解析Minecraft NBT格式二进制数据
  *
- * 所有数据采用大端序(Big-Endian)
+ * <p>用于解析Minecraft NBT（Named Binary Tag）格式的二进制数据。
+ * 所有数据采用大端序（Big-Endian）存储，符合Minecraft的NBT规范。</p>
+ *
+ * <p>使用示例：</p>
+ * <pre>{@code
+ * try (NbtReader reader = new NbtReader(inputStream)) {
+ *     Tag.Compound root = reader.readDocument();
+ *     // 处理NBT数据...
+ * }
+ * }</pre>
+ *
+ * @see Tag
  */
 public class NbtReader implements AutoCloseable {
 
+    /** 数据输入流，用于读取二进制NBT数据 */
     private final DataInputStream in;
 
+    /**
+     * 构造NBT读取器
+     *
+     * @param in 输入流，包含NBT格式的二进制数据
+     */
     public NbtReader(InputStream in) {
         this.in = new DataInputStream(in);
     }
 
     /**
      * 读取完整的NBT文档（根Compound）
+     *
+     * <p>读取整个NBT文档，返回根Compound标签。
+     * NBT文档必须以Compound类型开头。</p>
+     *
+     * @return 根Compound标签
+     * @throws IOException 如果读取失败或文档格式不正确
      */
     public Tag.Compound readDocument() throws IOException {
         byte type = in.readByte();
@@ -34,6 +56,11 @@ public class NbtReader implements AutoCloseable {
 
     /**
      * 读取单个Tag（包含类型和名称）
+     *
+     * <p>从输入流中读取一个完整的标签，包括类型标识、名称和数据内容。</p>
+     *
+     * @return 读取的Tag对象
+     * @throws IOException 如果读取失败
      */
     public Tag readTag() throws IOException {
         byte type = in.readByte();
@@ -46,6 +73,13 @@ public class NbtReader implements AutoCloseable {
 
     /**
      * 读取Tag内容（不含类型和名称前缀）
+     *
+     * <p>根据给定的类型标识读取对应的数据内容。</p>
+     *
+     * @param type NBT类型标识
+     * @param name 标签名称
+     * @return 读取的Tag对象
+     * @throws IOException 如果读取失败或类型未知
      */
     private Tag readPayload(byte type, String name) throws IOException {
         switch (type) {
@@ -81,7 +115,11 @@ public class NbtReader implements AutoCloseable {
     }
 
     /**
-     * 读取ByteArray
+     * 读取ByteArray类型标签
+     *
+     * @param name 标签名称
+     * @return ByteArray标签对象
+     * @throws IOException 如果读取失败或长度为负数
      */
     private Tag.ByteArray readByteArray(String name) throws IOException {
         int length = in.readInt();
@@ -94,7 +132,11 @@ public class NbtReader implements AutoCloseable {
     }
 
     /**
-     * 读取IntArray
+     * 读取IntArray类型标签
+     *
+     * @param name 标签名称
+     * @return IntArray标签对象
+     * @throws IOException 如果读取失败或长度为负数
      */
     private Tag.IntArray readIntArray(String name) throws IOException {
         int length = in.readInt();
@@ -109,7 +151,11 @@ public class NbtReader implements AutoCloseable {
     }
 
     /**
-     * 读取LongArray
+     * 读取LongArray类型标签
+     *
+     * @param name 标签名称
+     * @return LongArray标签对象
+     * @throws IOException 如果读取失败或长度为负数
      */
     private Tag.LongArray readLongArray(String name) throws IOException {
         int length = in.readInt();
@@ -124,7 +170,13 @@ public class NbtReader implements AutoCloseable {
     }
 
     /**
-     * 读取List内容（已读取类型和名称）
+     * 读取List类型标签内容
+     *
+     * <p>List中的所有元素必须是相同类型。元素没有名称，使用空字符串作为名称。</p>
+     *
+     * @param name 标签名称
+     * @return ListTag标签对象
+     * @throws IOException 如果读取失败或长度为负数
      */
     private Tag.ListTag readListContent(String name) throws IOException {
         byte elementType = in.readByte();
@@ -141,7 +193,14 @@ public class NbtReader implements AutoCloseable {
     }
 
     /**
-     * 读取Compound内容（已读取类型和名称）
+     * 读取Compound类型标签内容
+     *
+     * <p>Compound是一个键值对集合，以TAG_END作为结束标记。
+     * 子标签按读取顺序保存。</p>
+     *
+     * @param name 标签名称
+     * @return Compound标签对象
+     * @throws IOException 如果读取失败
      */
     private Tag.Compound readCompoundContent(String name) throws IOException {
         Map<String, Tag> children = new LinkedHashMap<>();
@@ -157,7 +216,9 @@ public class NbtReader implements AutoCloseable {
     }
 
     /**
-     * 关闭读取器
+     * 关闭读取器并释放资源
+     *
+     * @throws IOException 如果关闭时发生I/O错误
      */
     @Override
     public void close() throws IOException {

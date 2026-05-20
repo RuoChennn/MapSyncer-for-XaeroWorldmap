@@ -20,36 +20,68 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Xaero 地图集成器。
+ * 提供与 Xaero's World Map 模组的交互功能，包括地图数据写入、缓存管理和地图重新加载。
+ *
+ * <p>主要功能：</p>
+ * <ul>
+ *   <li>获取当前服务器和地图目录路径</li>
+ *   <li>写入服务端同步的地图数据到 Xaero 目录</li>
+ *   <li>管理区块更新的暂停和恢复</li>
+ *   <li>选择性重置区域加载状态，触发地图重新加载</li>
+ *   <li>使用反射操作 Xaero 内部类</li>
+ * </ul>
+ *
+ * <p>目录结构：</p>
+ * <ul>
+ *   <li>多人游戏：xaero/world-map/Multiplayer_<serverIP>/<dimension>/mw$<worldId>/</li>
+ *   <li>单机游戏：xaero/world-map/Multiplayer_Singleplayer/<dimension>/mw$<worldId>/</li>
+ *   <li>局域网游戏：xaero/world-map/Multiplayer_LAN/<dimension>/mw$<worldId>/</li>
+ * </ul>
+ */
 public class XaeroMapIntegrator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(XaeroMapIntegrator.class);
 
-    // Flag to control whether chunk updates are enabled during sync
+    /** 是否禁用区块更新（同步期间） */
     private static volatile boolean chunkUpdatesDisabled = false;
 
-    // Store updated regions for selective reset
+    /** 同步期间更新的区域集合，用于选择性重置 */
     private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
 
     /**
-     * Get the set of regions that were updated during sync.
-     * @return A copy of the updated regions set
+     * 获取同步期间更新的区域集合。
+     *
+     * @return 更新区域集合的副本
      */
     public static Set<RegionCoord> getUpdatedRegions() {
         return new HashSet<>(updatedRegions);
     }
 
     /**
-     * Region coordinate record for tracking which regions were updated.
+     * 区域坐标记录，用于追踪更新的区域。
      * 包含 caveLayer 信息，用于区分地表层和洞穴层。
+     *
+     * @param x 区域X坐标
+     * @param z 区域Z坐标
+     * @param caveLayer 洞穴层编号，地表层使用 Integer.MAX_VALUE
      */
     public record RegionCoord(int x, int z, int caveLayer) {
-        // 兼容旧代码的构造器（默认地表层）
+        /**
+         * 兼容旧代码的构造器（默认地表层）。
+         *
+         * @param x 区域X坐标
+         * @param z 区域Z坐标
+         */
         public RegionCoord(int x, int z) {
             this(x, z, Integer.MAX_VALUE);
         }
 
         /**
-         * 判断是否为地表层
+         * 判断是否为地表层。
+         *
+         * @return 如果是地表层返回 true；否则返回 false
          */
         public boolean isSurfaceLayer() {
             return caveLayer == Integer.MAX_VALUE;
@@ -57,8 +89,8 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Disable Xaero's chunk update processing during sync.
-     * This prevents Xaero from writing new chunk data while we're replacing files.
+     * 禁用 Xaero 的区块更新处理（同步期间）。
+     * 防止 Xaero 在我们替换文件时写入新的区块数据。
      */
     public static void disableChunkUpdates() {
         // Skip if already disabled (avoid duplicate messages)
@@ -83,7 +115,8 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Enable Xaero's chunk update processing after sync completes.
+     * 同步完成后启用 Xaero 的区块更新处理。
+     * 重新启用区块处理，允许地图继续更新。
      */
     public static void enableChunkUpdates() {
         chunkUpdatesDisabled = false;
@@ -103,16 +136,20 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Check if chunk updates are currently disabled.
+     * 检查区块更新是否被禁用。
+     *
+     * @return 如果区块更新被禁用返回 true；否则返回 false
      */
     public static boolean isChunkUpdatesDisabled() {
         return chunkUpdatesDisabled;
     }
 
     /**
-     * Record regions that were updated during sync.
-     * These will be selectively reset during reload.
+     * 记录同步期间更新的区域。
+     * 这些区域将在重新加载时被选择性重置。
      * 包含 caveLayer 信息，用于区分地表层和洞穴层。
+     *
+     * @param chunks 同步期间接收的区块数据列表
      */
     public static void recordUpdatedRegions(List<ChunkMapData> chunks) {
         // Clear existing set first to prevent memory leak
@@ -126,8 +163,10 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Calculate view distance range in region coordinates.
-     * @return Set of region coordinates within view distance from player
+     * 计算视距范围内的区域坐标。
+     * 根据玩家的位置和视距设置，计算需要关注的区域集合。
+     *
+     * @return 视距范围内的区域坐标集合
      */
     public static Set<RegionCoord> getViewDistanceRegions() {
         Minecraft mc = Minecraft.getInstance();
@@ -165,10 +204,14 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Selectively reset loadState only for regions that need it:
-     * - Regions that were updated during sync
-     * - Regions within player's view distance
-     * - Player's current region
+     * 选择性重置区域加载状态，仅针对需要重置的区域：
+     * <ul>
+     *   <li>同步期间更新的区域</li>
+     *   <li>玩家视距范围内的区域</li>
+     *   <li>玩家当前所在的区域</li>
+     * </ul>
+     *
+     * @return 重置的区域数量
      */
     public static int selectiveResetRegionLoadStates() {
         Minecraft mc = Minecraft.getInstance();
@@ -221,8 +264,11 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Reset loadState for specific regions only.
-     * Public method for external callers.
+     * 仅重置指定区域的加载状态。
+     * 公共方法，供外部调用者使用。
+     *
+     * @param regionsToReset 需要重置的区域集合
+     * @return 重置的区域数量
      */
     public static int resetSpecificRegionLoadStates(Set<RegionCoord> regionsToReset) {
         int resetCount = 0;
@@ -323,7 +369,11 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Traverse regions and selectively reset only those in the target set.
+     * 遍历区域并选择性重置目标集合中的区域。
+     *
+     * @param region 区域对象
+     * @param regionsToReset 需要重置的区域集合
+     * @return 重置的区域数量
      */
     private static int selectiveResetLeafRegions(Object region, Set<RegionCoord> regionsToReset) {
         int count = 0;
@@ -390,6 +440,10 @@ public class XaeroMapIntegrator {
         return count;
     }
 
+    /**
+     * 暂停 Xaero 的 MapWriter 线程。
+     * 通过反射设置暂停标志或中断线程。
+     */
     private static void pauseMapWriter() {
         try {
             Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
@@ -435,6 +489,10 @@ public class XaeroMapIntegrator {
         }
     }
 
+    /**
+     * 恢复 Xaero 的 MapWriter 线程。
+     * 通过反射清除暂停标志。
+     */
     private static void resumeMapWriter() {
         try {
             Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
@@ -469,8 +527,10 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Get the current Xaero WorldMap directory for the connected server.
-     * Path structure: xaero/world-map/Multiplayer_<server>/null/mw$<worldId>/
+     * 获取当前连接服务器的 Xaero WorldMap 目录。
+     * 路径结构：xaero/world-map/Multiplayer_<server>/null/mw$<worldId>/
+     *
+     * @return 当前地图目录路径，如果未连接服务器返回 null
      */
     public static Path getCurrentMapDirectory() {
         Minecraft mc = Minecraft.getInstance();
@@ -526,12 +586,16 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Get the base directory for the current server (null directory).
-     * Path structure: xaero/world-map/Multiplayer_<server>/null/
+     * 获取当前服务器的基础目录（null 目录）。
+     * 路径结构：xaero/world-map/Multiplayer_<server>/null/
      *
-     * 支持多种游戏模式：
-     * - 多人游戏：Multiplayer_<serverIP>/
-     * - 单机游戏/局域网：单机游戏使用 "Singleplayer" 目录名，局域网使用 LAN server 特殊处理
+     * <p>支持多种游戏模式：</p>
+     * <ul>
+     *   <li>多人游戏：Multiplayer_<serverIP>/</li>
+     *   <li>单机游戏/局域网：单机游戏使用 "Singleplayer" 目录名，局域网使用 LAN server 特殊处理</li>
+     * </ul>
+     *
+     * @return 服务器基础目录路径，如果未连接返回 null
      */
     public static Path getCurrentServerBaseDirectory() {
         Minecraft mc = Minecraft.getInstance();
@@ -624,10 +688,11 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Get the server directory (Multiplayer_<serverIP>) for the connected server.
-     * This is the parent directory containing all dimension folders.
+     * 获取当前连接服务器的服务器目录（Multiplayer_<serverIP>）。
+     * 这是包含所有维度文件夹的父目录。
+     * 路径结构：xaero/world-map/Multiplayer_<server>/
      *
-     * Path structure: xaero/world-map/Multiplayer_<server>/
+     * @return 服务器目录路径，如果未连接返回 null
      */
     public static Path getCurrentServerDirectory() {
         Minecraft mc = Minecraft.getInstance();
@@ -676,10 +741,14 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Write map data received from server to the correct location.
-     * Uses the server-provided worldId to ensure correct directory path.
-     * Returns the mw directory path for further processing.
-     * Also saves server timestamps to local cache for future sync comparison.
+     * 写入服务端接收的地图数据到正确位置。
+     * 使用服务端提供的 worldId 确保目录路径正确。
+     * 返回 mw 目录路径供后续处理。
+     * 同时保存服务端时间戳到本地缓存供未来同步比较。
+     *
+     * @param chunks 接收的区块数据列表
+     * @param serverWorldId 服务端的 worldId
+     * @return 最后写入的 mw 目录路径，如果写入失败返回 null
      */
     public static Path writeMapDataAndReturnDir(List<ChunkMapData> chunks, int serverWorldId) {
         Minecraft mc = Minecraft.getInstance();
@@ -747,13 +816,18 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Build relative path for timestamp cache in server format.
+     * 构建时间戳缓存的服务器格式相对路径。
      *
-     * 格式（匹配服务端 GenerationCache 格式）：
-     * - 地表：xaeroDim/regionX_regionZ（如 twilightforest$twilight_forest/0_0）
-     * - 洞穴：xaeroDim/caves/layer/regionX_regionZ
+     * <p>格式（匹配服务端 GenerationCache 格式）：</p>
+     * <ul>
+     *   <li>地表：xaeroDim/regionX_regionZ（如 twilightforest$twilight_forest/0_0）</li>
+     *   <li>洞穴：xaeroDim/caves/layer/regionX_regionZ</li>
+     * </ul>
      *
-     * 注意：chunk.dimension 已经是 Xaero 格式，直接使用即可，无需转换。
+     * <p>注意：chunk.dimension 已经是 Xaero 格式，直接使用即可，无需转换。</p>
+     *
+     * @param chunk 区块数据
+     * @return 相对路径字符串
      */
     private static String buildRelativePathForCache(ChunkMapData chunk) {
         // chunk.dimension 已经是 Xaero 格式（如 twilightforest$twilight_forest）
@@ -770,7 +844,10 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Compute CRC32 hash of data.
+     * 计算数据的 CRC32 哈希值。
+     *
+     * @param data 数据字节数组
+     * @return CRC32 哈希值（8位十六进制字符串）
      */
     private static String computeHash(byte[] data) {
         java.util.zip.CRC32 crc32 = new java.util.zip.CRC32();
@@ -779,20 +856,28 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * Write map data received from server to the correct location.
-     * Uses the server-provided worldId to ensure correct directory path.
+     * 写入服务端接收的地图数据到正确位置。
+     * 使用服务端提供的 worldId 确保目录路径正确。
+     *
+     * @param chunks 接收的区块数据列表
+     * @param serverWorldId 服务端的 worldId
      */
     public static void writeMapData(List<ChunkMapData> chunks, int serverWorldId) {
         writeMapDataAndReturnDir(chunks, serverWorldId);
     }
 
     /**
-     * Convert server dimension name to Xaero's directory name.
-     * Xaero uses "null" for the overworld dimension.
-     *
+     * 写入区块数据并返回 mw 目录路径。
      * 支持 caves/<layer> 目录结构：
-     * - 地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip
-     * - 洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip
+     * <ul>
+     *   <li>地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip</li>
+     *   <li>洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip</li>
+     * </ul>
+     *
+     * @param chunk 区块数据
+     * @param serverDir 服务器目录
+     * @param worldId worldId
+     * @return mw 目录路径
      */
     private static Path writeChunkDataAndGetDir(ChunkMapData chunk, Path serverDir, int worldId) {
         // chunk.dimension 已经是 Xaero 格式，直接使用
@@ -829,10 +914,21 @@ public class XaeroMapIntegrator {
         return mwDir;
     }
 
+    /**
+     * 写入区块数据到指定位置。
+     *
+     * @param chunk 区块数据
+     * @param serverDir 服务器目录
+     * @param worldId worldId
+     */
     private static void writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
         writeChunkDataAndGetDir(chunk, serverDir, worldId);
     }
 
+    /**
+     * 触发地图重新加载。
+     * 在游戏线程中执行地图重新加载操作。
+     */
     public static void reloadMap() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level != null) {

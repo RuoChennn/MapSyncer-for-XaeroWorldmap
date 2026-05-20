@@ -10,26 +10,43 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Cache for tracking regions that are completely generated locally.
- * Once a region is marked as complete, it won't be requested from server in future syncs.
+ * 用于跟踪本地已完全生成的区域的缓存。
+ * 一旦区域被标记为完成，在未来的同步中将不会从服务器请求该区域。
+ *
+ * <p>缓存文件格式：使用二进制格式存储，每个条目包含维度名称和区域坐标。</p>
+ *
+ * <p>缓存文件位置：位于地图目录下的 completed_regions.cache 文件中。</p>
  */
 public class CompletedRegionsCache {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CompletedRegionsCache.class);
 
+    /** 缓存文件名称 */
     private static final String CACHE_FILE_NAME = "completed_regions.cache";
 
+    /** 缓存文件路径 */
     private final Path cacheFile;
+
+    /** 已完成的区域集合，键格式为 "dimension:regionX_regionZ" */
     private final Set<String> completedRegions;
+
+    /** 是否已从磁盘加载缓存 */
     private boolean loaded = false;
 
+    /**
+     * 构造一个新的已完成区域缓存实例。
+     *
+     * @param mapDirectory 地图目录路径，缓存文件将存储在此目录下
+     */
     public CompletedRegionsCache(Path mapDirectory) {
         this.cacheFile = mapDirectory.resolve(CACHE_FILE_NAME);
         this.completedRegions = new HashSet<>();
     }
 
     /**
-     * Load the cache from disk.
+     * 从磁盘加载缓存数据。
+     * 如果缓存文件存在，读取其中的已完成区域列表。
+     * 加载是惰性的，只会在第一次需要时执行。
      */
     public void load() {
         if (loaded) return;
@@ -52,7 +69,8 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Save the cache to disk.
+     * 将缓存数据保存到磁盘。
+     * 使用二进制格式存储所有已完成的区域键。
      */
     public void save() {
         try {
@@ -71,12 +89,12 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Check if a region is marked as complete.
+     * 检查指定区域是否被标记为已完成。
      *
-     * @param dimension dimension name (e.g., "null", "DIM-1")
-     * @param regionX   region X coordinate
-     * @param regionZ   region Z coordinate
-     * @return true if region is complete and should not be synced
+     * @param dimension 维度名称（例如 "null"、"DIM-1"、"DIM1"）
+     * @param regionX   区域X坐标
+     * @param regionZ   区域Z坐标
+     * @return 如果区域已完成且不应同步，返回 true；否则返回 false
      */
     public boolean isComplete(String dimension, int regionX, int regionZ) {
         load();
@@ -85,11 +103,12 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Mark a region as complete.
+     * 将区域标记为已完成。
+     * 标记后的区域在未来的同步中将被跳过。
      *
-     * @param dimension dimension name
-     * @param regionX   region X coordinate
-     * @param regionZ   region Z coordinate
+     * @param dimension 维度名称
+     * @param regionX   区域X坐标
+     * @param regionZ   区域Z坐标
      */
     public void markComplete(String dimension, int regionX, int regionZ) {
         load();
@@ -102,11 +121,11 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Remove a region from the complete set (if it needs re-sync).
+     * 从已完成集合中移除区域标记（如果需要重新同步）。
      *
-     * @param dimension dimension name
-     * @param regionX   region X coordinate
-     * @param regionZ   region Z coordinate
+     * @param dimension 维度名称
+     * @param regionX   区域X坐标
+     * @param regionZ   区域Z坐标
      */
     public void unmarkComplete(String dimension, int regionX, int regionZ) {
         load();
@@ -118,7 +137,8 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Clear all cached regions.
+     * 清空所有缓存的已完成区域标记。
+     * 同时删除磁盘上的缓存文件。
      */
     public void clear() {
         completedRegions.clear();
@@ -131,10 +151,10 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Get all completed region keys for a dimension.
+     * 获取指定维度的所有已完成区域键。
      *
-     * @param dimension dimension name
-     * @return set of region keys (format: "regionX_regionZ")
+     * @param dimension 维度名称
+     * @return 区域键集合（格式为 "regionX_regionZ"）
      */
     public Set<String> getCompletedRegions(String dimension) {
         load();
@@ -148,14 +168,22 @@ public class CompletedRegionsCache {
     }
 
     /**
-     * Format a unique key for a region.
+     * 格式化区域的唯一键。
+     * 格式为 "dimension:regionX_regionZ"。
+     *
+     * @param dimension 维度名称
+     * @param regionX   区域X坐标
+     * @param regionZ   区域Z坐标
+     * @return 格式化的区域键字符串
      */
     private static String formatKey(String dimension, int regionX, int regionZ) {
         return dimension + ":" + regionX + "_" + regionZ;
     }
 
     /**
-     * Get the total number of cached complete regions.
+     * 获取缓存的已完成区域总数。
+     *
+     * @return 已完成区域的数量
      */
     public int size() {
         load();

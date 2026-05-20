@@ -20,7 +20,9 @@ public final class HashUtils {
     /** 文件不存在或读取失败时返回的默认哈希值 */
     public static final String DEFAULT_HASH = "00000000";
 
-    private HashUtils() {}
+    private HashUtils() {
+        // 工具类不允许实例化
+    }
 
     /**
      * 计算文件的CRC32哈希值

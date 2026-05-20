@@ -42,8 +42,8 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 功能 | 状态 | 描述 |
 |------|------|------|
 | 批量检测模式 | ✅ | 自动检测未变化 MCA，跳过已处理区域 |
-| TICK 周期模式 | ⚠️ | 可配置 tick 间隔自动扫描（使用指令后未同步更改配置文件） |
-| SCHEDULED 定时模式 | ⚠️ | 每日指定时间自动更新（使用指令后未同步更改配置文件） |
+| TICK 周期模式 | ✅ | 可配置 tick 间隔自动扫描，指令执行后自动保存配置文件（v4.4） |
+| SCHEDULED 定时模式 | ✅ | 每日指定时间自动更新，指令执行后自动保存配置文件（v4.4） |
 | 禁用增量更新 | ✅ | `/mapsyncer incremental off` 停止自动更新 |
 | 时间戳缓存 | ✅ | MCA/生成时间戳持久化，秒级精度 |
 | 洞穴模式增量更新 | 🧪 | 增量更新支持 caves/<layer> 目录检测 |
@@ -52,7 +52,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 | 功能 | 状态 | 描述 |
 |------|------|------|
-| CRC32 哈希比对 | ✅ | 哈希一致跳过同步，避免重复传输 |
+| CRC32 哈希比对 | ✅ | 哈希一致跳过同步，避免重复传输；无缓存记录时从 ZIP 文件回退计算（v4.1） |
 | 时间戳比对 | ✅ | 客户端旧于服务端才同步 |
 | 分批传输 | ✅ | 默认 1MB 分批，可配置 64KB-10MB |
 | 速率限制 | ✅ | 可配置 KB/s 限制，避免网络拥塞 |
@@ -62,17 +62,20 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 维度过滤 | 🧪 | 仅同步客户端请求的维度 |
 | 洞穴层同步 | 🧪 | 支持 caves/<layer> 目录结构同步 |
 | 维度不存在提示 | 🧪 | 客户端请求维度不存在时提示需先生成 |
+| 旧版维度名兼容 | ✅ | 服务端自动转换旧版 Minecraft 维度名（如 `overworld/`）为 Xaero 格式（v4.1） |
 
 ### 2.4 服务端命令系统
 
 | 命令 | 状态 | 功能 |
 |------|------|------|
 | `/mapsyncer generate` | ✅ | 生成所有维度缓存 |
-| `/mapsyncer generate <dim>` | ✅ | 生成指定维度（增量模式） |
+| `/mapsyncer generate <dim>` | ✅ | 生成指定维度（增量模式），使用 DimensionArgument 支持 Mod 维度 ID（v3.5） |
 | `/mapsyncer generate <dim> <x> <z>` | ✅ | 生成单个区域 |
 | `/mapsyncer generate <dim> force` | ✅ | 强制生成（无视缓存） |
 | `/mapsyncer status` | ✅ | 查看生成进度 |
 | `/mapsyncer incremental off/tick/scheduled/status` | ✅ | 增量更新控制 |
+| 维度命令建议 | ✅ | 动态列出已加载维度，原版显示简化名称，Mod 维度显示完整 ID（v3.4） |
+| 聊天消息统一 | ✅ | 所有消息使用 `[MapSyncer]` 前缀格式（v4.2） |
 
 ---
 
@@ -82,13 +85,16 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 | 命令 | 状态 | 功能 |
 |------|------|------|
-| `/mapsyncer sync` | ⚠️ | 同步当前维度（存在问题：无法确定目录） |
-| `/mapsyncer sync <dim>` | ⚠️ | 同步指定维度（存在问题：无法确定目录） |
+| `/mapsyncer sync` | ✅ | 同步当前维度（v4.1 修复目录问题） |
+| `/mapsyncer sync <dim>` | ✅ | 同步指定维度（v4.1 修复目录问题，v3.7 修复冒号解析） |
 | `/mapsyncer sync all` | ✅ | 同步所有维度（应提示具体同步了哪些维度） |
-| 维度名称别名 | ⚠️ | 支持 `overworld`/`null`/`nether`/`dim-1` 等（存在问题） |
-| Mod 维度同步 | ✅ | 支持任意维度 ID（暮光森林测试通过） |
-| 维度目录建议 | ✅ | 动态扫描 Xaero 目录列出已有维度（原版通过） |
-| 单维度精确同步 | 🧪 | 不 fallback 到其他维度 |
+| 维度名称别名 | ✅ | 支持 `overworld`/`null`/`nether`/`dim-1` 等（v3.4 统一格式） |
+| Mod 维度同步 | ✅ | 支持任意维度 ID（暮光森林测试通过，v3.7 修复解析） |
+| 维度目录建议 | ✅ | 动态扫描 Xaero 目录 + 注册表获取维度（v3.6 注册表支持） |
+| 单维度精确同步 | ✅ | 不 fallback 到其他维度（v4.1 修复） |
+| 维度名显示 | ✅ | 显示原始维度 ID（如 `minecraft:overworld`）而非友好名称（v4.1） |
+| 聊天消息统一 | ✅ | 所有消息使用 `[MapSyncer]` 前缀格式（v4.2） |
+| 时间戳缓存 | ✅ | 单例缓存路径追踪，服务器切换时自动重新初始化（v4.1） |
 
 ### 3.2 元数据计算系统
 
@@ -144,7 +150,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ### 4.2 服务端配置（mapsyncer-server.toml）
 
-#### 增量更新配置
+#### 增量更新配置插件
 
 | 配置项 | 状态 | 默认值 | 说明 |
 |--------|------|--------|------|
@@ -211,12 +217,15 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 功能 | 状态 | 描述 |
 |------|------|------|
 | 原版维度映射 | ✅ | the_nether → DIM-1, the_end → DIM1, overworld → null |
-| Mod 维度映射 | ✅ | namespace:path → namespace$path（动态检测新格式） |
+| Mod 维度映射 | ✅ | namespace:path → dimensions/<namespace>/<path>/（文件系统），namespace$path（Xaero格式） |
 | 双向转换 | ✅ | 文件系统目录 ↔ Xaero 目录 ↔ ResourceLocation path |
 | 统一映射类 | ✅ | DimensionPathMapping 类管理所有映射逻辑 |
 | 新旧格式兼容 | ✅ | 支持 Minecraft 26.1+ 新格式和传统格式自动检测 |
-| 原版维度新格式 | 🧪 | dimensions/minecraft/overworld 等 26.1+ 格式支持 |
+| 原版维度路径格式 | ✅ | 原版维度始终使用传统格式（region/, DIM-1/, DIM1/），不使用 dimensions/ 新格式 |
 | 首次转换检测 | 🧪 | 首次执行地图转换时自动检测维度路径并写入配置 |
+| 旧版缓存兼容 | ✅ | 服务端自动将旧版 Minecraft 维度名转换为 Xaero 格式（v4.1） |
+| 预设映射清理 | ✅ | 移除预设 DIM{id} 映射，统一使用动态检测格式（v3.2） |
+| 反向查找 | ✅ | 从缓存键和目录结构反向查找正确的 Xaero 格式（v3.3） |
 
 ---
 
@@ -259,6 +268,8 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 生成缓存（新） | ✅ | Properties，`<路径> = <秒>:<CRC32>` |
 | 区域 ZIP 文件 | ✅ | 单个 `region.xaero`，标准 ZIP 压缩 |
 | caves 层路径 | 🧪 | `dim/caves/layer/regionX_regionZ` 格式 |
+| 缓存键统一 | ✅ | 服务端和客户端使用统一 Xaero 格式键（v4.1） |
+| 哈希回退计算 | ✅ | 无缓存记录时从 ZIP 文件计算 CRC32（v4.1） |
 
 #### 缓存键格式规范（重要）
 
@@ -368,6 +379,7 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 | 错误处理 | ✅ | 单区块失败不中断，异常捕获记录 |
 | 内存管理 | ✅ | 服务器停止清理缓存，避免泄漏 |
 | C2ME 兼容 | ✅ | 主线程调度保存操作 |
+| 代码质量 | ✅ | 合并重复功能为统一工具类（HashUtils、PropertiesCacheIO、ChatUtils），清理弃用方法（v4.5） |
 
 ---
 
@@ -378,7 +390,7 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 | 问题 | 状态 | 描述 |
 |------|------|------|
 | 地狱渲染问题 | ⚠️ | 区块中间出现竖线，像被拦腰斩断 |
-| 末地渲染问题 | ✅ | 虚空区域正确显示深紫色（已修复空白像素写入逻辑+区块存在性检测） |
+| 末地渲染问题 | ✅ | 虚空区域正确显示深紫色（已修复空白像素写入逻辑+区块存在性检测，v3.2+v3.8） |
 | 洞穴内容异常 | ⚠️ | 洞穴模式生成的文件存在一定异常 |
 | 含水方块渲染 | ⚠️ | 水下方块、含水方块存在差异 |
 | 树木渲染 | ⚠️ | 某些树木类型不完整 |
@@ -396,8 +408,8 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 | Mod 维度 | ✅ | 暮光森林测试通过，路径格式正确 |
 | 其他维度测试 | ⚠️ | 地狱、末地生成存在渲染问题 |
 | 洞穴模式测试 | ✅ | 基本功能通过，内容有一定异常 |
-| 增量更新指令 | ⚠️ | 使用指令后未同步更改配置文件 |
-| 客户端同步目录 | ⚠️ | 存在问题：无法确定目录，是否已连接至服务器 |
+| 增量更新指令 | ✅ | v4.4 已修复：incremental 指令执行后自动调用 saveConfig() 保存配置文件 |
+| 客户端同步目录 | ✅ | v4.1 已修复：路径追踪 + 目录逻辑简化 |
 
 ---
 
@@ -411,6 +423,7 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 | 客户端集成 | ✅ | 反射操作，选择性重载，缓存清理 |
 | Mod 方块支持 | ✅ | 自动识别，RenderShape/Tags 检测 |
 | 增量同步 | ✅ | CRC32 哈希比对，保留客户端探索成果 |
+| 代码重构 | ✅ | 统一工具类（HashUtils、PropertiesCacheIO、ChatUtils），简化映射逻辑（v4.5） |
 | 洞穴模式配置 | 🧪 | 灵活的维度扫描配置系统 |
 | MCA 路径配置 | 🧪 | region_folder 支持自定义维度文件路径 |
 
@@ -425,13 +438,48 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 
 ---
 
-**文档版本**: 4.2
-**最后更新**: 2026-05-20
+**文档版本**: 4.5
+**最后更新**: 2026-05-21
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
 ---
 
 ### 历史更新记录
+
+**2026-05-21 更新 (v4.5)**:
+
+- ✅ **代码重构与清理**: 多项重构优化代码结构
+  - 合并重复功能为统一工具类：
+    - `HashUtils`: 统一 CRC32 哈希计算（合并 ClientHashManager 和 GenerationCache 的重复实现）
+    - `PropertiesCacheIO`: 统一 Properties 缓存文件读写（合并 ClientTimestampCache 和 GenerationCache 的重复实现）
+    - `ChatUtils`: 统一聊天消息前缀和颜色处理（合并6个类的重复实现）
+  - 清理所有弃用方法：移除 `@Deprecated` 标记的方法，更新相关调用
+  - 简化 DimensionPathMapping：移除反向 Map，只维护2个正向 Map，减少内存占用
+  - 移除预设映射冗余条目：`VANILLA_FORMAT` 和 `VANILLA_XAERO_MAPPINGS` 只存储不带 `minecraft:` 前缀的版本
+  - 移除屏幕进度条渲染器：聊天消息进度显示已足够，删除 `SyncProgressBarRenderer` 和 `ClientEventHandler`
+  - 删除空的按键映射注册方法：此功能已改为指令同步
+
+- ✅ **备用功能标记**: 明确未使用但保留的功能
+  - `RegionMerger`: 标记为备用（区块级增量合并功能，当前使用直接覆盖方式）
+  - `BlockClassifier`: 标记为备用（字符串匹配判断方块属性，推荐使用 BlockPropertyResolver）
+
+- ✅ **文档术语规范化**: 使用标准术语描述序列化方法
+  - encode: "编码为网络数据包" → "序列化到网络缓冲区"
+  - decode: "从网络数据包解码" → "从网络缓冲区反序列化"
+
+**2026-05-21 更新 (v4.4)**:
+
+- ✅ **增量更新指令配置保存修复**: `/mapsyncer incremental` 指令执行后自动保存配置文件
+  - 问题：使用 incremental 指令设置 tick/scheduled 模式后，配置文件不会立即更新
+  - 修复：CacheGenerateCommand 中所有 incremental 相关方法调用 `saveConfig()` 方法
+  - 涉及方法：setIncrementalOff, setIncrementalTick, setIncrementalTickInterval, setIncrementalScheduled, setScheduledTimeDefaultMinute, setScheduledTime
+  - 实现：调用 `ModConfig.SERVER_SPEC.save()` 将配置持久化到文件
+  - 效果：指令修改增量更新设置后，配置文件立即同步更新
+
+- ✅ **维度路径映射文档更新**: 明确原版维度和 Mod 维度的路径格式差异
+  - 原版维度：始终使用传统格式（overworld → region/, the_nether → DIM-1/, the_end → DIM1/）
+  - Mod 维度：使用 dimensions/ 新格式（如 twilightforest:twilight_forest → dimensions/twilightforest/twilight_forest/）
+  - 代码确认：DimensionPathMapping 中 VANILLA_FORMAT 和 detectRegionDir 方法实现正确的路径选择逻辑
 
 **2026-05-20 更新 (v4.2)**:
 
@@ -633,5 +681,4 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 **已知问题**:
 
 1. **地狱/末地渲染问题**: 地狱区块出现竖线分割，末地虚空区域渲染异常（边缘绿色填充）
-2. **客户端同步目录问题**: 单维度同步时提示"无法确定目录"，需要检查 XaeroMapIntegrator 的服务器目录识别逻辑
-3. **增量更新配置同步**: 使用 `/mapsyncer incremental tick/scheduled` 指令后未同步更改配置文件值
+2. **客户端同步目录问题**: v4.1 已修复

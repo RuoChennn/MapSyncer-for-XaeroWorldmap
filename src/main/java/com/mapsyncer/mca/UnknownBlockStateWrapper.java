@@ -8,18 +8,47 @@ import java.util.Map;
 
 /**
  * 未知方块状态包装器
- * 参考 Xaero 的 UnknownBlockState 实现
- * 用于包装无法在注册表中找到的方块，保存原始 NBT 数据
+ *
+ * <p>参考 Xaero 的 UnknownBlockState 实现，用于包装无法在注册表中找到的方块，
+ * 保存原始 NBT 数据以便后续序列化。</p>
+ *
+ * <p>主要用途:</p>
+ * <ul>
+ *   <li>处理模组添加的方块（可能不在原版注册表中）</li>
+ *   <li>保存方块的完整NBT数据以进行正确序列化</li>
+ *   <li>提供基本的方块属性判断方法</li>
+ * </ul>
+ *
+ * @see com.mapsyncer.nbt.Tag.Compound NBT复合标签
  */
 public class UnknownBlockStateWrapper {
 
+    /**
+     * 方块的注册名称（如 "minecraft:stone"）
+     */
     private final String blockName;
+
+    /**
+     * 方块的属性映射（如 {snowy: "false", facing: "north"}）
+     */
     private final Map<String, String> properties;
+
+    /**
+     * 原始的NBT复合标签数据
+     */
     private final Tag.Compound originalNbt;
+
+    /**
+     * 用于toString输出的字符串表示形式
+     */
     private final String stringRepresentation;
 
     /**
-     * 从 NBT 创建未知方块状态
+     * 从NBT复合标签创建未知方块状态
+     *
+     * <p>解析NBT数据中的方块名称和属性，生成字符串表示形式</p>
+     *
+     * @param nbt 包含方块数据的NBT复合标签（必须包含"Name"字段）
      */
     public UnknownBlockStateWrapper(Tag.Compound nbt) {
         this.originalNbt = nbt;
@@ -42,7 +71,12 @@ public class UnknownBlockStateWrapper {
     }
 
     /**
-     * 从方块名称和属性创建
+     * 从方块名称和属性创建未知方块状态
+     *
+     * <p>适用于已知方块名称和属性但缺少原始NBT数据的情况</p>
+     *
+     * @param blockName 方块的注册名称（如 "minecraft:stone"）
+     * @param properties 方块属性映射（可为空Map）
      */
     public UnknownBlockStateWrapper(String blockName, Map<String, String> properties) {
         this.blockName = blockName;
@@ -52,28 +86,42 @@ public class UnknownBlockStateWrapper {
     }
 
     /**
-     * 获取方块名称
+     * 获取方块的注册名称
+     *
+     * @return 方块名称字符串（如 "minecraft:stone"）
      */
     public String getBlockName() {
         return blockName;
     }
 
     /**
-     * 获取方块属性
+     * 获取方块的属性映射
+     *
+     * @return 属性映射表，包含所有方块状态属性
      */
     public Map<String, String> getProperties() {
         return properties;
     }
 
     /**
-     * 获取原始 NBT 数据
+     * 获取原始的NBT数据
+     *
+     * <p>如果方块是从NBT创建的，返回原始NBT；否则返回null</p>
+     *
+     * @return 原始NBT复合标签，或null
      */
     public Tag.Compound getOriginalNbt() {
         return originalNbt;
     }
 
     /**
-     * 写入到输出流（用于序列化）
+     * 将方块状态写入到输出流（用于序列化）
+     *
+     * <p>如果存在原始NBT数据，直接写入原始数据；
+     * 否则根据方块名称和属性构造新的NBT结构</p>
+     *
+     * @param out 数据输出流
+     * @throws IOException 如果写入失败
      */
     public void write(DataOutputStream out) throws IOException {
         if (originalNbt != null) {
@@ -103,7 +151,14 @@ public class UnknownBlockStateWrapper {
     }
 
     /**
-     * 写入 NBT Compound 到输出流
+     * 将NBT复合标签写入到输出流
+     *
+     * <p>递归写入所有子标签，包括字符串、整数、字节等基本类型，
+     * 以及复合标签、列表、数组等复杂类型</p>
+     *
+     * @param compound NBT复合标签
+     * @param out 数据输出流
+     * @throws IOException 如果写入失败
      */
     private void writeNbtCompound(Tag.Compound compound, DataOutputStream out) throws IOException {
         out.writeByte(10);  // TAG_Compound
@@ -118,7 +173,14 @@ public class UnknownBlockStateWrapper {
     }
 
     /**
-     * 写入单个 Tag
+     * 将单个NBT标签写入到输出流
+     *
+     * <p>根据标签类型写入相应的类型标识、名称和值</p>
+     *
+     * @param name 标签名称
+     * @param tag NBT标签对象
+     * @param out 数据输出流
+     * @throws IOException 如果写入失败
      */
     private void writeTag(String name, Tag tag, DataOutputStream out) throws IOException {
         if (tag instanceof Tag.StringTag str) {
@@ -187,7 +249,13 @@ public class UnknownBlockStateWrapper {
     }
 
     /**
-     * 写入列表元素（无名称）
+     * 将列表元素写入到输出流（无名称）
+     *
+     * <p>列表元素不包含名称字段，只写入类型标识和值</p>
+     *
+     * @param tag NBT标签对象
+     * @param out 数据输出流
+     * @throws IOException 如果写入失败
      */
     private void writeListElement(Tag tag, DataOutputStream out) throws IOException {
         if (tag instanceof Tag.StringTag str) {
@@ -222,34 +290,55 @@ public class UnknownBlockStateWrapper {
         }
     }
 
+    /**
+     * 获取方块状态的字符串表示形式
+     *
+     * @return 格式为 "Unknown: blockName{properties}" 的字符串
+     */
     @Override
     public String toString() {
         return stringRepresentation;
     }
 
     /**
-     * 判断是否为空气（未知方块不是空气）
+     * 判断是否为空气方块
+     *
+     * <p>未知方块默认不是空气</p>
+     *
+     * @return 始终返回false
      */
     public boolean isAir() {
         return false;
     }
 
     /**
-     * 判断是否为流体（未知方块默认不是流体）
+     * 判断是否为流体方块
+     *
+     * <p>未知方块默认不是流体</p>
+     *
+     * @return 始终返回false
      */
     public boolean isFluid() {
         return false;
     }
 
     /**
-     * 判断是否为水（未知方块默认不是水）
+     * 判断是否为水方块
+     *
+     * <p>通过检查方块名称是否包含"water"来判断</p>
+     *
+     * @return 如果方块名称包含"water"则返回true
      */
     public boolean isWater() {
         return blockName.contains("water");
     }
 
     /**
-     * 判断是否为熔岩（未知方块默认不是熔岩）
+     * 判断是否为熔岩方块
+     *
+     * <p>通过检查方块名称是否包含"lava"来判断</p>
+     *
+     * @return 如果方块名称包含"lava"则返回true
      */
     public boolean isLava() {
         return blockName.contains("lava");

@@ -18,7 +18,7 @@ import java.nio.file.Path;
 import java.util.*;
 
 /**
- * 维度注册器：在首次执行地图转换时自动检测维度路径并注册到配置文件
+ * 维度注册器 - 在首次执行地图转换时自动检测维度路径并注册到配置文件
  *
  * 功能：
  * 1. 首次执行地图生成时扫描服务器所有已加载维度
@@ -34,18 +34,19 @@ public class DimensionRegistry {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DimensionRegistry.class);
 
-    // 是否已执行过首次注册
+    /** 是否已执行过首次注册 */
     private static volatile boolean hasRegistered = false;
 
     /**
      * 已知维度的推荐配置（系统预设）
-     * 原版维度使用特定配置，mod 维度使用预设或默认地表模式
-     * 包含维度类型信息用于离线解析时的光照计算和高度范围确定
+     *
+     * 原版维度使用特定配置，mod维度使用预设或默认地表模式。
+     * 包含维度类型信息用于离线解析时的光照计算和高度范围确定。
      */
     private static final Map<String, DimensionScanConfig> PRESET_CONFIGS = new LinkedHashMap<>();
 
     static {
-        // 原版维度预设配置（region_folder 为空，由自动检测决定）
+        // 原版维度预设配置（region_folder为空，由自动检测决定）
         // 主世界：地表模式，有天空光照，minY=-64, height=384
         PRESET_CONFIGS.put("minecraft:overworld",
                 new DimensionScanConfig("minecraft:overworld", "", ScanMode.SURFACE, 63,
@@ -61,7 +62,7 @@ public class DimensionRegistry {
                 new DimensionScanConfig("minecraft:the_end", "", ScanMode.SURFACE, 63,
                     DimensionTypeInfo.theEnd()));
 
-        // Mod 维度预设配置
+        // Mod维度预设配置
         // Twilight Forest: 地表模式（森林地形），类似主世界
         PRESET_CONFIGS.put("twilightforest:twilight_forest",
                 new DimensionScanConfig("twilightforest:twilight_forest", "", ScanMode.SURFACE, 63,
@@ -89,7 +90,7 @@ public class DimensionRegistry {
      * 自动检测每个维度的实际路径格式并写入配置文件。
      * 只在首次执行时运行，后续调用会跳过。
      *
-     * @param server MinecraftServer 实例
+     * @param server MinecraftServer实例
      */
     public static void registerAllDimensions(MinecraftServer server) {
         // 防止重复注册
@@ -200,13 +201,13 @@ public class DimensionRegistry {
     }
 
     /**
-     * 检测维度的实际 region_folder
+     * 检测维度的实际region_folder
      *
-     * 自动检测维度使用的是新格式（dimensions/）还是传统格式（DIM）
+     * 自动检测维度使用的是新格式（dimensions/）还是传统格式（DIM）。
      *
      * @param worldRoot 世界根目录
-     * @param dimId 维度 ID（如 "minecraft:overworld", "twilightforest:twilight_forest"）
-     * @return 检测到的 region_folder（如 "dimensions/minecraft/overworld", "DIM-1", ""）
+     * @param dimId 维度ID（如"minecraft:overworld", "twilightforest:twilight_forest"）
+     * @return 检测到的region_folder（如"dimensions/minecraft/overworld", "DIM-1", ""）
      */
     private static String detectRegionFolder(Path worldRoot, String dimId) {
         DimensionPathMapping mapping = DimensionPathMapping.getInstance();
@@ -227,17 +228,21 @@ public class DimensionRegistry {
     }
 
     /**
-     * 规范化维度 ID（移除 minecraft: 前缀，转小写）
+     * 规范化维度ID（移除minecraft:前缀，转小写）
+     *
+     * @param dimId 维度ID
+     * @return 规范化后的维度ID
      */
     private static String normalizeDimensionId(String dimId) {
         return dimId.replace("minecraft:", "").toLowerCase();
     }
 
     /**
-     * 获取维度的 ServerLevel 实例
-     * @param server MinecraftServer 实例
-     * @param dimId 维度 ID（如 "minecraft:overworld"）
-     * @return ServerLevel 实例，未找到返回 null
+     * 获取维度的ServerLevel实例
+     *
+     * @param server MinecraftServer实例
+     * @param dimId 维度ID（如"minecraft:overworld"）
+     * @return ServerLevel实例，未找到返回null
      */
     private static ServerLevel getLevelForDimension(MinecraftServer server, String dimId) {
         for (ServerLevel level : server.getAllLevels()) {
@@ -250,7 +255,11 @@ public class DimensionRegistry {
 
     /**
      * 获取维度的推荐配置（扫描模式等）
-     * region_folder 由 detectRegionFolder() 决定，不使用预设值
+     *
+     * region_folder由detectRegionFolder()决定，不使用预设值。
+     *
+     * @param dimId 维度ID
+     * @return 推荐的维度扫描配置
      */
     private static DimensionScanConfig getRecommendedConfig(String dimId) {
         // 检查是否有预设配置（扫描模式和维度类型信息）
@@ -266,9 +275,13 @@ public class DimensionRegistry {
     }
 
     /**
-     * 将 DimensionScanConfig 转换为字符串格式（用于配置文件）
+     * 将DimensionScanConfig转换为字符串格式（用于配置文件）
+     *
      * 格式：dimension|region_folder|scan_mode|cave_start|dim_type_info
-     * dim_type_info 格式：hasSkylight|hasCeiling|minY|height|logicalHeight
+     * dim_type_info格式：hasSkylight|hasCeiling|minY|height|logicalHeight
+     *
+     * @param config 维度扫描配置
+     * @return 配置字符串
      */
     private static String configToString(DimensionScanConfig config) {
         StringBuilder sb = new StringBuilder();
@@ -287,6 +300,8 @@ public class DimensionRegistry {
 
     /**
      * 获取所有已配置维度的列表（用于命令建议）
+     *
+     * @return 维度友好名称列表
      */
     public static List<String> getConfiguredDimensionNames() {
         List<String> names = new ArrayList<>();
@@ -298,7 +313,10 @@ public class DimensionRegistry {
     }
 
     /**
-     * 将维度 ID 转换为用户友好名称（使用标准名称）
+     * 将维度ID转换为用户友好名称（使用标准名称）
+     *
+     * @param dimId 维度ID
+     * @return 用户友好的维度名称
      */
     private static String toFriendlyName(String dimId) {
         String normalized = normalizeDimensionId(dimId);
@@ -308,6 +326,8 @@ public class DimensionRegistry {
 
     /**
      * 检查是否已注册过维度
+     *
+     * @return true表示已注册，false表示未注册
      */
     public static boolean isRegistered() {
         return hasRegistered;

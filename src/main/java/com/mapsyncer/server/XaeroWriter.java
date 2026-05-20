@@ -10,11 +10,21 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Writes converted region data as Xaero-compatible .zip files.
- * Output format: {outputDir}/{regionX}_{regionZ}.zip containing a "region.xaero" entry.
+ * Xaero地图文件写入器 - 将转换后的区域数据写入Xaero兼容的zip文件
+ *
+ * 输出格式：{outputDir}/{regionX}_{regionZ}.zip，包含一个"region.xaero"条目。
+ * 使用临时文件+原子替换的方式写入，确保文件完整性。
  */
 public class XaeroWriter {
 
+    /**
+     * 将转换后的区域数据写入zip文件
+     *
+     * @param outputDir 输出目录路径
+     * @param region 转换后的区域数据
+     * @return 写入的zip文件路径
+     * @throws IOException 如果写入过程中发生IO错误
+     */
     public static Path writeRegionFile(Path outputDir, ConvertedRegion region) throws IOException {
         Files.createDirectories(outputDir);
 
@@ -33,11 +43,28 @@ public class XaeroWriter {
         return finalFile;
     }
 
+    /**
+     * 检查区域文件是否已存在
+     *
+     * @param outputDir 输出目录路径
+     * @param regionX 区域X坐标
+     * @param regionZ 区域Z坐标
+     * @return true表示文件存在，false表示不存在
+     */
     public static boolean regionFileExists(Path outputDir, int regionX, int regionZ) {
         Path zipFile = outputDir.resolve(regionX + "_" + regionZ + ".zip");
         return Files.exists(zipFile);
     }
 
+    /**
+     * 读取区域zip文件内容
+     *
+     * @param outputDir 输出目录路径
+     * @param regionX 区域X坐标
+     * @param regionZ 区域Z坐标
+     * @return zip文件的完整字节内容，如果文件不存在则返回null
+     * @throws IOException 如果读取过程中发生IO错误
+     */
     public static byte[] readRegionFile(Path outputDir, int regionX, int regionZ) throws IOException {
         Path zipFile = outputDir.resolve(regionX + "_" + regionZ + ".zip");
         if (!Files.exists(zipFile)) {

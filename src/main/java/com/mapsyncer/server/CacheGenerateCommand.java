@@ -18,8 +18,27 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 
+/**
+ * 缓存生成命令 - 注册和处理/mapsyncer命令
+ *
+ * 提供以下命令：
+ * - /mapsyncer help - 显示帮助信息
+ * - /mapsyncer generate - 生成所有维度的地图缓存
+ * - /mapsyncer generate <dimension> - 生成指定维度的地图缓存
+ * - /mapsyncer generate <dimension> <x> <z> - 生成指定区域的地图缓存
+ * - /mapsyncer generate <dimension> force - 强制重新生成指定维度
+ * - /mapsyncer status - 显示当前生成状态
+ * - /mapsyncer incremental off/tick/scheduled/status - 配置增量更新模式
+ *
+ * 需要管理员权限（permission level 4）才能执行。
+ */
 public class CacheGenerateCommand {
 
+    /**
+     * 注册命令到命令分发器
+     *
+     * @param dispatcher Brigadier命令分发器
+     */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mapsyncer")
                 .requires(source -> source.hasPermission(4))
@@ -69,6 +88,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 生成所有维度的地图缓存
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
         MinecraftServer server = ctx.getSource().getServer();
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_full"), false);
@@ -84,6 +109,13 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 生成指定维度的地图缓存
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     * @throws CommandSyntaxException 如果维度参数解析失败
+     */
     private static int generateDimension(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
@@ -103,6 +135,15 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 强制重新生成指定维度的地图缓存
+     *
+     * 清除维度缓存目录后重新生成所有区域。
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     * @throws CommandSyntaxException 如果维度参数解析失败
+     */
     private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
@@ -122,6 +163,13 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 生成单个区域的地图缓存
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     * @throws CommandSyntaxException 如果参数解析失败
+     */
     private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
@@ -151,6 +199,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 显示当前生成状态
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
         if (ConversionOrchestrator.isRunning()) {
             ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.in_progress",
@@ -163,6 +217,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 禁用增量更新
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int setIncrementalOff(CommandContext<CommandSourceStack> ctx) {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.DISABLED);
         saveConfig();
@@ -171,6 +231,14 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 设置TICK模式增量更新
+     *
+     * 使用配置中默认的tick间隔。
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int setIncrementalTick(CommandContext<CommandSourceStack> ctx) {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
         saveConfig();
@@ -180,6 +248,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 设置TICK模式增量更新并指定间隔
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int setIncrementalTickInterval(CommandContext<CommandSourceStack> ctx) {
         int interval = IntegerArgumentType.getInteger(ctx, "interval");
         ModConfig.SERVER.incrementalUpdateIntervalTicks.set(interval);
@@ -190,6 +264,14 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 设置SCHEDULED模式增量更新
+     *
+     * 使用配置中默认的计划时间。
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int setIncrementalScheduled(CommandContext<CommandSourceStack> ctx) {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
         saveConfig();
@@ -200,6 +282,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 设置SCHEDULED模式并指定小时（使用默认分钟）
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int setScheduledTimeDefaultMinute(CommandContext<CommandSourceStack> ctx) {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
         ModConfig.SERVER.scheduledUpdateHour.set(hour);
@@ -211,6 +299,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 设置SCHEDULED模式并指定完整时间
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int setScheduledTime(CommandContext<CommandSourceStack> ctx) {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
         int minute = IntegerArgumentType.getInteger(ctx, "minute");
@@ -223,10 +317,19 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * 保存配置文件
+     */
     private static void saveConfig() {
         ModConfig.SERVER_SPEC.save();
     }
 
+    /**
+     * 显示增量更新状态
+     *
+     * @param ctx 命令上下文
+     * @return 命令执行结果
+     */
     private static int showIncrementalStatus(CommandContext<CommandSourceStack> ctx) {
         String status = IncrementalUpdateHandler.getInstance().getStatusInfo();
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.incremental_status", status), false);

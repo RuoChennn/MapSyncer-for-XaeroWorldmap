@@ -14,23 +14,34 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 缓存 MCA 文件的最后修改时间
- * 用于检测文件是否更新，触发增量重新生成
+ * MCA文件时间戳缓存 - 用于检测文件是否更新，触发增量重新生成
+ *
+ * 缓存每个MCA文件的最后修改时间，用于增量更新检测：
+ * - 文件时间戳变化 → 需要重新生成该区域的地图数据
+ * - 时间戳不变 → 跳过生成，节省处理时间
+ *
+ * 使用Properties格式存储缓存文件，人类可读且易于调试。
  */
 public class McaTimestampCache {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(McaTimestampCache.class);
     private static final String CACHE_FILE_NAME = "mca_timestamps.cache";
 
-    // 维度 -> 区域坐标 -> 最后修改时间 (毫秒)
+    /** 维度 -> 区域坐标 -> 最后修改时间 (毫秒) */
     private final Map<String, Map<String, Long>> timestampCache = new ConcurrentHashMap<>();
 
-    // 缓存文件路径
+    /** 缓存文件路径 */
     private final Path cacheFilePath;
 
-    // 单例实例
+    /** 单例实例 */
     private static volatile McaTimestampCache instance;
 
+    /**
+     * 获取单例实例
+     *
+     * @param baseDir 缓存文件存放的基础目录
+     * @return MCA时间戳缓存实例
+     */
     public static McaTimestampCache getInstance(Path baseDir) {
         if (instance == null) {
             synchronized (McaTimestampCache.class) {
@@ -42,13 +53,20 @@ public class McaTimestampCache {
         return instance;
     }
 
+    /**
+     * 私有构造方法
+     *
+     * @param baseDir 缓存文件存放的基础目录
+     */
     private McaTimestampCache(Path baseDir) {
         this.cacheFilePath = baseDir.resolve(CACHE_FILE_NAME);
         loadCache();
     }
 
     /**
-     * 从文件加载缓存（使用 Properties 格式，人类可读）
+     * 从文件加载缓存（使用Properties格式，人类可读）
+     *
+     * 缓存格式：dimension/region_x_z = timestamp_seconds
      */
     private void loadCache() {
         if (!Files.exists(cacheFilePath)) {
@@ -88,7 +106,9 @@ public class McaTimestampCache {
     }
 
     /**
-     * 保存缓存到文件（使用 Properties 格式，人类可读）
+     * 保存缓存到文件（使用Properties格式，人类可读）
+     *
+     * 先写入临时文件，再原子替换，确保文件完整性。
      */
     public void saveCache() {
         try {
@@ -266,6 +286,8 @@ public class McaTimestampCache {
 
     /**
      * 获取缓存统计信息
+     *
+     * @return 统计信息字符串
      */
     public String getCacheStats() {
         int totalDimensions = timestampCache.size();
@@ -274,8 +296,9 @@ public class McaTimestampCache {
     }
 
     /**
-     * Reset singleton instance to release memory.
-     * Called when server stops to prevent memory leaks on dedicated servers.
+     * 重置单例实例以释放内存
+     *
+     * 在服务器停止时调用，防止专用服务器重启时的内存泄漏。
      */
     public static void resetInstance() {
         if (instance != null) {

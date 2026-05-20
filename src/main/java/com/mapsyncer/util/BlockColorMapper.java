@@ -32,33 +32,44 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 方块颜色映射器
- * 参考 Xaero WorldMap 的颜色获取实现
- * 支持原版方块、mod 方块和纹理颜色提取
- */
-public class BlockColorMapper {
+     * 方块颜色映射器
+     * 参考 Xaero WorldMap 的颜色获取实现
+     * 支持原版方块、mod 方块和纹理颜色提取
+     *
+     * 使用四层颜色获取策略：
+     * 1. 纹理颜色提取（仅客户端可用）
+     * 2. MapColor API
+     * 3. 原版方块精确颜色
+     * 4. 启发式规则（基于方块名称模式）
+     */
+    public class BlockColorMapper {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockColorMapper.class);
 
-    // 缓存方块颜色查询结果
+    /** 方块颜色查询结果缓存 */
     private static final ConcurrentHashMap<String, Integer> blockColorCache = new ConcurrentHashMap<>();
 
-    // 纹理颜色缓存
+    /** 纹理颜色缓存 */
     private static final ConcurrentHashMap<String, Integer> textureColorCache = new ConcurrentHashMap<>();
 
-    // 有问题的方块集合（MapColor 抛出异常）
+    /** 有问题的方块集合（MapColor 抛出异常） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();
 
-    // 缓存是否需要清除的标志
+    /** 缓存是否需要清除的标志 */
     private static volatile boolean clearCachedColors = false;
 
-    // 启发式规则：基于方块名称模式的默认颜色
+    /** 启发式规则：基于方块名称模式的默认颜色 */
     private static final Map<String, Integer> patternColors = new HashMap<>();
 
     static {
         initPatternColors();
     }
 
+    /**
+     * 初始化启发式颜色模式规则
+     *
+     * @return void
+     */
     private static void initPatternColors() {
         // 矿石类 - 金色
         patternColors.put("_ore", 0xFDF546);
@@ -207,6 +218,9 @@ public class BlockColorMapper {
 
     /**
      * 获取方块颜色（通过 BlockState）
+     *
+     * @param state 方块状态
+     * @return 方块颜色值（ARGB 格式）
      */
     public static int getBlockColor(BlockState state) {
         String blockName = getKey(state);
@@ -245,6 +259,10 @@ public class BlockColorMapper {
 
     /**
      * 计算方块颜色（使用四层策略）
+     *
+     * @param state 方块状态
+     * @param blockName 方块注册名
+     * @return 计算得出的颜色值
      */
     private static int computeColor(BlockState state, String blockName) {
         // 检查是否需要清除缓存
@@ -287,6 +305,9 @@ public class BlockColorMapper {
 
     /**
      * 计算方块颜色（通过名称，无法获取 BlockState 时）
+     *
+     * @param blockName 方块注册名
+     * @return 计算得出的颜色值
      */
     private static int computeColorByName(String blockName) {
         // 检查是否为问题方块
@@ -314,6 +335,10 @@ public class BlockColorMapper {
     /**
      * 尝试从纹理提取颜色（参考 Xaero loadBlockColourFromTexture）
      * 仅在客户端环境可用
+     *
+     * @param state 方块状态
+     * @param blockName 方块注册名
+     * @return 纹理颜色值，失败返回 -1
      */
     private static int tryGetTextureColor(BlockState state, String blockName) {
         try {
@@ -372,6 +397,10 @@ public class BlockColorMapper {
 
     /**
      * 从纹理资源提取平均颜色
+     *
+     * @param textureName 纹理名称
+     * @param mc Minecraft 客户端实例
+     * @return 纹理平均颜色值，失败返回 -1
      */
     private static int extractColorFromTexture(String textureName, Minecraft mc) {
         try {
@@ -456,6 +485,10 @@ public class BlockColorMapper {
 
     /**
      * 尝试从 MapColor API 获取颜色
+     *
+     * @param state 方块状态
+     * @param blockName 方块注册名
+     * @return MapColor 颜色值，失败返回 -1
      */
     private static int tryGetMapColor(BlockState state, String blockName) {
         try {
@@ -487,6 +520,9 @@ public class BlockColorMapper {
     /**
      * 从 MapColor 获取颜色值
      * 参考：https://minecraft.wiki/w/Map_color
+     *
+     * @param mapColor MapColor 对象
+     * @return RGB 颜色值
      */
     private static int getMapColorValue(MapColor mapColor) {
         // MapColor 的颜色 ID 到 RGB 的映射
@@ -530,6 +566,9 @@ public class BlockColorMapper {
 
     /**
      * 原版方块精确颜色（保持与之前一致的视觉效果）
+     *
+     * @param state 方块状态
+     * @return 精确颜色值，非原版方块返回 -1
      */
     private static int getVanillaBlockColor(BlockState state) {
         Block block = state.getBlock();
@@ -590,6 +629,9 @@ public class BlockColorMapper {
 
     /**
      * 从方块名称模式推断颜色（启发式规则）
+     *
+     * @param blockName 方块注册名
+     * @return 推断得出的颜色值，默认返回灰色
      */
     private static int computeColorFromPattern(String blockName) {
         String name = blockName.toLowerCase();
@@ -618,6 +660,9 @@ public class BlockColorMapper {
 
     /**
      * 获取方块的注册表键名
+     *
+     * @param state 方块状态
+     * @return 方块注册名（如 "minecraft:stone"）
      */
     public static String getKey(BlockState state) {
         return BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
@@ -625,6 +670,9 @@ public class BlockColorMapper {
 
     /**
      * 获取方块的注册表键名
+     *
+     * @param block 方块对象
+     * @return 方块注册名（如 "minecraft:stone"）
      */
     public static String getKey(Block block) {
         return BuiltInRegistries.BLOCK.getKey(block).toString();
@@ -632,6 +680,8 @@ public class BlockColorMapper {
 
     /**
      * 清除缓存
+     *
+     * @return void
      */
     public static void clearCache() {
         clearCachedColors = true;
@@ -642,6 +692,8 @@ public class BlockColorMapper {
 
     /**
      * 获取缓存大小
+     *
+     * @return 方块颜色缓存中的条目数量
      */
     public static int getCacheSize() {
         return blockColorCache.size();
@@ -649,6 +701,8 @@ public class BlockColorMapper {
 
     /**
      * 获取纹理缓存大小
+     *
+     * @return 纹理颜色缓存中的条目数量
      */
     public static int getTextureCacheSize() {
         return textureColorCache.size();
@@ -656,6 +710,10 @@ public class BlockColorMapper {
 
     /**
      * 添加自定义颜色规则（用于配置扩展）
+     *
+     * @param pattern 方块名称模式（如 "_ore"）
+     * @param color 颜色值（RGB 格式）
+     * @return void
      */
     public static void addPatternColor(String pattern, int color) {
         patternColors.put(pattern.toLowerCase(), color);
@@ -663,6 +721,9 @@ public class BlockColorMapper {
 
     /**
      * 批量添加自定义颜色规则
+     *
+     * @param colors 颜色规则 Map（模式 -> 颜色值）
+     * @return void
      */
     public static void addPatternColors(Map<String, Integer> colors) {
         for (Map.Entry<String, Integer> entry : colors.entrySet()) {
@@ -672,28 +733,58 @@ public class BlockColorMapper {
 
     /**
      * 占位 BlockGetter（用于需要 BlockGetter 参数的 API）
+     *
+     * 提供空的 BlockGetter 实现，用于调用需要 BlockGetter 参数的方法时作为占位参数使用
      */
     private static class PlaceholderBlockGetter implements BlockGetter {
+        /**
+         * 获取指定位置的方块实体
+         *
+         * @param pos 方块位置
+         * @return null（占位实现）
+         */
         @Override
         public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
             return null;
         }
 
+        /**
+         * 获取指定位置的方块状态
+         *
+         * @param pos 方块位置
+         * @return AIR 方块的默认状态（占位实现）
+         */
         @Override
         public BlockState getBlockState(BlockPos pos) {
             return Blocks.AIR.defaultBlockState();
         }
 
+        /**
+         * 获取指定位置的流体状态
+         *
+         * @param pos 方块位置
+         * @return EMPTY 流体的默认状态（占位实现）
+         */
         @Override
         public net.minecraft.world.level.material.FluidState getFluidState(BlockPos pos) {
             return net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState();
         }
 
+        /**
+         * 获取世界高度
+         *
+         * @return 256（占位实现）
+         */
         @Override
         public int getHeight() {
             return 256;
         }
 
+        /**
+         * 获取最小建筑高度
+         *
+         * @return -64（占位实现）
+         */
         @Override
         public int getMinBuildHeight() {
             return -64;

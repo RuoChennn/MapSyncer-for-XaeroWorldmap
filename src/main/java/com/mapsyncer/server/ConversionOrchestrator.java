@@ -27,34 +27,58 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Coordinates the region conversion pipeline: scan → convert → write.
- * Supports full, per-dimension, and single-region conversion modes.
+ * 转换协调器 - 协调区域转换流水线：扫描 → 转换 → 写入
+ *
+ * 支持三种转换模式：
+ * - 全量转换：转换所有维度的所有区域
+ * - 单维度转换：转换指定维度的所有区域
+ * - 单区域转换：转换指定维度的单个区域
+ *
+ * 使用时间戳缓存检测需要更新的区域，避免重复处理未变化的文件。
+ * 支持增量更新，仅处理时间戳变化的MCA文件。
  */
 public class ConversionOrchestrator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ConversionOrchestrator.class);
 
+    /** 是否正在运行转换任务 */
     private static volatile boolean isRunning = false;
+
+    /** 已处理的区域数量 */
     private static volatile int processedCount = 0;
+
+    /** 总区域数量 */
     private static volatile int totalCount = 0;
+
+    /** 当前状态描述 */
     private static volatile String currentStatus = "idle";
+
+    /** 当前正在处理的维度 */
     private static volatile ResourceKey<Level> currentDimension = null;
 
+    /** 缓存输出目录 */
     public static final Path CACHE_DIR = Path.of("server_map_cache");
 
-    // 时间戳缓存实例
+    /** 时间戳缓存实例 */
     private static McaTimestampCache timestampCache;
 
-    // 单区域生成结果状态
+    /**
+     * 单区域生成结果状态
+     */
     public enum SingleRegionResult {
+        /** 成功 */
         SUCCESS,
+        /** 区域未找到 */
         REGION_NOT_FOUND,
+        /** 转换失败 */
         CONVERSION_FAILED,
+        /** 已有任务运行 */
         ALREADY_RUNNING
     }
 
     /**
      * 清除维度缓存目录
+     *
      * @param dimCacheDir 维度缓存目录路径
      */
     private static void clearDimensionCache(Path dimCacheDir) {
@@ -83,6 +107,8 @@ public class ConversionOrchestrator {
 
     /**
      * 获取或初始化时间戳缓存
+     *
+     * @return MCA时间戳缓存实例
      */
     private static McaTimestampCache getTimestampCache() {
         if (timestampCache == null) {
@@ -91,6 +117,11 @@ public class ConversionOrchestrator {
         return timestampCache;
     }
 
+    /**
+     * 执行全量转换 - 转换服务器所有维度的所有区域
+     *
+     * @param server Minecraft服务器实例
+     */
     public static void generateAll(MinecraftServer server) {
         if (isRunning) {
             LOGGER.warn("Conversion already in progress");
@@ -126,6 +157,14 @@ public class ConversionOrchestrator {
         }
     }
 
+    /**
+     * 执行单维度转换 - 转换指定维度的所有区域
+     *
+     * 使用时间戳缓存检测需要更新的区域，跳过未变化的区域。
+     *
+     * @param server Minecraft服务器实例
+     * @param dimensionId 维度ID（如"minecraft:overworld"）
+     */
     public static void generateDimension(MinecraftServer server, String dimensionId) {
         if (isRunning) {
             LOGGER.warn("Conversion already in progress");
@@ -157,6 +196,14 @@ public class ConversionOrchestrator {
         }
     }
 
+    /**
+     * 执行单维度强制转换 - 强制重新生成指定维度的所有区域
+     *
+     * 清除维度缓存目录后重新生成所有区域，忽略时间戳缓存。
+     *
+     * @param server Minecraft服务器实例
+     * @param dimensionId 维度ID（如"minecraft:overworld"）
+     */
     public static void generateDimensionForce(MinecraftServer server, String dimensionId) {
         if (isRunning) {
             LOGGER.warn("Conversion already in progress");
@@ -195,12 +242,13 @@ public class ConversionOrchestrator {
     }
 
     /**
-     * 检查单个区域的 MCA 文件是否存在
-     * @param server MinecraftServer 实例
-     * @param dimension 维度 ResourceKey
-     * @param regionX 区域 X 坐标
-     * @param regionZ 区域 Z 坐标
-     * @return MCA 文件路径（如果存在），null 表示不存在
+     * 检查单个区域的MCA文件是否存在
+     *
+     * @param server MinecraftServer实例
+     * @param dimension 维度ResourceKey
+     * @param regionX 区域X坐标
+     * @param regionZ 区域Z坐标
+     * @return MCA文件路径（如果存在），null表示不存在
      */
     public static Path checkMcaFileExists(MinecraftServer server, ResourceKey<Level> dimension, int regionX, int regionZ) {
         ServerLevel level = server.getLevel(dimension);
@@ -223,6 +271,15 @@ public class ConversionOrchestrator {
         return Files.exists(mcaPath) ? mcaPath : null;
     }
 
+    /**
+     * 执行单区域转换 - 转换指定维度的单个区域
+     *
+     * @param server Minecraft服务器实例
+     * @param dimension 维度ResourceKey
+     * @param regionX 区域X坐标
+     * @param regionZ 区域Z坐标
+     * @return 转换结果状态
+     */
     public static SingleRegionResult generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int regionX, int regionZ) {
         if (isRunning) {
             LOGGER.warn("Conversion already in progress");
@@ -331,6 +388,16 @@ public class ConversionOrchestrator {
         return result;
     }
 
+    /**
+     * 转换指定维度的所有区域
+     *
+     * 根据force参数决定是否强制重新生成所有区域，
+     * 或使用时间戳缓存仅处理有变化的区域。
+     *
+     * @param server Minecraft服务器实例
+     * @param dimRegions 维度区域数据
+     * @param force 是否强制重新生成
+     */
     private static void convertDimension(MinecraftServer server, DimensionRegions dimRegions, boolean force) {
         ServerLevel level = server.getLevel(dimRegions.dimension());
         if (level == null) { LOGGER.error("Level not loaded"); return; }
@@ -525,9 +592,13 @@ public class ConversionOrchestrator {
     }
 
     /**
-     * Force-save all chunks across all dimensions to ensure .mca files are up-to-date
-     * before reading them for map generation.
-     * Must be called from server thread (not async) due to C2ME concurrency restrictions.
+     * 强制保存所有维度的所有区块到磁盘
+     *
+     * 确保MCA文件是最新的，必须在读取MCA文件之前调用。
+     * 由于C2ME并发限制，必须在服务器线程上执行（不能异步）。
+     *
+     * @param server Minecraft服务器实例
+     * @return true表示保存成功，false表示保存失败
      */
     private static boolean saveAllChunks(MinecraftServer server) {
         try {
@@ -576,6 +647,18 @@ public class ConversionOrchestrator {
         }
     }
 
+    /**
+     * 解析维度ID为ResourceKey
+     *
+     * 支持多种输入格式：
+     * - 简称：overworld, the_nether, the_end
+     * - 全称：minecraft:overworld, minecraft:the_nether
+     * - Mod维度ID：twilightforest:twilight_forest
+     *
+     * @param id 维度ID字符串
+     * @param server Minecraft服务器实例
+     * @return 维度ResourceKey，无效ID返回null
+     */
     public static ResourceKey<Level> parseDimensionId(String id, MinecraftServer server) {
         String normalized = id.toLowerCase();
 
@@ -610,9 +693,12 @@ public class ConversionOrchestrator {
     }
 
     /**
-     * Perform scheduled incremental scan for changed regions.
-     * Called periodically by IncrementalUpdateHandler from server thread.
-     * Scans all dimensions and updates only regions with changed timestamps.
+     * 执行计划增量扫描 - 扫描所有维度并更新时间戳变化的区域
+     *
+     * 由IncrementalUpdateHandler从服务器线程周期性调用。
+     * 扫描所有维度，仅更新时间戳有变化的区域。
+     *
+     * @param server Minecraft服务器实例
      */
     public static void performIncrementalScan(MinecraftServer server) {
         if (isRunning) {
@@ -740,9 +826,38 @@ public class ConversionOrchestrator {
         }
     }
 
+    /**
+     * 检查转换任务是否正在运行
+     *
+     * @return true表示正在运行，false表示空闲
+     */
     public static boolean isRunning() { return isRunning; }
+
+    /**
+     * 获取已处理的区域数量
+     *
+     * @return 已处理数量
+     */
     public static int getProcessedCount() { return processedCount; }
+
+    /**
+     * 获取总区域数量
+     *
+     * @return 总数量
+     */
     public static int getTotalCount() { return totalCount; }
+
+    /**
+     * 获取当前状态描述
+     *
+     * @return 状态字符串
+     */
     public static String getStatus() { return currentStatus; }
+
+    /**
+     * 获取当前正在处理的维度
+     *
+     * @return 维度ResourceKey，空闲时返回null
+     */
     public static ResourceKey<Level> getCurrentDimension() { return currentDimension; }
 }

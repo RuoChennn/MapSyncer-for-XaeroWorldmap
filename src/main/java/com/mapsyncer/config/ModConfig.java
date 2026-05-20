@@ -10,17 +10,45 @@ import net.neoforged.neoforge.common.ModConfigSpec.ConfigValue;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Mod 配置类
+ *
+ * <p>管理 MapSyncer for XaeroWorldMap 的服务器端配置，包括:</p>
+ * <ul>
+ *   <li>通用设置（调试日志、并发限制等）</li>
+ *   <li>增量更新设置（更新模式、时间间隔）</li>
+ *   <li>维度扫描配置（扫描模式、起始高度等）</li>
+ * </ul>
+ *
+ * <p>使用 NeoForge 的 ModConfigSpec 进行配置管理</p>
+ *
+ * @see ServerConfig 服务端配置内部类
+ * @see DimensionScanConfig 维度扫描配置记录
+ * @see ScanMode 扫描模式枚举
+ * @see UpdateMode 更新模式枚举
+ */
 public class ModConfig {
 
+    /**
+     * 服务端配置规范对象
+     */
     public static final ModConfigSpec SERVER_SPEC;
+
+    /**
+     * 服务端配置实例
+     */
     public static final ServerConfig SERVER;
 
     /**
-     * 原版维度的默认配置（系统预设）
-     * 使用字符串格式避免 NightConfig 序列化问题
-     * 格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"
-     * dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"
-     * 例如："minecraft:the_nether|DIM-1|CAVE|63|false|true|0|256|256"
+     * 获取原版维度的默认配置（系统预设）
+     *
+     * <p>使用字符串格式避免 NightConfig 序列化问题</p>
+     * <p>格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
+     * <p>dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
+     *
+     * <p>例如："minecraft:the_nether|DIM-1|CAVE|63|false|true|0|256|256"</p>
+     *
+     * @return 默认维度配置字符串列表
      */
     private static List<String> getDefaultDimensionConfigStrings() {
         List<String> defaults = new ArrayList<>();
@@ -40,34 +68,68 @@ public class ModConfig {
         return defaults;
     }
 
+    /**
+     * 初始化配置的静态代码块
+     */
     static {
         var serverPair = new ModConfigSpec.Builder().configure(ServerConfig::new);
         SERVER = serverPair.getLeft();
         SERVER_SPEC = serverPair.getRight();
     }
 
+    /**
+     * 更新模式枚举
+     *
+     * <p>定义增量地图更新的触发方式</p>
+     */
     public enum UpdateMode {
-        DISABLED,   // 禁用
-        TICK,       // tick周期模式
-        SCHEDULED   // 每日定时模式
+        /**
+         * 禁用增量更新
+         */
+        DISABLED,
+
+        /**
+         * tick周期模式（按固定tick间隔更新）
+         */
+        TICK,
+
+        /**
+         * 每日定时模式（在指定时间更新）
+         */
+        SCHEDULED
     }
 
     /**
      * 扫描模式枚举
+     *
+     * <p>定义维度地图的扫描方式</p>
      */
     public enum ScanMode {
-        SURFACE,  // 地表模式：从高度图向下扫描
-        CAVE      // 洞穴模式：从固定高度向下扫描
+        /**
+         * 地表模式：从高度图向下扫描
+         *
+         * <p>适用于普通地表地图，使用高度图确定扫描起始位置</p>
+         */
+        SURFACE,
+
+        /**
+         * 洞穴模式：从固定高度向下扫描
+         *
+         * <p>适用于洞穴地图（如地狱），使用固定的起始高度向下扫描</p>
+         */
+        CAVE
     }
 
     /**
      * 维度扫描配置记录
      *
+     * <p>存储单个维度的扫描参数</p>
+     *
      * @param dimension 维度 ID（如 "minecraft:the_nether"）
      * @param regionFolder MCA 文件存放目录（如 "DIM-1"，默认在 world 目录下）
      *                     用于适配 mod 修改维度 ID 后的文件路径
-     * @param scanMode 扫描模式
-     * @param caveStart 洞穴起始高度（SURFACE 模式忽略）
+     * @param scanMode 扫描模式（SURFACE 或 CAVE）
+     * @param caveStart 洞穴起始高度（SURFACE 模式忽略此参数）
      * @param dimTypeInfo 维度类型信息（可选，用于离线解析时确定高度范围和光照属性）
      */
     public record DimensionScanConfig(
@@ -79,6 +141,13 @@ public class ModConfig {
     ) {
         /**
          * 简化构造函数（不包含维度类型信息）
+         *
+         * <p>维度类型信息将根据维度 ID 自动推断</p>
+         *
+         * @param dimension 维度 ID
+         * @param regionFolder MCA 文件存放目录
+         * @param scanMode 扫描模式
+         * @param caveStart 洞穴起始高度
          */
         public DimensionScanConfig(String dimension, String regionFolder, ScanMode scanMode, int caveStart) {
             this(dimension, regionFolder, scanMode, caveStart, null);
@@ -86,10 +155,15 @@ public class ModConfig {
 
         /**
          * 计算洞穴层号
-         * 参考 Xaero MapProcessor.getCaveLayer():
-         * - SURFACE 模式返回 Integer.MAX_VALUE（地表）
-         * - CAVE 模式返回 caveStart >> 4（除以16）
-         * - 支持负高度：-64 → layer -4
+         *
+         * <p>参考 Xaero MapProcessor.getCaveLayer():</p>
+         * <ul>
+         *   <li>SURFACE 模式返回 Integer.MAX_VALUE（地表）</li>
+         *   <li>CAVE 模式返回 caveStart >> 4（除以16）</li>
+         *   <li>支持负高度：-64 → layer -4</li>
+         * </ul>
+         *
+         * @return 洞穴层号
          */
         public int getCaveLayer() {
             if (scanMode == ScanMode.SURFACE) {
@@ -103,6 +177,9 @@ public class ModConfig {
 
         /**
          * 获取洞穴深度（覆盖到世界底部）
+         *
+         * @param minBuildHeight 世界最低建筑高度
+         * @return 洞穴深度值
          */
         public int getCaveDepth(int minBuildHeight) {
             if (scanMode == ScanMode.SURFACE) {
@@ -112,7 +189,11 @@ public class ModConfig {
         }
 
         /**
-         * 获取维度类型信息（如果有配置则返回配置值，否则根据维度 ID 推断）
+         * 获取维度类型信息
+         *
+         * <p>如果有配置则返回配置值，否则根据维度 ID 推断</p>
+         *
+         * @return DimensionTypeInfo 对象
          */
         public DimensionTypeInfo getDimensionTypeInfo() {
             if (dimTypeInfo != null) {
@@ -122,25 +203,85 @@ public class ModConfig {
         }
     }
 
+    /**
+     * 服务端配置内部类
+     *
+     * <p>包含所有服务端可配置的选项</p>
+     */
     public static class ServerConfig {
-        // General settings (formerly common config)
+        // ========== 通用设置 ==========
+
+        /**
+         * 启用调试日志记录
+         */
         public final BooleanValue enableDebugLogging;
+
+        /**
+         * 最大并发区域转换数量
+         */
         public final IntValue maxConcurrentRegions;
+
+        /**
+         * 最大同步数据包大小（字节）
+         */
         public final IntValue maxSyncPacketSize;
+
+        /**
+         * 同步速度限制（KB/s）
+         */
         public final IntValue syncSpeedLimitKBps;
+
+        /**
+         * 启用断点续传
+         */
         public final BooleanValue enableResumeSync;
 
-        // Incremental update settings
+        // ========== 增量更新设置 ==========
+
+        /**
+         * 增量更新模式
+         */
         public final EnumValue<UpdateMode> incrementalUpdateMode;
+
+        /**
+         * TICK 模式的更新间隔（tick 数）
+         */
         public final IntValue incrementalUpdateIntervalTicks;
+
+        /**
+         * SCHEDULED 模式的更新时间（小时）
+         */
         public final IntValue scheduledUpdateHour;
+
+        /**
+         * SCHEDULED 模式的更新时间（分钟）
+         */
         public final IntValue scheduledUpdateMinute;
 
-        // 维度扫描配置
+        // ========== 维度扫描配置 ==========
+
+        /**
+         * 默认扫描模式
+         */
         public final EnumValue<ScanMode> defaultScanMode;
+
+        /**
+         * 默认洞穴起始高度
+         */
         public final IntValue defaultCaveStart;
+
+        /**
+         * 维度扫描配置列表
+         */
         public final ConfigValue<List<? extends String>> dimensionConfigs;
 
+        /**
+         * 构造服务端配置
+         *
+         * <p>定义所有配置选项及其默认值、范围和注释</p>
+         *
+         * @param builder ModConfigSpec 构建器
+         */
         public ServerConfig(ModConfigSpec.Builder builder) {
             builder.push("general");
             builder.comment("General settings / 通用设置");
@@ -224,8 +365,12 @@ public class ModConfig {
         }
 
         /**
-         * 解析维度配置列表为 DimensionScanConfig 对象
-         * 字符串格式：dimension|region_folder|scan_mode|cave_start|dim_type_info
+         * 解析维度配置列表
+         *
+         * <p>将字符串格式的配置转换为 DimensionScanConfig 对象列表</p>
+         * <p>字符串格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
+         *
+         * @return DimensionScanConfig 对象列表
          */
         public List<DimensionScanConfig> parseDimensionConfigs() {
             List<DimensionScanConfig> result = new ArrayList<>();
@@ -240,9 +385,13 @@ public class ModConfig {
 
         /**
          * 解析单个配置字符串
-         * 格式：dimension|region_folder|scan_mode|cave_start|dim_type_info
-         * dim_type_info 格式：hasSkylight|hasCeiling|minY|height|logicalHeight
-         * 向后兼容：不包含 dim_type_info 时自动推断
+         *
+         * <p>格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
+         * <p>dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
+         * <p>向后兼容：不包含 dim_type_info 时自动推断</p>
+         *
+         * @param configStr 配置字符串
+         * @return DimensionScanConfig 对象，如果无效则返回 null
          */
         private DimensionScanConfig parseConfigString(String configStr) {
             if (configStr == null || configStr.isEmpty()) {
@@ -291,7 +440,16 @@ public class ModConfig {
 
         /**
          * 获取特定维度的扫描配置
+         *
+         * <p>查找顺序:</p>
+         * <ol>
+         *   <li>首先检查配置列表中的自定义配置</li>
+         *   <li>然后检查原版维度的内置默认配置</li>
+         *   <li>最后返回通用默认配置</li>
+         * </ol>
+         *
          * @param dimensionPath 维度路径（如 "the_nether" 或 "minecraft:the_nether"）
+         * @return DimensionScanConfig 对象
          */
         public DimensionScanConfig getConfigForDimension(String dimensionPath) {
             // 规范化维度路径（移除 minecraft: 前缀）

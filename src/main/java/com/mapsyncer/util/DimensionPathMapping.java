@@ -76,6 +76,9 @@ public class DimensionPathMapping {
         VANILLA_XAERO_MAPPINGS.put("the_end", "DIM1");
     }
 
+    /**
+     * 私有构造方法，初始化默认映射
+     */
     private DimensionPathMapping() {
         // 初始化 Xaero 映射（仅原版维度）
         pathToXaero.putAll(VANILLA_XAERO_MAPPINGS);
@@ -85,6 +88,8 @@ public class DimensionPathMapping {
 
     /**
      * 获取单例实例
+     *
+     * @return DimensionPathMapping 单例实例
      */
     public static DimensionPathMapping getInstance() {
         if (instance == null) {
@@ -99,6 +104,8 @@ public class DimensionPathMapping {
 
     /**
      * 重置单例实例（用于测试或重新加载配置）
+     *
+     * @return void
      */
     public static void resetInstance() {
         synchronized (DimensionPathMapping.class) {
@@ -172,6 +179,9 @@ public class DimensionPathMapping {
 
     /**
      * 判断是否为原版维度（仅判断三个原版维度）
+     *
+     * @param dimPath 维度路径（已标准化）
+     * @return true 如果是原版维度，false 否则
      */
     private boolean isVanillaDimension(String dimPath) {
         return "overworld".equals(dimPath) || "the_nether".equals(dimPath) || "the_end".equals(dimPath);
@@ -179,6 +189,10 @@ public class DimensionPathMapping {
 
     /**
      * 根据文件夹名解析 region 目录路径
+     *
+     * @param worldRoot 世界根目录
+     * @param folder 文件夹名（如 "."、"DIM-1"、"dimensions/mod/dim"）
+     * @return region 目录的完整路径
      */
     private Path resolveRegionDir(Path worldRoot, String folder) {
         if (folder == null || folder.isEmpty() || ".".equals(folder)) {
@@ -226,6 +240,9 @@ public class DimensionPathMapping {
 
     /**
      * 根据维度 ResourceKey 获取文件系统目录名
+     *
+     * @param dimensionKey 维度 ResourceKey
+     * @return 文件系统目录名
      */
     public String getFolderName(ResourceKey<Level> dimensionKey) {
         return getFolderName(dimensionKey.location().toString());
@@ -233,6 +250,9 @@ public class DimensionPathMapping {
 
     /**
      * 根据文件系统目录名获取 ResourceLocation path
+     *
+     * @param folderName 文件系统目录名
+     * @return 维度的 ResourceLocation path
      */
     public String getPathFromFolder(String folderName) {
         // 遍历正向映射查找
@@ -272,6 +292,9 @@ public class DimensionPathMapping {
      *
      * 原版维度返回固定格式（null, DIM-1, DIM1），
      * Mod 维度返回 namespace$path 格式。
+     *
+     * @param dimPath 维度 ResourceLocation path
+     * @return Xaero 目录名
      */
     public String getXaeroFolder(String dimPath) {
         String normalized = normalizeDimPath(dimPath);
@@ -301,6 +324,9 @@ public class DimensionPathMapping {
 
     /**
      * 根据 Xaero 目录名获取 ResourceLocation path
+     *
+     * @param xaeroFolder Xaero 目录名
+     * @return 维度的 ResourceLocation path
      */
     public String getPathFromXaero(String xaeroFolder) {
         // 遍历正向映射查找
@@ -327,6 +353,9 @@ public class DimensionPathMapping {
 
     /**
      * 将客户端维度名转换为服务端格式
+     *
+     * @param clientDim 客户端维度名（可能是 Xaero 格式）
+     * @return 服务端格式的维度名
      */
     public String toServerDimension(String clientDim) {
         if (clientDim == null || clientDim.isEmpty()) {
@@ -352,6 +381,9 @@ public class DimensionPathMapping {
 
     /**
      * 将服务端维度名转换为 Xaero 格式
+     *
+     * @param serverDim 服务端维度名
+     * @return Xaero 格式的维度名
      */
     public String toXaeroDimension(String serverDim) {
         if (serverDim == null || serverDim.isEmpty()) {
@@ -375,11 +407,20 @@ public class DimensionPathMapping {
 
     /**
      * 获取用户友好的维度显示名称
+     *
+     * @param dimPath 维度路径
+     * @return 标准化后的维度名称
      */
     public String getFriendlyName(String dimPath) {
         return normalizeDimPath(dimPath);
     }
 
+    /**
+     * 获取用户友好的维度显示名称
+     *
+     * @param dimensionKey 维度 ResourceKey
+     * @return 标准化后的维度名称
+     */
     public String getFriendlyName(ResourceKey<Level> dimensionKey) {
         return getFriendlyName(dimensionKey.location().getPath());
     }
@@ -388,6 +429,9 @@ public class DimensionPathMapping {
 
     /**
      * 标准化维度 path（移除 minecraft: 前缀）
+     *
+     * @param dimPath 原始维度路径
+     * @return 标准化后的维度路径（不带 minecraft: 前缀）
      */
     private String normalizeDimPath(String dimPath) {
         if (dimPath == null || dimPath.isEmpty()) {
@@ -409,6 +453,9 @@ public class DimensionPathMapping {
 
     /**
      * 检查是否为主世界
+     *
+     * @param dimPath 维度路径
+     * @return true 如果是主世界，false 否则
      */
     public boolean isOverworld(String dimPath) {
         String normalized = normalizeDimPath(dimPath);
@@ -417,6 +464,9 @@ public class DimensionPathMapping {
 
     /**
      * 检查是否为地狱
+     *
+     * @param dimPath 维度路径
+     * @return true 如果是地狱，false 否则
      */
     public boolean isNether(String dimPath) {
         String normalized = normalizeDimPath(dimPath);
@@ -425,6 +475,9 @@ public class DimensionPathMapping {
 
     /**
      * 检查是否为末地
+     *
+     * @param dimPath 维度路径
+     * @return true 如果是末地，false 否则
      */
     public boolean isEnd(String dimPath) {
         String normalized = normalizeDimPath(dimPath);
@@ -433,6 +486,9 @@ public class DimensionPathMapping {
 
     /**
      * 获取 region 目录相对路径
+     *
+     * @param dimPath 维度路径
+     * @return region 目录的相对路径（如 "region" 或 "DIM-1/region"）
      */
     public String getRegionRelativePath(String dimPath) {
         String folder = getFolderName(dimPath);
@@ -446,6 +502,10 @@ public class DimensionPathMapping {
 
     /**
      * 注册维度路径映射
+     *
+     * @param dimPath 维度 ResourceLocation path
+     * @param folderName 文件系统目录名
+     * @param xaeroFolder Xaero 目录名
      */
     public void registerMapping(String dimPath, String folderName, String xaeroFolder) {
         pathToFolder.put(dimPath, folderName);
@@ -455,6 +515,9 @@ public class DimensionPathMapping {
 
     /**
      * 注册维度路径映射（自动计算 Xaero 目录名）
+     *
+     * @param dimPath 维度 ResourceLocation path
+     * @param folderName 文件系统目录名
      */
     public void registerMapping(String dimPath, String folderName) {
         String xaeroFolder = computeXaeroFolderFromFolderName(dimPath, folderName);
@@ -463,6 +526,10 @@ public class DimensionPathMapping {
 
     /**
      * 根据文件系统目录名计算正确的 Xaero 目录名
+     *
+     * @param dimPath 维度 ResourceLocation path
+     * @param folderName 文件系统目录名
+     * @return 计算得出的 Xaero 目录名
      */
     private String computeXaeroFolderFromFolderName(String dimPath, String folderName) {
         // 新格式路径：dimensions/<namespace>/<path>
@@ -490,6 +557,8 @@ public class DimensionPathMapping {
 
     /**
      * 移除映射
+     *
+     * @param dimPath 要移除的维度 ResourceLocation path
      */
     public void removeMapping(String dimPath) {
         pathToFolder.remove(dimPath);
@@ -499,6 +568,8 @@ public class DimensionPathMapping {
 
     /**
      * 清除所有检测到的映射（重置为初始状态）
+     *
+     * @return void
      */
     public void clearDetectedMappings() {
         pathToFolder.clear();
@@ -509,12 +580,19 @@ public class DimensionPathMapping {
     }
 
     /**
-     * 获取所有已注册的映射
+     * 获取所有已注册的文件夹映射
+     *
+     * @return 文件夹映射的副本 Map
      */
     public Map<String, String> getAllFolderMappings() {
         return new HashMap<>(pathToFolder);
     }
 
+    /**
+     * 获取所有已注册的 Xaero 映射
+     *
+     * @return Xaero 映射的副本 Map
+     */
     public Map<String, String> getAllXaeroMappings() {
         return new HashMap<>(pathToXaero);
     }
@@ -523,6 +601,10 @@ public class DimensionPathMapping {
 
     /**
      * 自动搜索维度 region 目录
+     *
+     * @param worldRoot 世界根目录
+     * @param dimId 维度 ID
+     * @return 找到的 region 目录路径，如果未找到返回 null
      */
     public Path autoSearchRegionDir(Path worldRoot, String dimId) {
         return detectRegionDir(worldRoot, dimId);
@@ -530,6 +612,9 @@ public class DimensionPathMapping {
 
     /**
      * 扫描世界目录并自动注册所有发现的维度映射
+     *
+     * @param worldRoot 世界根目录路径
+     * @return 已注册的维度映射数量
      */
     public int scanAndRegisterDimensions(Path worldRoot) {
         if (worldRoot == null || !Files.exists(worldRoot)) {
@@ -603,6 +688,8 @@ public class DimensionPathMapping {
 
     /**
      * 获取所有检测到的维度映射（用于保存到配置文件）
+     *
+     * @return 维度映射的副本 Map
      */
     public Map<String, String> getDetectedMappingsForConfig() {
         return new LinkedHashMap<>(pathToFolder);

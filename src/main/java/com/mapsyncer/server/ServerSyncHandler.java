@@ -32,37 +32,70 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Note: This class is manually registered in the main mod class via modBus.addListener()
-// because RegisterPayloadHandlersEvent is a MOD bus event.
+/**
+ * 服务端同步处理器 - 处理客户端请求的地图数据同步
+ *
+ * 功能：
+ * - 接收客户端同步请求，包含客户端缓存的元数据（时间戳+哈希）
+ * - 比对服务端缓存与客户端元数据，确定需要同步的区域
+ * - 分批发送差异区域数据到客户端
+ * - 支持同步中断恢复（玩家断线后重新连接可继续）
+ * - 支持速度限制，避免网络拥塞
+ *
+ * 同步逻辑：
+ * 1. 哈希值一致 → 不同步（文件内容相同）
+ * 2. 哈希值不一致 + 客户端时间戳旧于服务端 → 同步
+ * 3. 哈希值不一致 + 客户端时间戳新于服务端 → 不同步（客户端有新数据）
+ * 4. 客户端无该区域的元数据 → 同步（新区域）
+ *
+ * 注意：此类通过主mod类的modBus.addListener()手动注册，
+ * 因为RegisterPayloadHandlersEvent是MOD总线事件。
+ */
 public class ServerSyncHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerSyncHandler.class);
 
-    // Maximum packet size ~1MB to avoid "Packet too large" error
+    /** 最大数据包大小约1MB，避免"Packet too large"错误 */
     private static final int MAX_PACKET_SIZE = 1_000_000;
 
-    // Track players currently syncing (to abort on disconnect or dimension change)
+    /** 正在同步的玩家集合（用于断线或维度切换时中断同步） */
     private static final Set<UUID> syncingPlayers = ConcurrentHashMap.newKeySet();
 
-    // Track player's dimension at sync start (to abort on dimension change)
+    /** 玩家同步开始时的维度（用于维度切换时中断同步） */
     private static final Map<UUID, ResourceKey<Level>> playerSyncDimensions = new ConcurrentHashMap<>();
 
-    // Track sync progress for resume capability (playerId -> SyncProgress)
+    /** 玩家同步进度（用于断线恢复） */
     private static final Map<UUID, SyncProgress> playerSyncProgress = new ConcurrentHashMap<>();
 
     /**
-     * Tracks a player's sync progress for resume capability.
-     * NOTE: We only store metadata (total count, start index) to minimize memory usage.
-     * The actual chunk data is computed on-demand rather than cached.
-     * This prevents memory leaks when sync is interrupted.
+     * 同步进度记录 - 用于断线恢复
+     *
+     * 仅存储元数据（总数、起始索引），不缓存实际的区块数据，
+     * 以最小化内存占用并防止内存泄漏。
      */
     public static class SyncProgress {
-        public final int totalChunks;      // Total chunks to sync
-        public final int startIndex;       // Where to resume from
-        public final int worldId;
-        public final long startTime;
-        public final long lastActivityTime; // Last successful packet sent time
+        /** 需同步的总区块数 */
+        public final int totalChunks;
 
+        /** 恢复起始位置 */
+        public final int startIndex;
+
+        /** 世界ID */
+        public final int worldId;
+
+        /** 同步开始时间 */
+        public final long startTime;
+
+        /** 最后活动时间（用于检测过期） */
+        public final long lastActivityTime;
+
+        /**
+         * 构造同步进度记录
+         *
+         * @param totalChunks 需同步的总区块数
+         * @param startIndex 恢复起始位置
+         * @param worldId 世界ID
+         */
         public SyncProgress(int totalChunks, int startIndex, int worldId) {
             this.totalChunks = totalChunks;
             this.startIndex = startIndex;
@@ -72,14 +105,23 @@ public class ServerSyncHandler {
         }
 
         /**
-         * Check if this sync progress is stale (no activity for too long).
-         * Stale progress will be cleared to prevent memory leaks.
+         * 检查同步进度是否过期（无活动时间过长）
+         *
+         * 过期进度将被清除以防止内存泄漏。
+         *
+         * @param timeoutMs 过期超时时间（毫秒）
+         * @return true表示已过期
          */
         public boolean isStale(long timeoutMs) {
             return System.currentTimeMillis() - lastActivityTime > timeoutMs;
         }
     }
 
+    /**
+     * 注册网络数据包处理器
+     *
+     * @param event 数据包处理器注册事件
+     */
     public static void register(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar("1").optional();
 
@@ -103,7 +145,11 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Called when a player disconnects. Marks sync as interrupted but preserves progress for resume.
+     * 玩家断线事件处理
+     *
+     * 标记同步为已中断但保留进度，用于断线恢复。
+     *
+     * @param playerId 玩家UUID
      */
     public static void onPlayerDisconnect(UUID playerId) {
         if (syncingPlayers.remove(playerId)) {
@@ -113,7 +159,10 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Check if a player is still connected, in sync session, and in same dimension.
+     * 检查玩家是否仍然有效（在线、在同步会话中、在同一维度）
+     *
+     * @param player 服务端玩家实例
+     * @return true表示玩家有效，false表示无效（应中断同步）
      */
     private static boolean isPlayerStillValid(ServerPlayer player) {
         UUID playerId = player.getUUID();
@@ -138,9 +187,13 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Read worldId from xaeromap.txt file.
-     * File location: <world>/xaeromap.txt
-     * Format: id:<number>
+     * 从xaeromap.txt文件读取worldId
+     *
+     * 文件位置：<world>/xaeromap.txt
+     * 格式：id:<number>
+     *
+     * @param serverPlayer 服务端玩家实例
+     * @return worldId，如果文件不存在返回0
      */
     private static int readWorldIdFromXaeroMap(ServerPlayer serverPlayer) {
         try {
@@ -171,8 +224,9 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Calculate sleep time based on data sent to enforce speed limit.
-     * @param bytesSent Number of bytes sent in this batch
+     * 根据发送的数据量计算休眠时间，强制执行速度限制
+     *
+     * @param bytesSent 本次发送的字节数
      */
     private static void applySpeedLimit(int bytesSent) {
         int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
@@ -189,6 +243,14 @@ public class ServerSyncHandler {
         }
     }
 
+    /**
+     * 处理客户端同步请求
+     *
+     * 接收客户端元数据，比对服务端缓存，发送差异数据。
+     *
+     * @param payload 同步请求数据包
+     * @param context 数据包上下文
+     */
     private static void handleSyncRequest(PacketHandler.SyncRequestPayload payload, IPayloadContext context) {
         Player player = context.player();
         if (!(player instanceof ServerPlayer serverPlayer)) return;
@@ -479,11 +541,16 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Helper to add chunk data from zip file.
+     * 从zip文件添加区块数据
      *
      * 路径格式解析：
      * - 地表：dim/regionX_regionZ
      * - 洞穴：dim/caves/layer/regionX_regionZ
+     *
+     * @param diffs 差异数据列表
+     * @param zipPath zip文件路径
+     * @param normalizedPath 规范化的相对路径
+     * @param timestampSeconds 时间戳（秒）
      */
     private static void addChunkData(List<ChunkMapData> diffs, Path zipPath, String normalizedPath, long timestampSeconds) {
         try {
@@ -520,8 +587,9 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Clear all tracking data. Called when server stops to prevent memory leaks.
-     * Also clears stale progress entries that may have accumulated.
+     * 清除所有跟踪数据
+     *
+     * 在服务器停止时调用，防止内存泄漏。
      */
     public static void cleanup() {
         syncingPlayers.clear();
@@ -531,8 +599,9 @@ public class ServerSyncHandler {
     }
 
     /**
-     * Clear stale sync progress entries (those with no activity for >5 minutes).
-     * This prevents memory leaks from abandoned sync sessions.
+     * 清除过期的同步进度记录
+     *
+     * 无活动超过5分钟的进度被视为过期，将被清除以防止内存泄漏。
      */
     public static void clearStaleProgress() {
         final long STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
