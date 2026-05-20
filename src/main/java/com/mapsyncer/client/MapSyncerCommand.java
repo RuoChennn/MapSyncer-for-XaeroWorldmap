@@ -9,12 +9,14 @@ import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -63,28 +65,47 @@ public class MapSyncerCommand {
 
                                             Set<String> addedDimensions = new HashSet<>();
 
-                                            // 方法1：从客户端注册表获取已知维度（需要已连接服务器）
+                                            // 方法1：从客户端维度注册表获取所有已知维度（需要已连接服务器）
                                             Minecraft mc = Minecraft.getInstance();
-                                            if (mc.getConnection() != null && mc.level != null) {
-                                                RegistryAccess registryAccess = mc.level.registryAccess();
-                                                // 从维度注册表获取所有维度
-                                                registryAccess.registry(ResourceKey.createRegistryKey(ResourceLocation.parse("dimension")))
-                                                    .ifPresent(registry -> {
-                                                        registry.stream().forEach(dimType -> {
-                                                            ResourceLocation loc = registry.getKey(dimType);
-                                                            if (loc != null && !"minecraft".equals(loc.getNamespace())) {
+                                            ClientLevel clientLevel = mc.level;
+                                            if (clientLevel != null) {
+                                                try {
+                                                    // 使用 Registries.DIMENSION 获取维度注册表
+                                                    clientLevel.registryAccess().registry(Registries.DIMENSION)
+                                                        .ifPresent(registry -> {
+                                                            // 遍历所有注册的维度 key
+                                                            for (ResourceKey<?> key : registry.registryKeySet()) {
+                                                                ResourceLocation loc = key.location();
+                                                                String namespace = loc.getNamespace();
+                                                                // 原版维度已单独建议，跳过
+                                                                if ("minecraft".equals(namespace)) {
+                                                                    continue;
+                                                                }
                                                                 // Mod 维度：使用完整 ID (namespace:path)
                                                                 String suggestion = loc.toString();
                                                                 if (!addedDimensions.contains(suggestion)) {
                                                                     builder.suggest(suggestion);
                                                                     addedDimensions.add(suggestion);
+                                                                    LOGGER.debug("Added Mod dimension suggestion: {}", suggestion);
                                                                 }
                                                             }
                                                         });
-                                                    });
+                                                } catch (Exception e) {
+                                                    LOGGER.debug("Could not access dimension registry: {}", e.getMessage());
+                                                    // 失败时，至少添加当前维度
+                                                    ResourceKey<Level> currentDim = clientLevel.dimension();
+                                                    ResourceLocation currentLoc = currentDim.location();
+                                                    if (!"minecraft".equals(currentLoc.getNamespace())) {
+                                                        String suggestion = currentLoc.toString();
+                                                        if (!addedDimensions.contains(suggestion)) {
+                                                            builder.suggest(suggestion);
+                                                            addedDimensions.add(suggestion);
+                                                        }
+                                                    }
+                                                }
                                             }
 
-                                            // 方法2：扫描 Xaero 目录列出已有维度数据
+                                            // 方法2：扫描 Xaero 目录列出已有维度数据（作为补充）
                                             Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
                                             if (baseDir != null) {
                                                 try (Stream<Path> dirs = Files.list(baseDir)) {

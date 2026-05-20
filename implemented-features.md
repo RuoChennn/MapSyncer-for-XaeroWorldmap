@@ -396,13 +396,21 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ---
 
-**文档版本**: 3.5
+**文档版本**: 3.6
 **最后更新**: 2026-05-20
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
 ---
 
 ### 历史更新记录
+
+**2026-05-20 更新 (v3.6)**:
+
+- ✅ **客户端 sync 命令 Mod 维度建议修复**: 从客户端注册表获取 Mod 维度
+  - 问题：之前仅扫描 Xaero 目录获取维度建议，无法获取未同步过的 Mod 维度
+  - 修复：连接服务器后从 `Registries.DIMENSION` 注册表获取所有已知维度
+  - 效果：客户端加载了暮光森林 mod，即使未同步过也能显示 `twilightforest:twilight_forest` 建议
+  - 原版维度（minecraft 前缀）跳过，已单独建议简化名称
 
 **2026-05-20 更新 (v3.5)**:
 
