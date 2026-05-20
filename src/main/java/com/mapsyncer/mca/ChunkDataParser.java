@@ -386,14 +386,16 @@ public class ChunkDataParser {
      * @param z 局部Z (0-15)
      * @param lightMode 光照模式（SURFACE 或 CAVE）
      * @param hasOverlay 是否有覆盖层（水、玻璃等透明方块）
+     * @param worldHasSkylight 维度是否有天空光照
      */
     public static byte getEffectiveLight(ChunkInfo chunk, int x, int worldY, int z,
-                                          LightMode lightMode, boolean hasOverlay) {
+                                          LightMode lightMode, boolean hasOverlay,
+                                          boolean worldHasSkylight) {
         byte blockLight = getBlockLightAt(chunk, x, worldY, z);
         byte skyLight = getSkyLightAt(chunk, x, worldY, z);
         boolean hasSkyAccess = hasSkyAccess(chunk, x, worldY, z);
 
-        return lightMode.calculateEffectiveLight(blockLight, skyLight, hasSkyAccess, hasOverlay, false);
+        return lightMode.calculateEffectiveLight(blockLight, skyLight, hasSkyAccess, hasOverlay, false, worldHasSkylight);
     }
 
     /**

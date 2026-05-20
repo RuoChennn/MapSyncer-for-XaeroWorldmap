@@ -47,18 +47,6 @@ public enum LightMode {
     CAVE;
 
     /**
-     * 计算有效光照值（不考虑维度天空光照属性）
-     *
-     * @deprecated 使用 {@link #calculateEffectiveLight(byte, byte, boolean, boolean, boolean, boolean)} 代替
-     */
-    @Deprecated
-    public byte calculateEffectiveLight(byte blockLight, byte skyLight,
-                                         boolean hasSkyAccess, boolean hasOverlay,
-                                         boolean isGlowing) {
-        return calculateEffectiveLight(blockLight, skyLight, hasSkyAccess, hasOverlay, isGlowing, true);
-    }
-
-    /**
      * 计算有效光照值
      *
      * 参考 Xaero WorldDataReader.java 光照处理逻辑：

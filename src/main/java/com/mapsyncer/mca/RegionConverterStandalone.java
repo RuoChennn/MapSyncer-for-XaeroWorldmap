@@ -66,19 +66,6 @@ public class RegionConverterStandalone {
     }
 
     /**
-     * 转换单个区域文件（支持光照模式，默认有天空光照）
-     * @deprecated 使用 {@link #convertRegion(Path, int, int, int, int, LightMode, CaveModeParams, boolean)} 代替
-     */
-    @Deprecated
-    public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
-                                                  int minBuildHeight, int worldTopY,
-                                                  LightMode lightMode,
-                                                  CaveModeParams caveParams) {
-        return convertRegion(mcaPath, regionX, regionZ, minBuildHeight, worldTopY,
-                             lightMode, caveParams, true);
-    }
-
-    /**
      * 转换单个区域文件（完整参数）
      *
      * 参考 Xaero WorldDataReader.java 第186行：
@@ -147,16 +134,6 @@ public class RegionConverterStandalone {
     }
 
     /**
-     * 使用独立 MCA 解析器读取区域文件（支持光照模式）
-     * @deprecated 使用带 worldHasSkylight 参数的方法代替
-     */
-    @Deprecated
-    static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY,
-                                       LightMode lightMode, CaveModeParams caveParams) throws IOException {
-        return readMcaFile(mcaPath, minBuildHeight, worldTopY, lightMode, caveParams, true);
-    }
-
-    /**
      * 使用独立 MCA 解析器读取区域文件（完整参数）
      *
      * @param worldHasSkylight 维度是否有天空光照（末地为 false）
@@ -188,17 +165,6 @@ public class RegionConverterStandalone {
     private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
                                        int minBuildHeight, int worldTopY) {
         processChunk(data, chunk, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE, true);
-    }
-
-    /**
-     * 处理单个 Chunk 的数据（支持光照模式）
-     * @deprecated 使用带 worldHasSkylight 参数的方法代替
-     */
-    @Deprecated
-    private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
-                                       int minBuildHeight, int worldTopY,
-                                       LightMode lightMode, CaveModeParams caveParams) {
-        processChunk(data, chunk, minBuildHeight, worldTopY, lightMode, caveParams, true);
     }
 
     /**

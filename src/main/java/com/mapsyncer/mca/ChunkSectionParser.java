@@ -655,14 +655,16 @@ public class ChunkSectionParser {
          * @param lightMode 光照模式
          * @param hasSkyAccess 是否有天空访问
          * @param hasOverlay 是否有覆盖层
+         * @param worldHasSkylight 维度是否有天空光照
          */
         public byte getEffectiveLight(int x, int localY, int z,
                                        LightMode lightMode,
-                                       boolean hasSkyAccess, boolean hasOverlay) {
+                                       boolean hasSkyAccess, boolean hasOverlay,
+                                       boolean worldHasSkylight) {
             return lightMode.calculateEffectiveLight(
                 getBlockLightAt(x, localY, z),
                 getSkyLightAt(x, localY, z),
-                hasSkyAccess, hasOverlay, false
+                hasSkyAccess, hasOverlay, false, worldHasSkylight
             );
         }
     }

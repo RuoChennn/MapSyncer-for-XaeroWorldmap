@@ -80,15 +80,6 @@ public class GenerationCache {
     }
 
     /**
-     * 计算文件的CRC32哈希值（使用 HashUtils）
-     * @deprecated 使用 {@link HashUtils#computeFileHash(Path)} 代替
-     */
-    @Deprecated
-    public static String computeFileHash(Path filePath) {
-        return HashUtils.computeFileHash(filePath);
-    }
-
-    /**
      * 更新region的缓存信息
      */
     public void update(String relativePath, long timestampSeconds, String hash) {

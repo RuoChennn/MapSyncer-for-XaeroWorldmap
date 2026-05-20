@@ -636,15 +636,6 @@ public class DimensionPathMapping {
     }
 
     /**
-     * 获取预设的 Mod 维度映射列表（已移除）
-     * @deprecated 预设映射已清理，返回空 Map
-     */
-    @Deprecated
-    public static Map<String, String> getModPresets() {
-        return new LinkedHashMap<>();
-    }
-
-    /**
      * 获取所有检测到的维度映射（用于保存到配置文件）
      */
     public Map<String, String> getDetectedMappingsForConfig() {

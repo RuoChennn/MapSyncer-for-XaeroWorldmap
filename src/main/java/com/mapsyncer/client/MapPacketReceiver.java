@@ -411,36 +411,6 @@ public class MapPacketReceiver {
     }
 
     /**
-     * Clear Xaero's cache files (.xwmc) before reload.
-     * This ensures fresh data is loaded from the new .zip files.
-     * Only clears surface layer cache (not caves).
-     * @deprecated Use clearXaeroCacheSelective() for better performance
-     */
-    @Deprecated
-    private static void clearXaeroCache() {
-        try {
-            // Use the mw directory from the last sync instead of recalculating
-            Path mwDir = lastMwDir;
-            if (mwDir == null || !mwDir.toFile().exists()) {
-                LOGGER.info("No mw directory found from sync, skipping cache clear");
-                return;
-            }
-
-            LOGGER.info("Clearing cache in: {}", mwDir);
-
-            // Delete surface cache directories only (cache/ and cache_1/)
-            deleteCacheDirectory(mwDir.resolve("cache"));
-            deleteCacheDirectory(mwDir.resolve("cache_1"));
-
-            LOGGER.info("Xaero surface cache cleared successfully");
-            Minecraft.getInstance().player.displayClientMessage(ChatUtils.desc("mapsyncer.cache.cleared"), false);
-
-        } catch (Exception e) {
-            LOGGER.warn("Failed to clear Xaero cache: {}", e.getMessage());
-        }
-    }
-
-    /**
      * Delete a cache directory and all .xwmc files inside.
      */
     private static void deleteCacheDirectory(Path cacheDir) {
