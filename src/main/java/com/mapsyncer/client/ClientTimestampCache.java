@@ -1,14 +1,14 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.util.PropertiesCacheIO;
+import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 
 /**
  * 缓存服务端同步过来的 region 时间戳
@@ -22,26 +22,19 @@ public class ClientTimestampCache {
     private static final String CACHE_FILE_NAME = "sync_timestamps.cache";
 
     private static volatile ClientTimestampCache instance;
-    private static volatile Path lastBaseDir = null;  // Track the last used baseDir
+    private static volatile Path lastBaseDir = null;
 
     private final Path cacheFile;
     private final Map<String, CacheEntry> cache = new HashMap<>();
 
     /**
      * 缓存条目：时间戳(秒) + CRC32哈希
+     * 与 TimestampHashEntry 功能相同，保留此类型用于兼容
      */
     public record CacheEntry(long timestampSeconds, String hash) {
         public static CacheEntry parse(String value) {
-            String[] parts = value.split(":");
-            if (parts.length == 2) {
-                try {
-                    long ts = Long.parseLong(parts[0]);
-                    return new CacheEntry(ts, parts[1]);
-                } catch (NumberFormatException e) {
-                    return null;
-                }
-            }
-            return null;
+            TimestampHashEntry entry = PropertiesCacheIO.parseEntry(value);
+            return entry != null ? new CacheEntry(entry.timestampSeconds(), entry.hash()) : null;
         }
 
         public String format() {
@@ -55,15 +48,13 @@ public class ClientTimestampCache {
     }
 
     /**
-     * 获取实例，baseDir 通常是 Multiplayer_<server> 目录
-     * 如果路径发生变化，会重新初始化单例
+     * 获取实例（使用 PropertiesCacheIO 加载）
      */
     public static ClientTimestampCache getInstance(Path baseDir) {
         if (baseDir == null) {
             return instance;
         }
 
-        // 如果路径变化，重置单例
         if (instance == null || lastBaseDir == null || !lastBaseDir.equals(baseDir)) {
             synchronized (ClientTimestampCache.class) {
                 if (instance == null || lastBaseDir == null || !lastBaseDir.equals(baseDir)) {
@@ -77,7 +68,7 @@ public class ClientTimestampCache {
     }
 
     /**
-     * 重置实例（用于切换服务器时）
+     * 重置实例
      */
     public static void resetInstance() {
         if (instance != null) {
@@ -89,53 +80,25 @@ public class ClientTimestampCache {
     }
 
     /**
-     * 从文件加载缓存
+     * 从文件加载缓存（使用 PropertiesCacheIO）
      */
     private void load() {
-        if (!Files.exists(cacheFile)) {
-            LOGGER.info("No existing sync timestamp cache found");
-            return;
-        }
-
-        try (InputStream is = Files.newInputStream(cacheFile)) {
-            Properties props = new Properties();
-            props.load(is);
-
-            for (String key : props.stringPropertyNames()) {
-                CacheEntry entry = CacheEntry.parse(props.getProperty(key));
-                if (entry != null) {
-                    cache.put(key, entry);
-                } else {
-                    LOGGER.warn("Invalid cache entry for {}: {}", key, props.getProperty(key));
-                }
-            }
-
-            LOGGER.info("Loaded {} region entries from sync timestamp cache", cache.size());
-        } catch (IOException e) {
-            LOGGER.error("Failed to load sync timestamp cache", e);
+        Map<String, TimestampHashEntry> loaded = PropertiesCacheIO.load(cacheFile, PropertiesCacheIO::parseEntry);
+        for (Map.Entry<String, TimestampHashEntry> entry : loaded.entrySet()) {
+            cache.put(entry.getKey(), new CacheEntry(entry.getValue().timestampSeconds(), entry.getValue().hash()));
         }
     }
 
     /**
-     * 保存缓存到文件
+     * 保存缓存到文件（使用 PropertiesCacheIO）
      */
     public void save() {
-        try {
-            Files.createDirectories(cacheFile.getParent());
-
-            Properties props = new Properties();
-            for (Map.Entry<String, CacheEntry> entry : cache.entrySet()) {
-                props.setProperty(entry.getKey(), entry.getValue().format());
-            }
-
-            try (OutputStream os = Files.newOutputStream(cacheFile)) {
-                props.store(os, "Sync timestamps cache\nFormat: dimension/region_x_z = timestamp_seconds:hash\nUsed to compare with server for sync decisions");
-            }
-
-            LOGGER.info("Saved {} region entries to sync timestamp cache", cache.size());
-        } catch (IOException e) {
-            LOGGER.error("Failed to save sync timestamp cache", e);
+        Map<String, TimestampHashEntry> toSave = new HashMap<>();
+        for (Map.Entry<String, CacheEntry> entry : cache.entrySet()) {
+            toSave.put(entry.getKey(), new TimestampHashEntry(entry.getValue().timestampSeconds(), entry.getValue().hash()));
         }
+        PropertiesCacheIO.save(cacheFile, toSave, TimestampHashEntry::format,
+            "Sync timestamps cache\nFormat: dimension/region_x_z = timestamp_seconds:hash\nUsed to compare with server for sync decisions");
     }
 
     /**
@@ -167,19 +130,15 @@ public class ClientTimestampCache {
         try {
             Files.deleteIfExists(cacheFile);
             LOGGER.info("Cleared sync timestamp cache");
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOGGER.warn("Failed to delete cache file: {}", e.getMessage());
         }
     }
 
     /**
      * 检查指定维度是否已同步过
-     * @param xaeroDim Xaero 格式的维度名（如 "null", "DIM-1", "DIM1"）
-     * @return true 如果该维度至少有一个已同步的 region
      */
     public boolean hasDimensionSynced(String xaeroDim) {
-        // 检查 cache 中是否有以该维度开头的 key
-        // key 格式：xaeroDim/regionX_regionZ 或 xaeroDim/caves/layer/regionX_regionZ
         String prefix = xaeroDim + "/";
         for (String key : cache.keySet()) {
             if (key.startsWith(prefix)) {
@@ -190,7 +149,7 @@ public class ClientTimestampCache {
     }
 
     /**
-     * 检查缓存文件是否存在（表示至少运行过一次同步）
+     * 检查缓存文件是否存在
      */
     public boolean cacheFileExists() {
         return Files.exists(cacheFile);

@@ -2,9 +2,8 @@ package com.mapsyncer.client;
 
 import com.mapsyncer.network.ChunkMapData;
 import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.util.ChatUtils;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -21,13 +20,6 @@ import java.util.List;
 public class MapPacketReceiver {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapPacketReceiver.class);
-
-    /**
-     * 创建带颜色的前缀组件
-     */
-    private static MutableComponent prefix() {
-        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E)); // 黄色
-    }
 
     // Track if sync is in progress to coordinate chunk update disabling
     private static volatile boolean syncInProgress = false;
@@ -130,8 +122,7 @@ public class MapPacketReceiver {
                 clearSyncData();
                 LOGGER.warn("Sync was stale, cleared accumulated data");
                 if (Minecraft.getInstance().player != null) {
-                    Minecraft.getInstance().player.displayClientMessage(
-                        prefix().append(Component.translatable("mapsyncer.sync.timeout").withStyle(style -> style.withColor(0xFF5555))), false);
+                    Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
                 }
                 return;
             }
@@ -191,8 +182,7 @@ public class MapPacketReceiver {
 
             if (regionsToReload.isEmpty()) {
                 LOGGER.info("No regions need reload, all caches were cleared");
-                mc.player.displayClientMessage(
-                        prefix().append(Component.translatable("mapsyncer.cache.all_cleared").withStyle(style -> style.withColor(0x55FF55))), false);
+                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.all_cleared"), false);
                 resumeChunkUpdates();
                 return;
             }
@@ -284,16 +274,14 @@ public class MapPacketReceiver {
             LOGGER.info("Direct reload requested: {} reset, {} new, total {} regions",
                     loadedCount, createdCount, totalRequested);
 
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.cache.direct_reload", totalRequested).withStyle(style -> style.withColor(0x55FF55))), false);
+            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.direct_reload", totalRequested), false);
 
             // Re-enable chunk updates after reload requests
             resumeChunkUpdates();
 
         } catch (Exception e) {
             LOGGER.error("Failed to trigger Xaero map reload", e);
-            Minecraft.getInstance().player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.cache.reload_failed").withStyle(style -> style.withColor(0xFF5555))), false);
+            Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.cache.reload_failed"), false);
             // Always re-enable chunk updates, even on error
             resumeChunkUpdates();
         }
@@ -376,8 +364,7 @@ public class MapPacketReceiver {
             LOGGER.info("Cache cleared: {} files, reload needed: {} regions", cacheClearedCount, reloadNeededCount);
 
             if (Minecraft.getInstance().player != null) {
-                Minecraft.getInstance().player.displayClientMessage(
-                        prefix().append(Component.translatable("mapsyncer.cache.status", cacheClearedCount, reloadNeededCount).withStyle(style -> style.withColor(0xAAAAAA))), false);
+                Minecraft.getInstance().player.displayClientMessage(ChatUtils.desc("mapsyncer.cache.status", cacheClearedCount, reloadNeededCount), false);
             }
 
         } catch (Exception e) {
@@ -446,8 +433,7 @@ public class MapPacketReceiver {
             deleteCacheDirectory(mwDir.resolve("cache_1"));
 
             LOGGER.info("Xaero surface cache cleared successfully");
-            Minecraft.getInstance().player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.cache.cleared").withStyle(style -> style.withColor(0xAAAAAA))), false);
+            Minecraft.getInstance().player.displayClientMessage(ChatUtils.desc("mapsyncer.cache.cleared"), false);
 
         } catch (Exception e) {
             LOGGER.warn("Failed to clear Xaero cache: {}", e.getMessage());

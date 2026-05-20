@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.HashUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +16,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Stream;
-import java.util.zip.CRC32;
 
 public class ClientHashManager {
 
@@ -162,24 +162,12 @@ public class ClientHashManager {
     }
 
     /**
-     * Compute CRC32 hash of file content.
+     * Compute CRC32 hash of file content (uses HashUtils).
      * @param filePath file path
      * @return CRC32 hash (8 hex digits)
      */
     private static String computeFileHash(Path filePath) {
-        if (!Files.exists(filePath)) {
-            return "00000000";
-        }
-
-        try {
-            CRC32 crc32 = new CRC32();
-            byte[] data = Files.readAllBytes(filePath);
-            crc32.update(data);
-            return String.format("%08x", crc32.getValue());
-        } catch (IOException e) {
-            LOGGER.warn("Failed to compute hash for {}", filePath, e);
-            return "00000000";
-        }
+        return HashUtils.computeFileHash(filePath);
     }
 
     /**

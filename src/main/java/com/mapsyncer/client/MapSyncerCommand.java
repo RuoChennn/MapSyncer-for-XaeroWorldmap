@@ -8,13 +8,12 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mapsyncer.client.ClientHashManager.ClientMeta;
 import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
@@ -40,10 +39,6 @@ public class MapSyncerCommand {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapSyncerCommand.class);
 
-    private static MutableComponent prefix() {
-        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E));
-    }
-
     @SubscribeEvent
     public static void registerClientCommands(RegisterClientCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
@@ -67,11 +62,11 @@ public class MapSyncerCommand {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
-        mc.player.displayClientMessage(prefix().append(Component.translatable("mapsyncer.command.help_header").withStyle(s -> s.withColor(0xFFFFFF))), false);
-        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_sync").withStyle(s -> s.withColor(0xAAAAAA)), false);
-        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_sync_dim").withStyle(s -> s.withColor(0xAAAAAA)), false);
-        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_sync_all").withStyle(s -> s.withColor(0xAAAAAA)), false);
-        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_dimension_note").withStyle(s -> s.withColor(0xFFFF55)), false);
+        mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.command.help_header")), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync"), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_dim"), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_all"), false);
+        mc.player.displayClientMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -79,7 +74,6 @@ public class MapSyncerCommand {
      * 维度名称建议
      */
     private static CompletableFuture<Suggestions> suggestDimensions(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
-        // 原版维度简化名称
         builder.suggest("overworld");
         builder.suggest("the_nether");
         builder.suggest("the_end");
@@ -90,7 +84,6 @@ public class MapSyncerCommand {
         Minecraft mc = Minecraft.getInstance();
         ClientLevel level = mc.level;
         if (level != null) {
-            // 当前维度
             ResourceKey<Level> currentDim = level.dimension();
             ResourceLocation currentLoc = currentDim.location();
             if (!"minecraft".equals(currentLoc.getNamespace())) {
@@ -99,7 +92,6 @@ public class MapSyncerCommand {
                 added.add(suggestion);
             }
 
-            // 从 DIMENSION_TYPE 注册表推断 Mod 维度
             level.registryAccess().registry(Registries.DIMENSION_TYPE).ifPresent(registry -> {
                 for (var key : registry.registryKeySet()) {
                     ResourceLocation loc = key.location();
@@ -116,7 +108,6 @@ public class MapSyncerCommand {
                 }
             });
 
-            // 从 LEVEL_STEM 注册表获取维度模板
             level.registryAccess().registry(Registries.LEVEL_STEM).ifPresent(registry -> {
                 for (var key : registry.registryKeySet()) {
                     ResourceLocation loc = key.location();
@@ -131,7 +122,6 @@ public class MapSyncerCommand {
             });
         }
 
-        // 扫描 Xaero 目录
         Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
         if (baseDir != null) {
             try (Stream<Path> dirs = Files.list(baseDir)) {
@@ -171,7 +161,6 @@ public class MapSyncerCommand {
     private static int executeSyncDimension(CommandContext<CommandSourceStack> context) {
         String dimInput = StringArgumentType.getString(context, "dimension");
 
-        // 特殊处理 all
         if ("all".equalsIgnoreCase(dimInput)) {
             return executeSyncAll(context);
         }
@@ -179,12 +168,9 @@ public class MapSyncerCommand {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return 0;
 
-        // 解析维度 ID
         String dimensionId = resolveDimensionId(dimInput, mc.level);
 
-        mc.player.displayClientMessage(
-                prefix().append(Component.translatable("mapsyncer.command.sync_dimension", dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
-                false);
+        mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.sync_dimension", dimensionId), false);
 
         sendSyncRequest(mc, dimensionId, false);
 
@@ -198,9 +184,7 @@ public class MapSyncerCommand {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
-        mc.player.displayClientMessage(
-                prefix().append(Component.translatable("mapsyncer.command.sync_all").withStyle(s -> s.withColor(0xFFFFFF))),
-                false);
+        mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.sync_all"), false);
 
         sendSyncRequest(mc, "all", true);
 
@@ -217,9 +201,7 @@ public class MapSyncerCommand {
         ResourceKey<Level> currentDim = mc.level.dimension();
         String dimensionId = currentDim.location().toString();
 
-        mc.player.displayClientMessage(
-                prefix().append(Component.translatable("mapsyncer.command.sync_current", dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
-                false);
+        mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.sync_current", dimensionId), false);
 
         sendSyncRequest(mc, dimensionId, false);
 
@@ -230,18 +212,14 @@ public class MapSyncerCommand {
      * 解析用户输入的维度名称为完整维度 ID
      */
     private static String resolveDimensionId(String input, ClientLevel level) {
-        // 简化名称映射
         switch (input.toLowerCase()) {
             case "overworld": return "minecraft:overworld";
             case "nether": case "the_nether": return "minecraft:the_nether";
             case "end": case "the_end": return "minecraft:the_end";
         }
 
-        // 已是完整 ID
         if (input.contains(":")) return input;
 
-        // 尝试从注册表查找 namespace
-        // 输入只有 path 部分，需要推断 namespace
         var optRegistry = level.registryAccess().registry(Registries.DIMENSION_TYPE);
         if (optRegistry.isPresent()) {
             var registry = optRegistry.get();
@@ -256,18 +234,16 @@ public class MapSyncerCommand {
             }
         }
 
-        // 默认添加 minecraft 前缀
         return "minecraft:" + input;
     }
 
-    
+
     /**
      * 发送同步请求
      */
     private static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
         Map<String, ClientMeta> metaMap;
 
-        // 直接获取服务器目录（Multiplayer_<serverIP>）
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
 
         ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
@@ -306,13 +282,9 @@ public class MapSyncerCommand {
         LOGGER.info("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
 
         if (metaMap.isEmpty()) {
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.command.no_regions").withStyle(s -> s.withColor(0xFFFFFF))),
-                    false);
+            mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.no_regions"), false);
         } else {
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.command.checking_regions", metaMap.size()).withStyle(s -> s.withColor(0xFFFFFF))),
-                    false);
+            mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.checking_regions", metaMap.size()), false);
         }
 
         PacketDistributor.sendToServer(new PacketHandler.SyncRequestPayload(metaMap));

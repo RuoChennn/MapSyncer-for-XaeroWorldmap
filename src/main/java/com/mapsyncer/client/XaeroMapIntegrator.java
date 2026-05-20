@@ -1,12 +1,11 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.network.ChunkMapData;
+import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Player;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,13 +29,6 @@ public class XaeroMapIntegrator {
 
     // Store updated regions for selective reset
     private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
-
-    /**
-     * 创建带颜色的前缀组件
-     */
-    private static MutableComponent prefix() {
-        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E));
-    }
 
     /**
      * Get the set of regions that were updated during sync.
@@ -80,8 +72,7 @@ public class XaeroMapIntegrator {
         try {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
-                mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.chunk.paused").withStyle(s -> s.withColor(0xAAAAAA))), false);
+                mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.chunk.paused"), false);
             }
 
             // Try to pause Xaero's MapWriter thread via reflection
@@ -101,8 +92,7 @@ public class XaeroMapIntegrator {
         try {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
-                mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.chunk.resumed").withStyle(s -> s.withColor(0x55FF55))), false);
+                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.chunk.resumed"), false);
             }
 
             // Resume Xaero's MapWriter thread

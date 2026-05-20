@@ -1,8 +1,8 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.util.ChatUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -17,17 +17,9 @@ public class SyncProgressTracker {
     private static volatile long startTime = 0;
     private static volatile int lastDisplayedPercent = -1;
 
-    // 服务端响应超时检测
     private static volatile boolean receivedFirstResponse = false;
-    private static final long SERVER_RESPONSE_TIMEOUT_MS = 5000; // 5秒超时
+    private static final long SERVER_RESPONSE_TIMEOUT_MS = 5000;
     private static ScheduledExecutorService timeoutChecker = null;
-
-    /**
-     * 创建带颜色的前缀组件
-     */
-    private static MutableComponent prefix() {
-        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E)); // 黄色
-    }
 
     public static void startTracking() {
         tracking = true;
@@ -38,15 +30,11 @@ public class SyncProgressTracker {
         lastDisplayedPercent = -1;
         receivedFirstResponse = false;
 
-        // 在聊天栏显示开始消息
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.sync.start").withStyle(style -> style.withColor(0xFFFFFF))),
-                    false);
+            mc.player.displayClientMessage(ChatUtils.message("mapsyncer.sync.start"), false);
         }
 
-        // 启动超时检测
         startTimeoutChecker();
     }
 
@@ -57,12 +45,9 @@ public class SyncProgressTracker {
         timeoutChecker = Executors.newSingleThreadScheduledExecutor();
         timeoutChecker.schedule(() -> {
             if (tracking && !receivedFirstResponse) {
-                // 超时未收到服务端响应，弹出提示
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
-                    mc.player.displayClientMessage(
-                            prefix().append(Component.translatable("mapsyncer.sync.server_not_installed").withStyle(style -> style.withColor(0xFF5555))),
-                            false);
+                    mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"), false);
                 }
                 cancelTracking();
             }
@@ -70,7 +55,6 @@ public class SyncProgressTracker {
     }
 
     public static void update(int processed, int total, String status) {
-        // 标记收到服务端响应，取消超时检测
         if (!receivedFirstResponse) {
             receivedFirstResponse = true;
             stopTimeoutChecker();
@@ -80,7 +64,6 @@ public class SyncProgressTracker {
         SyncProgressTracker.total = total;
         SyncProgressTracker.status = status;
 
-        // 每10%进度更新一次聊天栏
         if (total > 0) {
             int percent = (processed * 100) / total;
             if (percent != lastDisplayedPercent && percent % 10 == 0) {
@@ -97,18 +80,12 @@ public class SyncProgressTracker {
 
         long elapsed = getElapsedSeconds();
 
-        // 在聊天栏显示完成消息
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
-            mc.player.displayClientMessage(
-                    prefix().append(Component.translatable("mapsyncer.sync.completed", total, elapsed).withStyle(style -> style.withColor(0x55FF55))),
-                    false);
+            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.completed", total, elapsed), false);
         }
     }
 
-    /**
-     * 取消同步追踪（服务端未响应时调用）
-     */
     public static void cancelTracking() {
         tracking = false;
         status = Component.translatable("mapsyncer.sync.cancelled").getString();
@@ -125,13 +102,11 @@ public class SyncProgressTracker {
     private static void displayProgress() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && tracking) {
-            MutableComponent message;
             if (total > 0) {
-                message = prefix().append(Component.translatable("mapsyncer.sync.progress", processed, total, lastDisplayedPercent).withStyle(style -> style.withColor(0xFFFFFF)));
+                mc.player.displayClientMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent), false);
             } else {
-                message = prefix().append(Component.literal(status).withStyle(style -> style.withColor(0xFFFFFF)));
+                mc.player.displayClientMessage(ChatUtils.prefix().append(Component.literal(status)), false);
             }
-            mc.player.displayClientMessage(message, false);
         }
     }
 

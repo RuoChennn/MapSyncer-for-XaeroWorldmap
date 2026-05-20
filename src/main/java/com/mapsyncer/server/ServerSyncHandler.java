@@ -5,9 +5,9 @@ import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.ChunkMapData;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.server.GenerationCache.RegionMeta;
+import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
+import com.mapsyncer.util.HashUtils;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -38,12 +38,6 @@ public class ServerSyncHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerSyncHandler.class);
 
-    /**
-     * 创建带颜色的前缀组件
-     */
-    private static MutableComponent prefix() {
-        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E));
-    }
     // Maximum packet size ~1MB to avoid "Packet too large" error
     private static final int MAX_PACKET_SIZE = 1_000_000;
 
@@ -221,7 +215,7 @@ public class ServerSyncHandler {
         Path cacheDir = ConversionOrchestrator.CACHE_DIR;
 
         if (!Files.exists(cacheDir)) {
-            serverPlayer.sendSystemMessage(prefix().append(Component.translatable("mapsyncer.server.no_cache").withStyle(s -> s.withColor(0xFFFFFF))));
+            serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -266,8 +260,7 @@ public class ServerSyncHandler {
             if (!Files.exists(dimCacheDir) || !dimCacheDir.toFile().isDirectory()) {
                 // 将 Xaero 格式转换为用户友好名称用于提示
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
-                serverPlayer.sendSystemMessage(prefix().append(Component.translatable(
-                        "mapsyncer.server.dim_not_available", friendlyDim, friendlyDim).withStyle(s -> s.withColor(0xFF5555))));
+                serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
                 // 继续处理其他维度，而不是直接返回
             }
@@ -315,7 +308,7 @@ public class ServerSyncHandler {
                         // Server has no GenerationCache entry → compute hash from file and compare
                         // This handles legacy cache that doesn't have generation_cache.properties
                         if (serverMeta == null) {
-                            String serverHash = GenerationCache.computeFileHash(zipPath);
+                            String serverHash = HashUtils.computeFileHash(zipPath);
                             long fileTimestamp = System.currentTimeMillis() / 1000;
 
                             LOGGER.info("No server cache entry, computed hash from file: {}, ts={}", serverHash, fileTimestamp);
@@ -387,8 +380,7 @@ public class ServerSyncHandler {
                 serverPlayer.getName().getString(), total, hashMatchCount, timestampSkipCount);
 
         if (total == 0) {
-            serverPlayer.sendSystemMessage(prefix().append(Component.translatable(
-                    "mapsyncer.server.map_uptodate", hashMatchCount, timestampSkipCount).withStyle(s -> s.withColor(0x55FF55))));
+            serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", hashMatchCount, timestampSkipCount));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -397,8 +389,7 @@ public class ServerSyncHandler {
             return;
         }
 
-        serverPlayer.sendSystemMessage(prefix().append(Component.translatable(
-                "mapsyncer.server.sync_start", total, hashMatchCount, timestampSkipCount).withStyle(s -> s.withColor(0xFFFFFF))));
+        serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start", total, hashMatchCount, timestampSkipCount));
 
         // Check if this is a resumed sync
         SyncProgress existingProgress = playerSyncProgress.get(playerId);
@@ -477,8 +468,7 @@ public class ServerSyncHandler {
         PacketDistributor.sendToPlayer(serverPlayer,
                 new PacketHandler.SyncProgressPayload(total, total, "completed"));
 
-        serverPlayer.sendSystemMessage(
-                prefix().append(Component.translatable("mapsyncer.server.sync_complete", total).withStyle(s -> s.withColor(0x55FF55))));
+        serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
         LOGGER.info("Map sync complete for player {}: {} regions",
                 serverPlayer.getName().getString(), total);
 
