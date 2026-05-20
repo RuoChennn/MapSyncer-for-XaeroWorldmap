@@ -170,8 +170,8 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
 
         // 强制生成前先清除该维度的缓存目录
-        String dimPath = dimKey.location().getPath();
-        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+        String fullDimId = dimKey.location().toString(); // 完整维度 ID（包含 namespace）
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path dimCacheDir = CACHE_DIR.resolve(xaeroDimName);
         clearDimensionCache(dimCacheDir);
 
@@ -250,16 +250,17 @@ public class ConversionOrchestrator {
             return SingleRegionResult.CONVERSION_FAILED;
         }
 
-        // 使用服务端维度名作为缓存 key
-        String dimPath = dimension.location().getPath();
+        // 使用完整维度 ID 作为缓存 key（确保新格式路径正确转换）
+        String fullDimId = dimension.location().toString();
+        String dimPath = dimension.location().getPath(); // 用于配置查找
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
-        // 使用 Xaero 格式的维度目录名（与客户端保持一致）
-        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+        // 使用 Xaero 格式的维度目录名（使用完整维度 ID，确保新格式路径正确转换）
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
         // 获取 MCA 文件存放目录（用于读取）
         Path regionDir;
@@ -335,16 +336,20 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded"); return; }
 
         currentDimension = dimRegions.dimension();
-        // 使用服务端维度名作为缓存 key（便于客户端识别）
+        // 获取完整的维度 ID（包含 namespace，如 "twilightforest:twilight_forest"）
+        // 用于 Xaero 目录映射，确保新格式路径能正确转换为 namespace$path 格式
+        String fullDimId = dimRegions.dimension().location().toString();
+        // 获取维度 path 部分（不含 namespace，如 "twilight_forest"）
+        // 用于配置查找，因为配置可能只使用 path 部分
         String dimPath = dimRegions.dimension().location().getPath();
 
-        // 从配置获取维度扫描配置
+        // 从配置获取维度扫描配置（使用 path 部分，因为配置可能不含 namespace）
         DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
-        // 获取 Xaero 格式的目录名（用于输出）
-        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+        // 获取 Xaero 格式的目录名（使用完整维度 ID，确保新格式路径正确转换）
+        String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
         // 获取 MCA 文件存放目录（用于读取）
         // 优先使用配置中的 regionFolder，否则使用默认路径
@@ -634,15 +639,17 @@ public class ConversionOrchestrator {
             ServerLevel level = server.getLevel(dimRegions.dimension());
             if (level == null) continue;
 
-            String dimPath = dimRegions.dimension().location().getPath();
+            // 获取完整维度 ID（包含 namespace，用于 Xaero 目录映射）
+            String fullDimId = dimRegions.dimension().location().toString();
+            String dimPath = dimRegions.dimension().location().getPath(); // 用于配置查找
 
             // 从配置获取维度扫描配置
             DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
             ScanMode scanMode = scanConfig.scanMode();
             int caveLayer = scanConfig.getCaveLayer();
 
-            // 获取 Xaero 格式的目录名（用于输出）
-            String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(dimPath);
+            // 获取 Xaero 格式的目录名（使用完整维度 ID，确保新格式路径正确转换）
+            String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
             // 获取 MCA 文件存放目录（用于读取）
             Path regionDir;

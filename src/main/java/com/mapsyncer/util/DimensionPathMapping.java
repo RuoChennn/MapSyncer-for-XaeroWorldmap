@@ -372,13 +372,33 @@ public class DimensionPathMapping {
 
     /**
      * 根据维度 ResourceLocation path 获取 Xaero 目录名
+     *
+     * 优先级：
+     * 1. 已检测并注册的映射（新格式优先）
+     * 2. 原版维度预设映射
+     * 3. Mod 预设映射
+     * 4. 自动计算（namespace$path 格式）
      */
     public String getXaeroFolder(String dimPath) {
         String normalized = normalizeDimPath(dimPath);
 
+        // 优先检查已注册的 Xaero 映射（可能来自自动检测）
         String registered = pathToXaero.get(normalized);
         if (registered != null) {
             return registered;
+        }
+
+        // 检查已检测到的文件系统路径
+        // 如果检测到新格式路径，则计算对应的 namespace$path 格式
+        String detectedFolder = pathToFolder.get(normalized);
+        if (detectedFolder != null) {
+            return computeXaeroFolderFromFolderName(normalized, detectedFolder);
+        }
+
+        // 原版维度预设映射
+        String vanillaXaero = VANILLA_XAERO_MAPPINGS.get(normalized);
+        if (vanillaXaero != null) {
+            return vanillaXaero;
         }
 
         // Mod 预设
@@ -386,7 +406,7 @@ public class DimensionPathMapping {
             return MOD_XAERO_MAPPINGS.get(normalized);
         }
 
-        // 无预设时，使用新格式的 path 部分
+        // 无预设时，使用 namespace$path 格式（Xaero 新格式）
         if (normalized.contains(":")) {
             String[] parts = normalized.split(":");
             if (parts.length == 2) {
@@ -447,12 +467,35 @@ public class DimensionPathMapping {
 
     /**
      * 将服务端维度名转换为 Xaero 格式
+     *
+     * 输入可能是以下格式：
+     * 1. 完整维度 ID：如 "twilightforest:twilight_forest"
+     * 2. 维度 path：如 "twilight_forest"
+     * 3. 已经是 Xaero 格式：如 "twilightforest$twilight_forest" 或 "DIM-1"
+     *
+     * 如果输入已经是 Xaero 格式，直接返回。
      */
     public String toXaeroDimension(String serverDim) {
         if (serverDim == null || serverDim.isEmpty()) {
             return "null";
         }
 
+        // 检查是否已经是 Xaero 格式
+        // Xaero 格式特征：
+        // - 原版：null, DIM-1, DIM1
+        // - Mod 新格式：namespace$path（包含 $ 符号）
+        // - Mod 传统格式：DIM{id}（如 DIM7, DIM-17）
+        if (serverDim.equals("null") || serverDim.equals("DIM-1") || serverDim.equals("DIM1")) {
+            return serverDim; // 原版 Xaero 格式，直接返回
+        }
+        if (serverDim.contains("$")) {
+            return serverDim; // Mod 新格式 namespace$path，直接返回
+        }
+        if (serverDim.startsWith("DIM") || serverDim.startsWith("DIM-")) {
+            return serverDim; // Mod 传统格式 DIM{id}，直接返回
+        }
+
+        // 不是 Xaero 格式，需要转换
         return getXaeroFolder(normalizeDimPath(serverDim));
     }
 
@@ -529,6 +572,10 @@ public class DimensionPathMapping {
 
     /**
      * 注册维度路径映射
+     *
+     * @param dimPath 维度 path（如 "twilightforest:twilight_forest"）
+     * @param folderName 文件系统目录名（如 "dimensions/twilightforest/twilight_forest" 或 "DIM7"）
+     * @param xaeroFolder Xaero 目录名（如 "twilightforest$twilight_forest" 或 "DIM7"）
      */
     public void registerMapping(String dimPath, String folderName, String xaeroFolder) {
         pathToFolder.put(dimPath, folderName);
@@ -537,8 +584,58 @@ public class DimensionPathMapping {
         LOGGER.info("Registered dimension mapping: {} → folder={}, xaero={}", dimPath, folderName, xaeroFolder);
     }
 
+    /**
+     * 注册维度路径映射（自动计算 Xaero 目录名）
+     *
+     * 当检测到新格式路径时，使用 namespace$path 格式作为 Xaero 目录名；
+     * 当检测到传统格式路径时，使用 DIM{id} 格式或预设值。
+     */
     public void registerMapping(String dimPath, String folderName) {
-        registerMapping(dimPath, folderName, getXaeroFolder(dimPath));
+        String xaeroFolder = computeXaeroFolderFromFolderName(dimPath, folderName);
+        registerMapping(dimPath, folderName, xaeroFolder);
+    }
+
+    /**
+     * 根据文件系统目录名计算正确的 Xaero 目录名
+     *
+     * 关键逻辑：
+     * - 新格式（dimensions/...）：始终使用 namespace$path 格式，忽略预设映射
+     * - 传统格式（DIM{id}）：使用预设映射或 DIM{id} 本身
+     *
+     * 这确保了当 mod 使用新规范路径时，Xaero 目录名也同步使用新格式，
+     * 与客户端期望的路径一致。
+     */
+    private String computeXaeroFolderFromFolderName(String dimPath, String folderName) {
+        // 新格式路径：dimensions/<namespace>/<path>
+        // → 始终使用 namespace$path 格式作为 Xaero 目录名（忽略预设映射）
+        // 这是关键修复：当 mod 使用新规范路径时，不再使用旧的 DIM{id} 格式
+        if (folderName.startsWith("dimensions/")) {
+            String remaining = folderName.substring(11); // 移除 "dimensions/"
+            String[] parts = remaining.split("/");
+            if (parts.length == 2) {
+                String namespace = parts[0];
+                String path = parts[1];
+                String newXaeroFormat = namespace + "$" + path; // Xaero 新格式：namespace$path
+                LOGGER.debug("New format detected for {}: using Xaero folder {} (instead of preset)",
+                    dimPath, newXaeroFormat);
+                return newXaeroFormat;
+            }
+        }
+
+        // 传统格式路径：检查是否有预设映射
+        String presetXaero = MOD_XAERO_MAPPINGS.get(dimPath);
+        if (presetXaero != null) {
+            LOGGER.debug("Legacy format for {}: using preset Xaero folder {}", dimPath, presetXaero);
+            return presetXaero; // 使用预设的 DIM{id} 格式
+        }
+
+        // 如果文件夹名已经是 DIM 格式，直接使用
+        if (folderName.startsWith("DIM") || folderName.startsWith("DIM-")) {
+            return folderName;
+        }
+
+        // 默认：使用路径部分作为 Xaero 目录名
+        return getXaeroFolder(dimPath);
     }
 
     /**

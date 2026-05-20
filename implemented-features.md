@@ -211,10 +211,10 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 功能 | 状态 | 描述 |
 |------|------|------|
 | 原版维度映射 | ✅ | the_nether → DIM-1, the_end → DIM1, overworld → null |
-| Mod 维度映射 | 🧪 | namespace:path → dimensions/<namespace>/<path> 格式 |
-| 双向转换 | 🧪 | 文件系统目录 ↔ Xaero 目录 ↔ ResourceLocation path |
-| 统一映射类 | 🧪 | DimensionPathMapping 类管理所有映射逻辑 |
-| 新旧格式兼容 | 🧪 | 支持 Minecraft 26.1 新格式和传统格式自动检测 |
+| Mod 维度映射 | ✅ | namespace:path → namespace$path（新格式）或 DIM{id}（传统格式） |
+| 双向转换 | ✅ | 文件系统目录 ↔ Xaero 目录 ↔ ResourceLocation path |
+| 统一映射类 | ✅ | DimensionPathMapping 类管理所有映射逻辑 |
+| 新旧格式兼容 | ✅ | 支持 Minecraft 26.1+ 新格式和传统格式自动检测 |
 | 原版维度新格式 | 🧪 | dimensions/minecraft/overworld 等 26.1+ 格式支持 |
 | 首次转换检测 | 🧪 | 首次执行地图转换时自动检测维度路径并写入配置 |
 
