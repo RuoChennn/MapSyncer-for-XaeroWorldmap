@@ -50,3 +50,6 @@ xaeroworldmap-neoforge-*/
 gradle-8.9/
 gradle-8.9-bin.zip
 .fake
+
+# Deployment scripts (local environment specific)
+deploy.bat
