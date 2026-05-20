@@ -792,6 +792,58 @@ public class XaeroMapIntegrator {
     }
 
     /**
+     * Get the server directory (Multiplayer_<serverIP>) for the connected server.
+     * This is the parent directory containing all dimension folders.
+     *
+     * Path structure: xaero/world-map/Multiplayer_<server>/
+     */
+    public static Path getCurrentServerDirectory() {
+        Minecraft mc = Minecraft.getInstance();
+        ClientPacketListener connection = mc.getConnection();
+        if (connection == null) {
+            LOGGER.warn("getCurrentServerDirectory: connection is null");
+            return null;
+        }
+
+        ServerData serverData = connection.getServerData();
+        Path gameDir = mc.gameDirectory.toPath();
+        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+
+        String serverIP;
+
+        if (serverData != null && serverData.ip != null && !serverData.ip.isEmpty()) {
+            serverIP = serverData.ip;
+
+            // Clean up server IP
+            int portDivider = serverIP.lastIndexOf(":");
+            if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
+                portDivider = serverIP.lastIndexOf("]:") + 1;
+            }
+            if (portDivider > 0) {
+                serverIP = serverIP.substring(0, portDivider);
+            }
+            serverIP = serverIP.replace("[", "").replace("]", "");
+            serverIP = serverIP.replaceAll(":", ".");
+            while (serverIP.endsWith(".")) {
+                serverIP = serverIP.substring(0, serverIP.length() - 1);
+            }
+            if (serverIP.isEmpty()) {
+                serverIP = "Empty Address";
+            }
+        } else {
+            if (mc.hasSingleplayerServer()) {
+                serverIP = "Singleplayer";
+            } else {
+                serverIP = "LAN";
+            }
+        }
+
+        Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
+        LOGGER.debug("Server directory: {}", serverDir);
+        return serverDir;
+    }
+
+    /**
      * Write map data received from server to the correct location.
      * Uses the server-provided worldId to ensure correct directory path.
      * Returns the mw directory path for further processing.

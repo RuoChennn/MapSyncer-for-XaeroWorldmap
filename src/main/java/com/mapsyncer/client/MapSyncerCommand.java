@@ -182,14 +182,12 @@ public class MapSyncerCommand {
 
         // 解析维度 ID
         String dimensionId = resolveDimensionId(dimInput, mc.level);
-        String friendlyName = getFriendlyName(dimensionId);
 
         mc.player.displayClientMessage(
-                prefix().append(Component.literal("开始同步维度: " + friendlyName).withStyle(s -> s.withColor(0xFFFFFF))),
+                prefix().append(Component.literal("开始同步维度: " + dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
                 false);
 
-        Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
-        sendSyncRequest(mc, baseDir, dimensionId, false);
+        sendSyncRequest(mc, dimensionId, false);
 
         return Command.SINGLE_SUCCESS;
     }
@@ -205,8 +203,7 @@ public class MapSyncerCommand {
                 prefix().append(Component.literal("开始同步所有维度...").withStyle(s -> s.withColor(0xFFFFFF))),
                 false);
 
-        Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
-        sendSyncRequest(mc, baseDir, "all", true);
+        sendSyncRequest(mc, "all", true);
 
         return Command.SINGLE_SUCCESS;
     }
@@ -220,14 +217,12 @@ public class MapSyncerCommand {
 
         ResourceKey<Level> currentDim = mc.level.dimension();
         String dimensionId = currentDim.location().toString();
-        String friendlyName = getFriendlyName(dimensionId);
 
         mc.player.displayClientMessage(
-                prefix().append(Component.literal("同步当前维度: " + friendlyName).withStyle(s -> s.withColor(0xFFFFFF))),
+                prefix().append(Component.literal("同步当前维度: " + dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
                 false);
 
-        Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
-        sendSyncRequest(mc, baseDir, dimensionId, false);
+        sendSyncRequest(mc, dimensionId, false);
 
         return Command.SINGLE_SUCCESS;
     }
@@ -266,36 +261,25 @@ public class MapSyncerCommand {
         return "minecraft:" + input;
     }
 
-    /**
-     * 获取友好显示名称
-     */
-    private static String getFriendlyName(String dimensionId) {
-        if (dimensionId.startsWith("minecraft:")) {
-            String path = dimensionId.substring(10);
-            switch (path) {
-                case "overworld": return "主世界";
-                case "the_nether": return "地狱";
-                case "the_end": return "末地";
-            }
-        }
-        return dimensionId;
-    }
-
+    
     /**
      * 发送同步请求
      */
-    private static void sendSyncRequest(Minecraft mc, Path baseDir, String dimensionId, boolean syncAll) {
+    private static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
         Map<String, ClientMeta> metaMap;
 
-        ClientTimestampCache tsCache = baseDir != null && baseDir.toFile().exists()
-                ? ClientTimestampCache.getInstance(baseDir) : null;
+        // 直接获取服务器目录（Multiplayer_<serverIP>）
+        Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+
+        ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
+                ? ClientTimestampCache.getInstance(serverDir) : null;
 
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         String xaeroDim = syncAll ? null : dimMapping.toXaeroDimension(dimensionId);
 
         if (syncAll) {
-            if (baseDir != null && tsCache != null && tsCache.cacheFileExists()) {
-                metaMap = ClientHashManager.computeMetaForSync(baseDir);
+            if (serverDir != null && tsCache != null && tsCache.cacheFileExists()) {
+                metaMap = ClientHashManager.computeMetaForSync(serverDir);
                 LOGGER.info("Sync all: {} cached entries", metaMap.size());
             } else {
                 metaMap = new java.util.HashMap<>();
@@ -303,8 +287,8 @@ public class MapSyncerCommand {
             }
         } else {
             if (tsCache != null && tsCache.cacheFileExists() && tsCache.hasDimensionSynced(xaeroDim)) {
-                Path targetDir = baseDir.resolve(xaeroDim);
-                Path mwDir = findMwDir(targetDir);
+                Path dimDir = serverDir.resolve(xaeroDim);
+                Path mwDir = findMwDir(dimDir);
                 if (mwDir != null) {
                     metaMap = ClientHashManager.computeMetaForSync(mwDir);
                     LOGGER.info("Dimension {} previously synced, {} entries", dimensionId, metaMap.size());
@@ -320,7 +304,7 @@ public class MapSyncerCommand {
             }
         }
 
-        LOGGER.info("Sending sync request with {} entries", metaMap.size());
+        LOGGER.info("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
 
         if (metaMap.isEmpty()) {
             mc.player.displayClientMessage(

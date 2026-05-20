@@ -280,9 +280,20 @@ public class ServerSyncHandler {
 
                         LOGGER.info("Checking cache file: normalizedPath={}, xaeroDimName={}", normalizedPath, xaeroDimName);
 
+                        // 兼容旧版本缓存：将 Minecraft 格式的维度名转换为 Xaero 格式
+                        // 旧版本可能生成 overworld, the_nether, the_end 目录
+                        // 新版本使用 null, DIM-1, DIM1 目录
+                        String normalizedXaeroDim = dimMapping.toXaeroDimension(xaeroDimName);
+                        if (!normalizedXaeroDim.equals(xaeroDimName)) {
+                            LOGGER.info("Legacy cache dir detected: {} -> {}", xaeroDimName, normalizedXaeroDim);
+                            // 更新 normalizedPath 使用正确的 Xaero 格式
+                            normalizedPath = normalizedXaeroDim + normalizedPath.substring(xaeroDimName.length());
+                            LOGGER.info("Updated normalizedPath: {}", normalizedPath);
+                        }
+
                         // Skip if client didn't request this dimension (直接用 Xaero 格式匹配)
-                        if (!requestedDimensions.contains(xaeroDimName)) {
-                            LOGGER.info("Skipping {}: xaero dim {} not in requestedDimensions {}", normalizedPath, xaeroDimName, requestedDimensions);
+                        if (!requestedDimensions.contains(normalizedXaeroDim)) {
+                            LOGGER.info("Skipping {}: xaero dim {} (original {}) not in requestedDimensions {}", normalizedPath, normalizedXaeroDim, xaeroDimName, requestedDimensions);
                             return;
                         }
 
@@ -293,9 +304,32 @@ public class ServerSyncHandler {
                                 serverMeta != null ? "ts=" + serverMeta.timestampSeconds() + ",hash=" + serverMeta.hash() : "null",
                                 clientMetaEntry != null ? "ts=" + clientMetaEntry.timestampSeconds() + ",hash=" + clientMetaEntry.hash() : "null");
 
-                        // Server has no record → skip (shouldn't happen if generate ran)
+                        // Server has no GenerationCache entry → compute hash from file and compare
+                        // This handles legacy cache that doesn't have generation_cache.properties
                         if (serverMeta == null) {
-                            LOGGER.info("Skipping {}: no server cache entry", normalizedPath);
+                            String serverHash = GenerationCache.computeFileHash(zipPath);
+                            long fileTimestamp = System.currentTimeMillis() / 1000;
+
+                            LOGGER.info("No server cache entry, computed hash from file: {}, ts={}", serverHash, fileTimestamp);
+
+                            // Client has no metadata → sync (new region for client)
+                            if (clientMetaEntry == null) {
+                                LOGGER.info("Will sync {}: client has no metadata (new region)", normalizedPath);
+                                addChunkData(diffs, zipPath, normalizedPath, fileTimestamp);
+                                return;
+                            }
+
+                            // Hash match → skip sync (file content identical)
+                            if (serverHash.equals(clientMetaEntry.hash())) {
+                                LOGGER.info("Skipping {}: hash match (computed server={}, client={})",
+                                        normalizedPath, serverHash, clientMetaEntry.hash());
+                                return;
+                            }
+
+                            // Hash mismatch → sync (server has newer data from file)
+                            LOGGER.info("Will sync {}: hash mismatch (computed server={}, client={})",
+                                    normalizedPath, serverHash, clientMetaEntry.hash());
+                            addChunkData(diffs, zipPath, normalizedPath, fileTimestamp);
                             return;
                         }
 

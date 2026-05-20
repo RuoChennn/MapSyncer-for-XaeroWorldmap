@@ -22,6 +22,7 @@ public class ClientTimestampCache {
     private static final String CACHE_FILE_NAME = "sync_timestamps.cache";
 
     private static volatile ClientTimestampCache instance;
+    private static volatile Path lastBaseDir = null;  // Track the last used baseDir
 
     private final Path cacheFile;
     private final Map<String, CacheEntry> cache = new HashMap<>();
@@ -55,12 +56,20 @@ public class ClientTimestampCache {
 
     /**
      * 获取实例，baseDir 通常是 Multiplayer_<server> 目录
+     * 如果路径发生变化，会重新初始化单例
      */
     public static ClientTimestampCache getInstance(Path baseDir) {
-        if (instance == null) {
+        if (baseDir == null) {
+            return instance;
+        }
+
+        // 如果路径变化，重置单例
+        if (instance == null || lastBaseDir == null || !lastBaseDir.equals(baseDir)) {
             synchronized (ClientTimestampCache.class) {
-                if (instance == null) {
+                if (instance == null || lastBaseDir == null || !lastBaseDir.equals(baseDir)) {
                     instance = new ClientTimestampCache(baseDir);
+                    lastBaseDir = baseDir;
+                    LOGGER.info("ClientTimestampCache initialized for baseDir: {}", baseDir);
                 }
             }
         }
@@ -74,6 +83,7 @@ public class ClientTimestampCache {
         if (instance != null) {
             instance.cache.clear();
             instance = null;
+            lastBaseDir = null;
             LOGGER.info("ClientTimestampCache instance reset");
         }
     }
