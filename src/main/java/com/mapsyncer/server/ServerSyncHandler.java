@@ -7,6 +7,7 @@ import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.server.GenerationCache.RegionMeta;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -36,6 +37,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ServerSyncHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerSyncHandler.class);
+
+    /**
+     * 创建带颜色的前缀组件
+     */
+    private static MutableComponent prefix() {
+        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E));
+    }
     // Maximum packet size ~1MB to avoid "Packet too large" error
     private static final int MAX_PACKET_SIZE = 1_000_000;
 
@@ -213,7 +221,7 @@ public class ServerSyncHandler {
         Path cacheDir = ConversionOrchestrator.CACHE_DIR;
 
         if (!Files.exists(cacheDir)) {
-            serverPlayer.sendSystemMessage(Component.translatable("mapsyncer.server.no_cache"));
+            serverPlayer.sendSystemMessage(prefix().append(Component.translatable("mapsyncer.server.no_cache").withStyle(s -> s.withColor(0xFFFFFF))));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -258,8 +266,8 @@ public class ServerSyncHandler {
             if (!Files.exists(dimCacheDir) || !dimCacheDir.toFile().isDirectory()) {
                 // 将 Xaero 格式转换为用户友好名称用于提示
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
-                serverPlayer.sendSystemMessage(Component.translatable(
-                        "mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
+                serverPlayer.sendSystemMessage(prefix().append(Component.translatable(
+                        "mapsyncer.server.dim_not_available", friendlyDim, friendlyDim).withStyle(s -> s.withColor(0xFF5555))));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
                 // 继续处理其他维度，而不是直接返回
             }
@@ -379,8 +387,8 @@ public class ServerSyncHandler {
                 serverPlayer.getName().getString(), total, hashMatchCount, timestampSkipCount);
 
         if (total == 0) {
-            serverPlayer.sendSystemMessage(Component.translatable(
-                    "mapsyncer.server.map_uptodate", hashMatchCount, timestampSkipCount));
+            serverPlayer.sendSystemMessage(prefix().append(Component.translatable(
+                    "mapsyncer.server.map_uptodate", hashMatchCount, timestampSkipCount).withStyle(s -> s.withColor(0x55FF55))));
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
             syncingPlayers.remove(playerId);
@@ -389,8 +397,8 @@ public class ServerSyncHandler {
             return;
         }
 
-        serverPlayer.sendSystemMessage(Component.translatable(
-                "mapsyncer.server.sync_start", total, hashMatchCount, timestampSkipCount));
+        serverPlayer.sendSystemMessage(prefix().append(Component.translatable(
+                "mapsyncer.server.sync_start", total, hashMatchCount, timestampSkipCount).withStyle(s -> s.withColor(0xFFFFFF))));
 
         // Check if this is a resumed sync
         SyncProgress existingProgress = playerSyncProgress.get(playerId);
@@ -470,7 +478,7 @@ public class ServerSyncHandler {
                 new PacketHandler.SyncProgressPayload(total, total, "completed"));
 
         serverPlayer.sendSystemMessage(
-                Component.translatable("mapsyncer.server.sync_complete", total));
+                prefix().append(Component.translatable("mapsyncer.server.sync_complete", total).withStyle(s -> s.withColor(0x55FF55))));
         LOGGER.info("Map sync complete for player {}: {} regions",
                 serverPlayer.getName().getString(), total);
 

@@ -14,11 +14,19 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 
 public class CacheGenerateCommand {
+
+    /**
+     * 创建带颜色的前缀组件
+     */
+    private static MutableComponent prefix() {
+        return Component.translatable("mapsyncer.prefix").withStyle(style -> style.withColor(0xFFE55E));
+    }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mapsyncer")
@@ -55,30 +63,30 @@ public class CacheGenerateCommand {
     }
 
     private static int showHelp(CommandContext<CommandSourceStack> ctx) {
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.header"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_dim"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_region"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_force"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.status"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_header"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_off"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_tick"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_scheduled"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_status"), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.help.server.header").withStyle(s -> s.withColor(0xFFFFFF))), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_dim").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_region").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.generate_force").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.status").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.help.server.incremental_header").withStyle(s -> s.withColor(0xFFFF55))), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_off").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_tick").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_scheduled").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.help.server.incremental_status").withStyle(s -> s.withColor(0xAAAAAA)), false);
         return Command.SINGLE_SUCCESS;
     }
 
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
         MinecraftServer server = ctx.getSource().getServer();
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.generate.start_full"), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.generate.start_full").withStyle(s -> s.withColor(0xFFFFFF))), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateAll(server);
-            ctx.getSource().sendSuccess(() -> Component.translatable(
+            ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
                     "mapsyncer.generate.full_complete",
                     ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount()), false);
+                    ConversionOrchestrator.getTotalCount()).withStyle(s -> s.withColor(0x55FF55))), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -91,15 +99,15 @@ public class CacheGenerateCommand {
         MinecraftServer server = ctx.getSource().getServer();
         String dimensionId = dimension.location().toString();
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                "mapsyncer.generate.start_dim", friendlyName), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
+                "mapsyncer.generate.start_dim", friendlyName).withStyle(s -> s.withColor(0xFFFFFF))), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimension(server, dimensionId);
-            ctx.getSource().sendSuccess(() -> Component.translatable(
+            ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
                     "mapsyncer.generate.dim_complete",
                     ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount()), false);
+                    ConversionOrchestrator.getTotalCount()).withStyle(s -> s.withColor(0x55FF55))), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -112,15 +120,15 @@ public class CacheGenerateCommand {
         MinecraftServer server = ctx.getSource().getServer();
         String dimensionId = dimension.location().toString();
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                "mapsyncer.generate.start_force", friendlyName), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
+                "mapsyncer.generate.start_force", friendlyName).withStyle(s -> s.withColor(0xFFFFFF))), false);
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimensionForce(server, dimensionId);
-            ctx.getSource().sendSuccess(() -> Component.translatable(
+            ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
                     "mapsyncer.generate.force_complete",
                     ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount()), false);
+                    ConversionOrchestrator.getTotalCount()).withStyle(s -> s.withColor(0x55FF55))), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -137,19 +145,19 @@ public class CacheGenerateCommand {
         // 提前检查 MCA 文件是否存在
         if (ConversionOrchestrator.checkMcaFileExists(server, dimension, x, z) == null) {
             String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
-            ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.region_not_found", x, z, friendlyName));
+            ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.region_not_found", x, z, friendlyName).withStyle(s -> s.withColor(0xFF5555)));
             return 0;
         }
 
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.generating_region", x, z, friendlyName), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.generating_region", x, z, friendlyName).withStyle(s -> s.withColor(0xFFFFFF))), false);
 
         Thread worker = new Thread(() -> {
             SingleRegionResult result = ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);
             if (result == SingleRegionResult.SUCCESS) {
-                ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.region_converted"), false);
+                ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.region_converted").withStyle(s -> s.withColor(0x55FF55))), false);
             } else if (result == SingleRegionResult.CONVERSION_FAILED) {
-                ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.region_conversion_failed", x, z));
+                ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.region_conversion_failed", x, z).withStyle(s -> s.withColor(0xFF5555)));
             }
         }, "xaero-map-generator");
         worker.start();
@@ -159,13 +167,13 @@ public class CacheGenerateCommand {
 
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
         if (ConversionOrchestrator.isRunning()) {
-            ctx.getSource().sendSuccess(() -> Component.translatable(
+            ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
                     "mapsyncer.generate.in_progress",
                     ConversionOrchestrator.getProcessedCount(),
                     ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getStatus()), false);
+                    ConversionOrchestrator.getStatus()).withStyle(s -> s.withColor(0xFFFFFF))), false);
         } else {
-            ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.generate.no_progress"), false);
+            ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.generate.no_progress").withStyle(s -> s.withColor(0xAAAAAA))), false);
         }
         return Command.SINGLE_SUCCESS;
     }
@@ -174,7 +182,7 @@ public class CacheGenerateCommand {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.DISABLED);
         saveConfig();
         IncrementalUpdateHandler.getInstance().stop();
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_disabled"), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.incremental_disabled").withStyle(s -> s.withColor(0x55FF55))), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -183,7 +191,7 @@ public class CacheGenerateCommand {
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_tick_set", interval, interval / 20.0f), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.incremental_tick_set", interval, interval / 20.0f).withStyle(s -> s.withColor(0x55FF55))), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -193,7 +201,7 @@ public class CacheGenerateCommand {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_tick_interval", interval, interval / 20.0f), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.incremental_tick_interval", interval, interval / 20.0f).withStyle(s -> s.withColor(0x55FF55))), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -203,7 +211,7 @@ public class CacheGenerateCommand {
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         int hour = ModConfig.SERVER.scheduledUpdateHour.get();
         int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute).withStyle(s -> s.withColor(0x55FF55))), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -214,7 +222,7 @@ public class CacheGenerateCommand {
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute).withStyle(s -> s.withColor(0x55FF55))), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -226,7 +234,7 @@ public class CacheGenerateCommand {
         ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        ctx.getSource().sendSuccess(() -> Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable("mapsyncer.command.incremental_scheduled_set", hour, minute).withStyle(s -> s.withColor(0x55FF55))), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -239,8 +247,8 @@ public class CacheGenerateCommand {
 
     private static int showIncrementalStatus(CommandContext<CommandSourceStack> ctx) {
         String status = IncrementalUpdateHandler.getInstance().getStatusInfo();
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                "mapsyncer.generate.incremental_status", status), false);
+        ctx.getSource().sendSuccess(() -> prefix().append(Component.translatable(
+                "mapsyncer.generate.incremental_status", status).withStyle(s -> s.withColor(0xFFFFFF))), false);
         return Command.SINGLE_SUCCESS;
     }
 }

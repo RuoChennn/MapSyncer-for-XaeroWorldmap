@@ -27,6 +27,18 @@
 
   "mapsyncer.prefix": "[MapSyncer]",
 
+  "mapsyncer.help.server.header": "Server Commands Help:",
+  "mapsyncer.help.server.generate": "/mapsyncer generate - Generate map cache for all dimensions",
+  "mapsyncer.help.server.generate_dim": "/mapsyncer generate <dim> - Generate cache for specified dimension (incremental)",
+  "mapsyncer.help.server.generate_region": "/mapsyncer generate <dim> <x> <z> - Generate single region",
+  "mapsyncer.help.server.generate_force": "/mapsyncer generate <dim> force - Force regenerate (ignore existing cache)",
+  "mapsyncer.help.server.status": "/mapsyncer status - Show generation progress and status",
+  "mapsyncer.help.server.incremental_header": "Incremental Update Commands:",
+  "mapsyncer.help.server.incremental_off": "/mapsyncer incremental off - Disable incremental updates",
+  "mapsyncer.help.server.incremental_tick": "/mapsyncer incremental tick [interval] - Set TICK mode",
+  "mapsyncer.help.server.incremental_scheduled": "/mapsyncer incremental scheduled [hour] [min] - Set scheduled mode",
+  "mapsyncer.help.server.incremental_status": "/mapsyncer incremental status - Show incremental update status",
+
   "mapsyncer.chunk.paused": "Chunk updates paused...",
   "mapsyncer.chunk.resumed": "Chunk updates resumed",
 
