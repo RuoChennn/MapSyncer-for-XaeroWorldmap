@@ -231,9 +231,10 @@ public class ServerSyncHandler {
         int timestampSkipCount = 0;
 
         // Determine which dimensions the client is requesting (based on their metadata keys)
-        // 客户端发送的维度名是 Xaero 格式（如 null, DIM-1, DIM1）
+        // 客户端发送的维度名是 Xaero 格式（如 null, DIM-1, DIM1, twilightforest$twilight_forest）
         Set<String> requestedDimensions = new java.util.HashSet<>();
         for (String key : clientMeta.keySet()) {
+            LOGGER.info("Client meta key: {}", key);
             String[] parts = key.split("[/\\\\]");
             if (parts.length > 1) {
                 String dim = parts[0];
@@ -243,7 +244,7 @@ public class ServerSyncHandler {
                 } else {
                     // Placeholder indicates client wants full sync for this dimension
                     requestedDimensions.add(dim);
-                    LOGGER.debug("Found placeholder for dimension {}, will sync all regions", dim);
+                    LOGGER.info("Found placeholder for dimension {}, will sync all regions", dim);
                 }
             }
         }
@@ -277,32 +278,37 @@ public class ServerSyncHandler {
                         String[] parts = normalizedPath.split("[/\\\\]");
                         String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
 
+                        LOGGER.info("Checking cache file: normalizedPath={}, xaeroDimName={}", normalizedPath, xaeroDimName);
+
                         // Skip if client didn't request this dimension (直接用 Xaero 格式匹配)
                         if (!requestedDimensions.contains(xaeroDimName)) {
-                            LOGGER.debug("Skipping {}: xaero dim {} not requested by client", normalizedPath, xaeroDimName);
-                            // dimensionSkipCount would need to be AtomicInteger for lambda
+                            LOGGER.info("Skipping {}: xaero dim {} not in requestedDimensions {}", normalizedPath, xaeroDimName, requestedDimensions);
                             return;
                         }
 
                         RegionMeta serverMeta = serverCache.get(normalizedPath);
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
 
+                        LOGGER.info("Comparing {}: serverMeta={}, clientMetaEntry={}", normalizedPath,
+                                serverMeta != null ? "ts=" + serverMeta.timestampSeconds() + ",hash=" + serverMeta.hash() : "null",
+                                clientMetaEntry != null ? "ts=" + clientMetaEntry.timestampSeconds() + ",hash=" + clientMetaEntry.hash() : "null");
+
                         // Server has no record → skip (shouldn't happen if generate ran)
                         if (serverMeta == null) {
-                            LOGGER.debug("Skipping {}: no server cache entry", normalizedPath);
+                            LOGGER.info("Skipping {}: no server cache entry", normalizedPath);
                             return;
                         }
 
                         // Client has no metadata → sync (new region for client)
                         if (clientMetaEntry == null) {
-                            LOGGER.debug("Will sync {}: client has no metadata (new region)", normalizedPath);
+                            LOGGER.info("Will sync {}: client has no metadata (new region)", normalizedPath);
                             addChunkData(diffs, zipPath, normalizedPath, serverMeta.timestampSeconds());
                             return;
                         }
 
                         // Hash match → skip sync (file content identical)
                         if (serverMeta.hash().equals(clientMetaEntry.hash())) {
-                            LOGGER.debug("Skipping {}: hash match (server={}, client={})",
+                            LOGGER.info("Skipping {}: hash match (server={}, client={})",
                                     normalizedPath, serverMeta.hash(), clientMetaEntry.hash());
                             return;  // hashMatchCount incremented outside lambda
                         }
@@ -310,12 +316,12 @@ public class ServerSyncHandler {
                         // Hash mismatch → check timestamps
                         // Client timestamp older than server → sync
                         if (clientMetaEntry.timestampSeconds() < serverMeta.timestampSeconds()) {
-                            LOGGER.debug("Will sync {}: hash mismatch, client ts={}s < server ts={}s",
+                            LOGGER.info("Will sync {}: hash mismatch, client ts={}s < server ts={}s",
                                     normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
                             addChunkData(diffs, zipPath, normalizedPath, serverMeta.timestampSeconds());
                         } else {
                             // Client timestamp newer → skip (client explored newer content)
-                            LOGGER.debug("Skipping {}: hash mismatch but client ts={}s >= server ts={}s",
+                            LOGGER.info("Skipping {}: hash mismatch but client ts={}s >= server ts={}s",
                                     normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
                         }
                     });

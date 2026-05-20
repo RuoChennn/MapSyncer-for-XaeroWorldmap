@@ -926,7 +926,9 @@ public class XaeroMapIntegrator {
      * - 洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip
      */
     private static Path writeChunkDataAndGetDir(ChunkMapData chunk, Path serverDir, int worldId) {
-        String xaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(chunk.dimension);
+        // chunk.dimension 已经是 Xaero 格式，直接使用
+        // 注意：服务端发送的 dimension 就是 Xaero 格式（如 null, DIM-1, DIM1, twilightforest$twilight_forest）
+        String xaeroDim = chunk.dimension;
         Path dimDir = serverDir.resolve(xaeroDim);
         Path mwDir = dimDir.resolve("mw$" + worldId);
 

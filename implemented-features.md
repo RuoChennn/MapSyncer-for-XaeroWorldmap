@@ -260,6 +260,35 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 区域 ZIP 文件 | ✅ | 单个 `region.xaero`，标准 ZIP 压缩 |
 | caves 层路径 | 🧪 | `dim/caves/layer/regionX_regionZ` 格式 |
 
+#### 缓存键格式规范（重要）
+
+服务端和客户端缓存文件使用**统一的 Xaero 格式**作为键：
+
+**原版维度映射**：
+| Minecraft 维度 ID | Xaero 缓存键 |
+|-------------------|--------------|
+| `minecraft:overworld` / `overworld` | `null` |
+| `minecraft:the_nether` / `the_nether` | `DIM-1` |
+| `minecraft:the_end` / `the_end` | `DIM1` |
+
+**Mod 维度映射**：
+| Minecraft 维度 ID | Xaero 缓存键 |
+|-------------------|--------------|
+| `twilightforest:twilight_forest` | `twilightforest$twilight_forest` |
+| `namespace:dimension_path` | `namespace$dimension_path` |
+
+**缓存键示例**：
+```properties
+# 服务端 generation_cache.properties 和客户端 sync_timestamps.cache 使用相同格式
+null/126_23=1779279580:f540e181        # 主世界
+DIM-1/-1_-1=1779189518:d99819be        # 地狱
+DIM1/-1_-1=1779240467:7e547918         # 末地
+twilightforest$twilight_forest/0_0=1779268940:e82308b4  # Mod 维度
+DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
+```
+
+**注意**：旧版本客户端缓存可能使用 Minecraft 维度名（如 `overworld/-1_-1`），需要删除旧缓存文件让其重新生成以使用正确的 Xaero 格式。
+
 ---
 
 ## 八、MCA 文件解析系统
@@ -396,13 +425,23 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ---
 
-**文档版本**: 3.9
+**文档版本**: 4.0
 **最后更新**: 2026-05-20
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
 ---
 
 ### 历史更新记录
+
+**2026-05-20 更新 (v4.0)**:
+
+- ✅ **缓存键格式规范统一**: 服务端和客户端缓存使用统一的 Xaero 格式作为键
+  - 问题：旧版本客户端缓存使用 Minecraft 维度名（如 `overworld/-1_-1`），与服务端 Xaero 格式（如 `null/-1_-1`）不匹配
+  - 修复：确认服务端和客户端缓存键均使用 Xaero 格式（`null`, `DIM-1`, `DIM1`, `namespace$path`）
+  - 修复：`XaeroMapIntegrator.writeChunkDataAndGetDir` 移除冗余的维度名转换（`chunk.dimension` 已是 Xaero 格式）
+  - 修复：`ClientHashManager.ensureCorrectXaeroFormat` 正确处理所有维度名输入格式
+  - 文档：添加缓存键格式规范说明，包括原版维度和 Mod 维度的映射表
+  - 注意：旧版本生成的缓存文件需要删除让其重新生成
 
 **2026-05-20 更新 (v3.8)**:
 
