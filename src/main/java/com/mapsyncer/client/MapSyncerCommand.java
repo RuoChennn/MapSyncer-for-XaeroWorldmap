@@ -67,12 +67,11 @@ public class MapSyncerCommand {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
-        mc.player.displayClientMessage(prefix(), false);
-        mc.player.displayClientMessage(Component.literal("用法:").withStyle(s -> s.withColor(0xFFFFFF)), false);
-        mc.player.displayClientMessage(Component.literal("  /mapsyncer sync - 同步当前维度").withStyle(s -> s.withColor(0xAAAAAA)), false);
-        mc.player.displayClientMessage(Component.literal("  /mapsyncer sync <维度> - 同步指定维度").withStyle(s -> s.withColor(0xAAAAAA)), false);
-        mc.player.displayClientMessage(Component.literal("  /mapsyncer sync all - 同步所有维度").withStyle(s -> s.withColor(0xAAAAAA)), false);
-        mc.player.displayClientMessage(Component.literal("维度名称: overworld, the_nether, the_end 或完整ID如 twilightforest:twilight_forest").withStyle(s -> s.withColor(0xFFFF55)), false);
+        mc.player.displayClientMessage(prefix().append(Component.translatable("mapsyncer.command.help_header").withStyle(s -> s.withColor(0xFFFFFF))), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_sync").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_sync_dim").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_sync_all").withStyle(s -> s.withColor(0xAAAAAA)), false);
+        mc.player.displayClientMessage(Component.translatable("mapsyncer.command.help_dimension_note").withStyle(s -> s.withColor(0xFFFF55)), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -184,7 +183,7 @@ public class MapSyncerCommand {
         String dimensionId = resolveDimensionId(dimInput, mc.level);
 
         mc.player.displayClientMessage(
-                prefix().append(Component.literal("开始同步维度: " + dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
+                prefix().append(Component.translatable("mapsyncer.command.sync_dimension", dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
                 false);
 
         sendSyncRequest(mc, dimensionId, false);
@@ -200,7 +199,7 @@ public class MapSyncerCommand {
         if (mc.player == null) return 0;
 
         mc.player.displayClientMessage(
-                prefix().append(Component.literal("开始同步所有维度...").withStyle(s -> s.withColor(0xFFFFFF))),
+                prefix().append(Component.translatable("mapsyncer.command.sync_all").withStyle(s -> s.withColor(0xFFFFFF))),
                 false);
 
         sendSyncRequest(mc, "all", true);
@@ -219,7 +218,7 @@ public class MapSyncerCommand {
         String dimensionId = currentDim.location().toString();
 
         mc.player.displayClientMessage(
-                prefix().append(Component.literal("同步当前维度: " + dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
+                prefix().append(Component.translatable("mapsyncer.command.sync_current", dimensionId).withStyle(s -> s.withColor(0xFFFFFF))),
                 false);
 
         sendSyncRequest(mc, dimensionId, false);
@@ -308,11 +307,11 @@ public class MapSyncerCommand {
 
         if (metaMap.isEmpty()) {
             mc.player.displayClientMessage(
-                    prefix().append(Component.literal("没有需要同步的区域").withStyle(s -> s.withColor(0xFFFFFF))),
+                    prefix().append(Component.translatable("mapsyncer.command.no_regions").withStyle(s -> s.withColor(0xFFFFFF))),
                     false);
         } else {
             mc.player.displayClientMessage(
-                    prefix().append(Component.literal("检查 " + metaMap.size() + " 个区域...").withStyle(s -> s.withColor(0xFFFFFF))),
+                    prefix().append(Component.translatable("mapsyncer.command.checking_regions", metaMap.size()).withStyle(s -> s.withColor(0xFFFFFF))),
                     false);
         }
 
