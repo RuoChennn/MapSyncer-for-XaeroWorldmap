@@ -52,14 +52,8 @@ public class DimensionPathMapping {
     // ResourceLocation path → 文件系统目录名（运行时检测到的实际路径）
     private final Map<String, String> pathToFolder = new ConcurrentHashMap<>();
 
-    // 文件系统目录名 → ResourceLocation path（反向映射）
-    private final Map<String, String> folderToPath = new ConcurrentHashMap<>();
-
     // ResourceLocation path → Xaero 目录名
     private final Map<String, String> pathToXaero = new ConcurrentHashMap<>();
-
-    // Xaero 目录名 → ResourceLocation path
-    private final Map<String, String> xaeroToPath = new ConcurrentHashMap<>();
 
     // ========== 预设映射 ==========
 
@@ -97,23 +91,7 @@ public class DimensionPathMapping {
         // 初始化 Xaero 映射（仅原版维度）
         pathToXaero.putAll(VANILLA_XAERO_MAPPINGS);
 
-        // 构建反向映射
-        rebuildReverseMappings();
-
         LOGGER.info("DimensionPathMapping initialized with {} Xaero mappings", pathToXaero.size());
-    }
-
-    private void rebuildReverseMappings() {
-        folderToPath.clear();
-        xaeroToPath.clear();
-
-        for (Map.Entry<String, String> entry : pathToFolder.entrySet()) {
-            folderToPath.put(entry.getValue(), entry.getKey());
-        }
-
-        for (Map.Entry<String, String> entry : pathToXaero.entrySet()) {
-            xaeroToPath.put(entry.getValue(), entry.getKey());
-        }
     }
 
     /**
@@ -177,7 +155,6 @@ public class DimensionPathMapping {
                 if (Files.exists(regionDir)) {
                     LOGGER.info("Detected vanilla dimension {}: {}", normalized, vanillaFolder);
                     pathToFolder.put(normalized, vanillaFolder);
-                    rebuildReverseMappings();
                     return regionDir;
                 }
             }
@@ -192,7 +169,6 @@ public class DimensionPathMapping {
                 if (Files.exists(regionDir)) {
                     LOGGER.info("Detected Mod dimension {} (new format): {}", normalized, newFormatFolder);
                     pathToFolder.put(normalized, newFormatFolder);
-                    rebuildReverseMappings();
                     return regionDir;
                 }
             }
@@ -271,9 +247,11 @@ public class DimensionPathMapping {
      * 根据文件系统目录名获取 ResourceLocation path
      */
     public String getPathFromFolder(String folderName) {
-        String registered = folderToPath.get(folderName);
-        if (registered != null) {
-            return registered;
+        // 遍历正向映射查找
+        for (Map.Entry<String, String> entry : pathToFolder.entrySet()) {
+            if (entry.getValue().equals(folderName)) {
+                return entry.getKey();
+            }
         }
 
         // 新格式：dimensions/<namespace>/<path> → namespace:path
@@ -337,9 +315,11 @@ public class DimensionPathMapping {
      * 根据 Xaero 目录名获取 ResourceLocation path
      */
     public String getPathFromXaero(String xaeroFolder) {
-        String registered = xaeroToPath.get(xaeroFolder);
-        if (registered != null) {
-            return registered;
+        // 遍历正向映射查找
+        for (Map.Entry<String, String> entry : pathToXaero.entrySet()) {
+            if (entry.getValue().equals(xaeroFolder)) {
+                return entry.getKey();
+            }
         }
 
         // Xaero 原版维度特殊值
@@ -372,10 +352,11 @@ public class DimensionPathMapping {
         if ("DIM-1".equals(normalized)) return "the_nether";
         if ("DIM1".equals(normalized)) return "the_end";
 
-        // 从 Xaero 目录名反向查找
-        String fromXaero = xaeroToPath.get(normalized);
-        if (fromXaero != null) {
-            return fromXaero;
+        // 从 Xaero 目录名反向查找（遍历正向映射）
+        for (Map.Entry<String, String> entry : pathToXaero.entrySet()) {
+            if (entry.getValue().equals(normalized)) {
+                return entry.getKey();
+            }
         }
 
         return normalized;
@@ -481,7 +462,6 @@ public class DimensionPathMapping {
     public void registerMapping(String dimPath, String folderName, String xaeroFolder) {
         pathToFolder.put(dimPath, folderName);
         pathToXaero.put(dimPath, xaeroFolder);
-        rebuildReverseMappings();
         LOGGER.info("Registered dimension mapping: {} -> folder={}, xaero={}", dimPath, folderName, xaeroFolder);
     }
 
@@ -526,7 +506,6 @@ public class DimensionPathMapping {
     public void removeMapping(String dimPath) {
         pathToFolder.remove(dimPath);
         pathToXaero.remove(dimPath);
-        rebuildReverseMappings();
         LOGGER.info("Removed dimension mapping for: {}", dimPath);
     }
 
@@ -538,7 +517,6 @@ public class DimensionPathMapping {
         // 保留原版维度 Xaero 映射
         pathToXaero.clear();
         pathToXaero.putAll(VANILLA_XAERO_MAPPINGS);
-        rebuildReverseMappings();
         LOGGER.info("Cleared all detected dimension mappings");
     }
 
