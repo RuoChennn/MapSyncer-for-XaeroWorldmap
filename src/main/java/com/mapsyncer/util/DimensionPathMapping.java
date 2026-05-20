@@ -65,26 +65,15 @@ public class DimensionPathMapping {
 
     static {
         // 原版维度 - 传统格式（Minecraft 1.21.X 实际格式）
-        // 主世界: region/ 目录（根目录）
+        // 只存储不带 minecraft: 前缀的版本，查询时统一通过 normalizeDimPath 处理
         VANILLA_FORMAT.put("overworld", ".");
-        VANILLA_FORMAT.put("minecraft:overworld", ".");
-        // 地狱: DIM-1/region/
         VANILLA_FORMAT.put("the_nether", "DIM-1");
-        VANILLA_FORMAT.put("minecraft:the_nether", "DIM-1");
-        // 末地: DIM1/region/
         VANILLA_FORMAT.put("the_end", "DIM1");
-        VANILLA_FORMAT.put("minecraft:the_end", "DIM1");
 
         // Xaero 目录映射 - 原版维度（固定格式）
         VANILLA_XAERO_MAPPINGS.put("overworld", "null");
-        VANILLA_XAERO_MAPPINGS.put("minecraft:overworld", "null");
         VANILLA_XAERO_MAPPINGS.put("the_nether", "DIM-1");
-        VANILLA_XAERO_MAPPINGS.put("minecraft:the_nether", "DIM-1");
         VANILLA_XAERO_MAPPINGS.put("the_end", "DIM1");
-        VANILLA_XAERO_MAPPINGS.put("minecraft:the_end", "DIM1");
-
-        // Mod 维度使用 dimensions/<namespace>/<path>/ 格式
-        // 统一使用动态检测的 namespace$path 格式（如 twilightforest$twilight_forest）
     }
 
     private DimensionPathMapping() {
@@ -182,11 +171,10 @@ public class DimensionPathMapping {
     }
 
     /**
-     * 判断是否为原版维度
+     * 判断是否为原版维度（仅判断三个原版维度）
      */
     private boolean isVanillaDimension(String dimPath) {
-        return "overworld".equals(dimPath) || "the_nether".equals(dimPath) || "the_end".equals(dimPath) ||
-               VANILLA_FORMAT.containsKey(dimPath);
+        return "overworld".equals(dimPath) || "the_nether".equals(dimPath) || "the_end".equals(dimPath);
     }
 
     /**
@@ -210,13 +198,13 @@ public class DimensionPathMapping {
      * @return 文件系统目录名
      */
     public String getFolderName(String dimPath) {
-        // 检查已缓存的映射
-        String cached = pathToFolder.get(dimPath);
+        String normalized = normalizeDimPath(dimPath);
+
+        // 检查已缓存的映射（使用标准化后的 key）
+        String cached = pathToFolder.get(normalized);
         if (cached != null) {
             return cached;
         }
-
-        String normalized = normalizeDimPath(dimPath);
 
         // 原版维度：返回传统格式
         if (isVanillaDimension(normalized)) {
