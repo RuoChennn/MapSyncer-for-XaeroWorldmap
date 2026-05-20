@@ -16,7 +16,6 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig.Type;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -37,7 +36,6 @@ public class MapSyncer {
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // Client-side initialization
-            modBus.addListener(this::onRegisterKeyMappings);
             modBus.addListener(MapPacketReceiver::register);
             LOGGER.info("MapSyncer initialized (client mode)");
         } else {
@@ -72,8 +70,5 @@ public class MapSyncer {
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         CacheGenerateCommand.register(event.getDispatcher());
-    }
-
-    private void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
     }
 }
