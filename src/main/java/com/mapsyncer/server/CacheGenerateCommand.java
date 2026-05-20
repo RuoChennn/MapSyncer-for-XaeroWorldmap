@@ -3,12 +3,13 @@ package com.mapsyncer.server;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.DimensionPathMapping;
+import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -16,7 +17,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class CacheGenerateCommand {
 
@@ -28,19 +28,7 @@ public class CacheGenerateCommand {
                         .executes(CacheGenerateCommand::showHelp))
                 .then(Commands.literal("generate")
                         .executes(CacheGenerateCommand::generateAll)
-                        .then(Commands.argument("dimension", StringArgumentType.string())
-                                .suggests((ctx, builder) -> {
-                                    MinecraftServer server = ctx.getSource().getServer();
-                                    DimensionPathMapping mapping = DimensionPathMapping.getInstance();
-                                    // 动态列出所有已加载的维度（包括 mod 创建的维度）
-                                    // 原版维度使用用户友好名称，mod 维度使用原始 path
-                                    for (ServerLevel level : server.getAllLevels()) {
-                                        ResourceKey<Level> dimKey = level.dimension();
-                                        String friendlyName = mapping.getFriendlyName(dimKey);
-                                        builder.suggest(friendlyName);
-                                    }
-                                    return builder.buildFuture();
-                                })
+                        .then(Commands.argument("dimension", DimensionArgument.dimension())
                                 .executes(CacheGenerateCommand::generateDimension)
                                 .then(Commands.argument("x", IntegerArgumentType.integer())
                                         .then(Commands.argument("z", IntegerArgumentType.integer())
@@ -97,10 +85,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateDimension(CommandContext<CommandSourceStack> ctx) {
-        String dimensionId = StringArgumentType.getString(ctx, "dimension");
+    private static int generateDimension(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
+        ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimensionId);
+        String dimensionId = dimension.location().toString();
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "mapsyncer.generate.start_dim", friendlyName), false);
 
@@ -116,10 +106,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) {
-        String dimensionId = StringArgumentType.getString(ctx, "dimension");
+    private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
+        ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimensionId);
+        String dimensionId = dimension.location().toString();
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "mapsyncer.generate.start_force", friendlyName), false);
 
@@ -135,16 +127,12 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) {
-        String dimensionId = StringArgumentType.getString(ctx, "dimension");
+    private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
+        ResourceKey<Level> dimension = level.dimension();
         int x = IntegerArgumentType.getInteger(ctx, "x");
         int z = IntegerArgumentType.getInteger(ctx, "z");
         MinecraftServer server = ctx.getSource().getServer();
-        ResourceKey<Level> dimension = ConversionOrchestrator.parseDimensionId(dimensionId, server);
-        if (dimension == null) {
-            ctx.getSource().sendFailure(Component.translatable("mapsyncer.command.unknown_dimension", dimensionId));
-            return 0;
-        }
 
         // 提前检查 MCA 文件是否存在
         if (ConversionOrchestrator.checkMcaFileExists(server, dimension, x, z) == null) {

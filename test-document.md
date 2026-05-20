@@ -34,17 +34,24 @@
 
 | 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
 |--------|----------|----------|----------|------|
-| Mod 维度识别 | 安装含自定义维度的 mod | 命令建议中显示 mod 维度 | 通过 | 在暮色森林测试，可以正常显示twilight_forest |
-| Mod 维度生成 | `/mapsyncer generate <mod:dimension>` | 成功生成 mod 维度缓存 | ✅ 已测试 | 暮色森林测试通过，使用 twilightforest$twilight_forest 格式保存 |
+| Mod 维度识别 | 安装含自定义维度的 mod | 命令建议中显示完整维度 ID（namespace:path） | ✅ 通过 | 暮色森林显示 twilightforest:twilight_forest |
+| Mod 维度生成 | `/mapsyncer generate twilightforest:twilight_forest` | 成功生成 mod 维度缓存 | ✅ 通过 | 使用 twilightforest$twilight_forest 格式保存 |
 | 维度路径格式 | 检查新格式 dimensions/minecraft/<dim> 和传统格式 DIM-1 | 自动检测并正确使用 | ✅ 已测试 | 新格式优先，暮光森林使用 dimensions/twilightforest/twilight_forest |
 | 首次转换写入配置 | 检查配置文件 region_folder | 检测结果写入配置 | ✅ 已测试 | 自动检测并写入配置 |
 
 **测试结果填写区**：
 ```
 暮光森林维度测试通过：
+- 命令格式：使用完整维度 ID（twilightforest:twilight_forest）
 - 服务端生成：缓存路径 server_map_cache/twilightforest$twilight_forest/
 - 客户端同步：保存路径 Multiplayer_server/twilightforest$twilight_forest/mw$worldId/
 - 路径格式：使用动态检测的 namespace$path 格式，不再依赖预设 DIM{id} 映射
+
+v3.5 更新：
+- 服务端命令使用 DimensionArgument 解决冒号解析问题
+- `/mapsyncer generate twilightforest:twilight_forest` 正常工作
+- 客户端命令建议显示 Mod 维度完整 ID
+- 原版维度使用简化名称（overworld, the_nether, the_end）
 ```
 
 ---
@@ -434,5 +441,5 @@
 
 ---
 
-**测试文档版本**: 2.2
+**测试文档版本**: 2.3
 **最后更新**: 2026-05-20

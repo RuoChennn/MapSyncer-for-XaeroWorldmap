@@ -396,7 +396,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ---
 
-**文档版本**: 3.2
+**文档版本**: 3.5
 **最后更新**: 2026-05-20
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
@@ -404,7 +404,39 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ### 历史更新记录
 
-**2026-05-20 更新**:
+**2026-05-20 更新 (v3.5)**:
+
+- ✅ **服务端命令使用 DimensionArgument**: 解决 Mod 维度 ID 解析问题
+  - 问题：使用 `StringArgumentType.word()` 时，包含冒号的维度 ID（如 `twilightforest:twilight_forest`）无法正确解析
+  - 修复：使用 Minecraft 提供的 `DimensionArgument.dimension()` 正确解析维度参数
+  - 自动提供维度建议：显示所有已加载维度的完整 ID（包括 Mod 维度）
+  - 支持命令：`/mapsyncer generate twilightforest:twilight_forest` 正常工作
+
+- ✅ **客户端命令添加 Mod 维度建议**: 从注册表获取已知维度
+  - 从客户端维度注册表获取已安装的 Mod 维度
+  - 从 Xaero 目录扫描已有同步数据
+  - 命令建议显示完整维度 ID（如 `twilightforest:twilight_forest`）
+
+**2026-05-20 更新 (v3.4)**:
+
+- ✅ **统一维度指令格式**: Mod 维度统一使用 `namespace:path` 格式
+  - 服务端命令建议：原版维度显示简化名称（overworld, the_nether, the_end），Mod 维度显示完整 ID（如 twilightforest:twilight_forest）
+  - 客户端命令建议：同样规则，从 Xaero 目录名（`namespace$path`）转换为完整维度 ID（`namespace:path`）
+  - `normalizeDimension` 方法：支持完整 ID 格式输入，原版维度返回简化名称，Mod 维度保持完整 ID
+  - `resolveCorrectXaeroDim` 方法简化：完整维度 ID 直接转换，缺少 namespace 时从缓存/目录反向查找
+  - 用户输入体验改进：输入 `twilightforest:twilight_forest` 而不是模糊的 `twilight_forest`
+
+**2026-05-20 更新 (v3.3)**:
+
+- ✅ **客户端增量同步维度名格式修复**: 确保客户端发送正确的 Xaero 格式维度名
+  - 问题：用户输入 `twilight_forest` 时，客户端无法转换为正确的 `twilightforest$twilight_forest` 格式
+  - 修复 `MapSyncerCommand.sendSyncRequest`: 添加 `resolveCorrectXaeroDim` 方法从缓存和目录反向查找正确格式
+  - 修复 `ClientHashManager.buildRelativePath`: 添加 `ensureCorrectXaeroFormat` 方法确保目录名转换为正确格式
+  - 修复单维度同步时使用已解析的 `xaeroDim` 作为目录名，不再调用可能失败的 `getDimensionDir`
+  - 从缓存键（`namespace$path/regionX_regionZ`）和目录结构反向查找正确的 Xaero 格式
+  - 兼容旧的错误目录格式（如只有 path 部分），能正确识别并转换为完整格式
+
+**2026-05-20 更新 (v3.2)**:
 
 - ✅ **末地虚空渲染修复**: 空白像素和空白 Tile 正确写入数据
   - 空白像素写入完整 AIR 方块状态 + null biome

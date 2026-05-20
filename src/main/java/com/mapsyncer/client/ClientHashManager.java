@@ -1,5 +1,6 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.util.DimensionPathMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -205,6 +206,11 @@ public class ClientHashManager {
      * - 地表：xaero_dim/regionX_regionZ
      * - 洞穴：xaero_dim/caves/layer/regionX_regionZ
      *
+     * 重要修复：确保 xaeroDim 使用正确的 Xaero 格式（namespace$path）
+     * - 如果目录名包含 $，说明已经是正确格式
+     * - 如果不包含，尝试从缓存反向查找正确格式
+     * - 使用 DimensionPathMapping 进行转换
+     *
      * @param zipPath the zip file path
      * @param serverDir the Multiplayer_<server> directory
      * @return relative path in server format (without .zip extension)
@@ -221,36 +227,114 @@ public class ClientHashManager {
         }
 
         // Parse path components
-        // 地表格式：dimension/mw$worldId/regionX_regionZ
-        // 洞穴格式：dimension/mw$worldId/caves/layer/regionX_regionZ
+        // 客户端路径格式：
+        // 地表：dimension/mw$worldId/regionX_regionZ (3 parts)
+        // 洞穴：dimension/mw$worldId/caves/layer/regionX_regionZ (5 parts)
         String[] parts = relative.split("/");
         if (parts.length < 3) {
             LOGGER.warn("Unexpected path format: {}", relative);
             return relative;
         }
 
-        String xaeroDim = parts[0];
+        String dirName = parts[0];  // 目录名（可能是正确的 Xaero 格式，也可能是错误的）
         String regionCoords = parts[parts.length - 1];  // Last part is regionX_regionZ
 
         // 检查是否有 caves 层
-        // 格式：dimension/mw$worldId/caves/layer/regionX_regionZ
-        // parts.length >= 5 时可能有 caves 层
+        // 客户端洞穴路径：dimension/mw$worldId/caves/layer/regionX_regionZ
+        // caves 在 parts[2]（因为 mw$worldId 在 parts[1]）
         int caveLayer = Integer.MAX_VALUE;
-        if (parts.length >= 5 && parts[2].equals("caves")) {
-            try {
-                caveLayer = Integer.parseInt(parts[3]);
-            } catch (NumberFormatException e) {
-                LOGGER.warn("Invalid cave layer in path: {}", relative);
+        boolean hasCaves = false;
+        for (int i = 1; i < parts.length - 2; i++) {
+            if (parts[i].equals("caves") && i + 1 < parts.length - 1) {
+                hasCaves = true;
+                try {
+                    caveLayer = Integer.parseInt(parts[i + 1]);
+                    LOGGER.debug("Found caves layer {} at index {} in path: {}", caveLayer, i, relative);
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Invalid cave layer at index {} in path: {}", i + 1, relative);
+                }
+                break;
             }
         }
 
-        // Build path in server format
+        if (hasCaves) {
+            LOGGER.debug("Path has caves layer: {}", relative);
+        }
+
+        // 关键修复：确保 xaeroDim 使用正确的 Xaero 格式
+        // 目录名可能是：
+        // 1. 正确的 Xaero 格式：twilightforest$twilight_forest（包含 $）
+        // 2. 原版维度：null, DIM-1, DIM1
+        // 3. 错误的格式：twilight_forest（缺少 namespace）
+        String xaeroDim = ensureCorrectXaeroFormat(dirName, serverDir);
+
+        // Build path in server format (matches GenerationCache key format)
+        String serverPath;
         if (caveLayer == Integer.MAX_VALUE) {
             // 地表层：xaero_dim/regionX_regionZ
-            return xaeroDim + "/" + regionCoords;
+            serverPath = xaeroDim + "/" + regionCoords;
         } else {
             // 洞穴层：xaero_dim/caves/layer/regionX_regionZ
-            return xaeroDim + "/caves/" + caveLayer + "/" + regionCoords;
+            serverPath = xaeroDim + "/caves/" + caveLayer + "/" + regionCoords;
         }
+
+        LOGGER.debug("buildRelativePath: {} -> {} (dirName={}, xaeroDim={})", relative, serverPath, dirName, xaeroDim);
+        return serverPath;
+    }
+
+    /**
+     * 确保维度名使用正确的 Xaero 格式
+     *
+     * @param dirName 目录名（可能是正确的 Xaero 格式，也可能是错误的）
+     * @param serverDir 服务器目录（用于查找缓存）
+     * @return 正确的 Xaero 格式维度名
+     */
+    private static String ensureCorrectXaeroFormat(String dirName, Path serverDir) {
+        // 原版维度直接返回
+        if (dirName.equals("null") || dirName.equals("DIM-1") || dirName.equals("DIM1")) {
+            return dirName;
+        }
+
+        // 如果已经包含 $，说明是正确的 namespace$path 格式
+        if (dirName.contains("$")) {
+            return dirName;
+        }
+
+        // 如果是 DIM{id} 格式（传统格式），直接返回
+        if (dirName.startsWith("DIM") || dirName.startsWith("DIM-")) {
+            return dirName;
+        }
+
+        // 尝试从缓存反向查找正确的格式
+        // 缓存键格式：xaeroDim/regionX_regionZ
+        // 我们需要找到包含 dirName 的缓存键
+        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+        for (String cacheKey : tsCache.getAll().keySet()) {
+            int slashIndex = cacheKey.indexOf('/');
+            if (slashIndex > 0) {
+                String cachedDim = cacheKey.substring(0, slashIndex);
+                // 检查缓存中的 xaeroDim 是否匹配 dirName
+                // 缓存中的格式：namespace$path，dirName 可能是 path 部分
+                if (cachedDim.contains("$")) {
+                    String pathPart = cachedDim.substring(cachedDim.indexOf('$') + 1);
+                    if (pathPart.equals(dirName)) {
+                        LOGGER.info("Found correct xaeroDim from cache: {} -> {}", dirName, cachedDim);
+                        return cachedDim;
+                    }
+                }
+            }
+        }
+
+        // 尝试使用 DimensionPathMapping 转换
+        // 注意：toXaeroDimension 对于没有 namespace 的名字可能无法正确转换
+        String converted = DimensionPathMapping.getInstance().toXaeroDimension(dirName);
+        if (!converted.equals(dirName)) {
+            LOGGER.info("Converted xaeroDim via mapping: {} -> {}", dirName, converted);
+            return converted;
+        }
+
+        // 无法转换，返回原始值（可能导致同步问题，但会记录日志）
+        LOGGER.warn("Could not convert dirName '{}' to correct Xaero format, sync may fail", dirName);
+        return dirName;
     }
 }
