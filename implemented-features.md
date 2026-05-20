@@ -396,7 +396,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ---
 
-**文档版本**: 3.8
+**文档版本**: 3.9
 **最后更新**: 2026-05-20
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 

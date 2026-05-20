@@ -11,7 +11,7 @@
 
 ## 一、服务端生成功能测试
 
-### 1.1 基础生成命令测试
+### 1.1 服务端生成命令测试
 
 | 测试项 | 测试命令 | 预期结果 | 测试结果 | 备注 |
 |--------|----------|----------|----------|------|
@@ -22,21 +22,9 @@
 | 单区域生成 | `/mapsyncer generate overworld 0 0` | 生成指定坐标的单个区域 | 通过 |  |
 | 强制生成 | `/mapsyncer generate overworld force` | 强制重新生成，忽略缓存 | 通过 |  |
 | 生成状态查询 | `/mapsyncer status` | 显示当前生成进度和状态 | 通过 | |
-
-**测试结果填写区**：
-```
-在服务器启动，加载mod的时候就应将原版三维度，可能存在的mod维度都进行注册，并且加入配置文件
-``` 
-
----
-
-### 1.2 Mod 维度与路径格式测试
-
-| 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
-|--------|----------|----------|----------|------|
 | Mod 维度识别 | 安装含自定义维度的 mod | 命令建议中显示完整维度 ID（namespace:path） | ✅ 通过 | 暮色森林显示 twilightforest:twilight_forest |
 | Mod 维度生成 | `/mapsyncer generate twilightforest:twilight_forest` | 成功生成 mod 维度缓存 | ✅ 通过 | 使用 twilightforest$twilight_forest 格式保存 |
-| 维度路径格式 | 检查新格式 dimensions/minecraft/<dim> 和传统格式 DIM-1 | 自动检测并正确使用 | ✅ 已测试 | 新格式优先，暮光森林使用 dimensions/twilightforest/twilight_forest |
+| 维度路径格式 | 检查原版传统格式和 Mod dimensions/ 格式 | 自动检测并正确使用 | ✅ 已测试 | 原版：region/, DIM-1/, DIM1/；Mod：dimensions/<ns>/<path>/ |
 | 首次转换写入配置 | 检查配置文件 region_folder | 检测结果写入配置 | ✅ 已测试 | 自动检测并写入配置 |
 
 **测试结果填写区**：
@@ -45,18 +33,18 @@
 - 命令格式：使用完整维度 ID（twilightforest:twilight_forest）
 - 服务端生成：缓存路径 server_map_cache/twilightforest$twilight_forest/
 - 客户端同步：保存路径 Multiplayer_server/twilightforest$twilight_forest/mw$worldId/
-- 路径格式：使用动态检测的 namespace$path 格式，不再依赖预设 DIM{id} 映射
+- 路径格式：原版使用传统格式（region/, DIM-1/, DIM1/），Mod 使用 dimensions/<namespace>/<path>/ 格式
 
-v3.5 更新：
+v3.8 更新：
+- 原版维度路径格式修正：始终使用传统格式，不尝试 dimensions/minecraft/
 - 服务端命令使用 DimensionArgument 解决冒号解析问题
-- `/mapsyncer generate twilightforest:twilight_forest` 正常工作
 - 客户端命令建议显示 Mod 维度完整 ID
 - 原版维度使用简化名称（overworld, the_nether, the_end）
 ```
 
 ---
 
-### 1.3 洞穴模式生成测试
+### 1.2 洞穴模式生成测试
 
 | 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
 |--------|----------|----------|----------|------|
@@ -71,7 +59,7 @@ v3.5 更新：
 
 ---
 
-### 1.4 region_folder 配置测试
+### 1.3 region_folder 配置测试
 
 | 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
 |--------|----------|----------|----------|------|
@@ -85,7 +73,7 @@ v3.5 更新：
 
 ---
 
-### 1.5 增量更新测试
+### 1.4 增量更新测试
 
 | 测试项 | 测试命令 | 预期结果 | 测试结果 | 备注 |
 |--------|----------|----------|----------|------|
@@ -388,7 +376,7 @@ v3.5 更新：
 
 ```
 问题 1：地狱渲染异常
-- 描述：地狱区块中间出现竖线分割，像被拦腰斩断
+- 描述：地狱区块中间出现竖线分割
 - 严重程度：中
 - 复现步骤：`/mapsyncer generate the_nether` 后查看客户端地图
 - 预期结果：地形完整显示
@@ -449,5 +437,5 @@ v3.5 更新：
 
 ---
 
-**测试文档版本**: 2.5
+**测试文档版本**: 2.6
 **最后更新**: 2026-05-20
