@@ -15,7 +15,17 @@ import java.util.zip.ZipOutputStream;
 /**
  * Handles incremental merging of Xaero region files at chunk level.
  * Merges server data with existing client data, only adding chunks that don't exist locally.
+ *
+ * @deprecated 此类为备用功能，当前未使用。
+ *             当前同步逻辑直接覆盖写入服务端数据（XaeroMapIntegrator.writeMapData），
+ *             不进行区块级合并。保留用于以下潜在场景：
+ *             1. 需要保护客户端探索的新内容不被覆盖
+ *             2. 需要增量合并而非全量覆盖的场景
+ *             3. 需要检测缺失区块进行选择性同步
+ *
+ * @see XaeroMapIntegrator.writeMapData 当前使用的直接写入方式
  */
+@Deprecated(since = "2026-05-21", forRemoval = false)
 public class RegionMerger {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RegionMerger.class);
