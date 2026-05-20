@@ -77,9 +77,11 @@ public class DimensionPathMapping {
     // 原版维度 - Xaero 目录映射（固定）
     private static final Map<String, String> VANILLA_XAERO_MAPPINGS = new LinkedHashMap<>();
 
-    // Mod 维度预设映射 - 传统 DIM{id} 格式
-    private static final Map<String, String> MOD_LEGACY_MAPPINGS = new LinkedHashMap<>();
-    private static final Map<String, String> MOD_XAERO_MAPPINGS = new LinkedHashMap<>();
+    // Mod 维度预设映射 - 已移除
+// 原因：预设 DIM{id} 映射会导致新格式路径被强制转换为旧格式
+// 现在统一使用动态检测的 namespace$path 格式（如 twilightforest$twilight_forest）
+// private static final Map<String, String> MOD_LEGACY_MAPPINGS = new LinkedHashMap<>();
+// private static final Map<String, String> MOD_XAERO_MAPPINGS = new LinkedHashMap<>();
 
     static {
         // 原版维度 - 新格式（26.1+）
@@ -106,50 +108,14 @@ public class DimensionPathMapping {
         VANILLA_XAERO_MAPPINGS.put("the_end", "DIM1");
         VANILLA_XAERO_MAPPINGS.put("minecraft:the_end", "DIM1");
 
-        // Mod 维度预设映射 - 传统 DIM{id} 格式（部分 mod 使用）
-        // 经典冒险类维度
-        MOD_LEGACY_MAPPINGS.put("twilightforest:twilight_forest", "DIM7");
-        MOD_LEGACY_MAPPINGS.put("twilight_forest", "DIM7");
-        MOD_LEGACY_MAPPINGS.put("aether:the_aether", "DIM-17");
-        MOD_LEGACY_MAPPINGS.put("the_aether", "DIM-17");
-        MOD_LEGACY_MAPPINGS.put("thebetweenlands:betweenlands", "DIM20");
-        MOD_LEGACY_MAPPINGS.put("betweenlands", "DIM20");
-        MOD_LEGACY_MAPPINGS.put("erebus:erebus", "DIM66");
-        MOD_LEGACY_MAPPINGS.put("atum:atum", "DIM-17");
-        MOD_LEGACY_MAPPINGS.put("lostcities:lostcities", "DIM-101");
-
-        // 科技/太空探索类维度 (Galacticraft)
-        MOD_LEGACY_MAPPINGS.put("galacticraftcore:moon", "DIM-28");
-        MOD_LEGACY_MAPPINGS.put("moon", "DIM-28");
-        MOD_LEGACY_MAPPINGS.put("galacticraftplanets:mars", "DIM-29");
-        MOD_LEGACY_MAPPINGS.put("mars", "DIM-29");
-        MOD_LEGACY_MAPPINGS.put("galacticraftplanets:asteroids", "DIM-30");
-        MOD_LEGACY_MAPPINGS.put("asteroids", "DIM-30");
-        MOD_LEGACY_MAPPINGS.put("galacticraftplanets:venus", "DIM-31");
-        MOD_LEGACY_MAPPINGS.put("venus", "DIM-31");
-
-        // 特殊功能维度
-        MOD_LEGACY_MAPPINGS.put("dimdoors:pocket_dimension", "DIM-35");
-        MOD_LEGACY_MAPPINGS.put("miningdimension:mining", "DIM-102");
-        MOD_LEGACY_MAPPINGS.put("huntingdimension:hunting", "DIM-103");
-
-        // 自然主题维度
-        MOD_LEGACY_MAPPINGS.put("the_bumblezone:the_bumblezone", "DIM-104");
-        MOD_LEGACY_MAPPINGS.put("lavender:lavender", "DIM-105");
-
-        // Vanilla 扩展维度
-        MOD_LEGACY_MAPPINGS.put("deeperdarker:deeper_dark", "DIM-106");
-
-        // Mod Xaero 映射（与传统格式相同）
-        for (Map.Entry<String, String> entry : MOD_LEGACY_MAPPINGS.entrySet()) {
-            MOD_XAERO_MAPPINGS.put(entry.getKey(), entry.getValue());
-        }
+        // Mod 维度不再预设 DIM{id} 映射
+        // 统一使用动态检测的 namespace$path 格式
+        // 例如：twilightforest:twilight_forest → twilightforest$twilight_forest
     }
 
     private DimensionPathMapping() {
-        // 初始化 Xaero 映射（固定）
+        // 初始化 Xaero 映射（仅原版维度）
         pathToXaero.putAll(VANILLA_XAERO_MAPPINGS);
-        pathToXaero.putAll(MOD_XAERO_MAPPINGS);
 
         // 构建反向映射
         rebuildReverseMappings();
@@ -242,17 +208,7 @@ public class DimensionPathMapping {
             return legacyRegionDir;
         }
 
-        // 4. 尝试 mod 预设映射
-        String modPreset = MOD_LEGACY_MAPPINGS.get(normalized);
-        if (modPreset != null) {
-            Path presetRegionDir = resolveRegionDir(worldRoot, modPreset);
-            if (Files.exists(presetRegionDir)) {
-                LOGGER.info("Detected mod preset format for dimension {}: {}", normalized, modPreset);
-                pathToFolder.put(normalized, modPreset);
-                rebuildReverseMappings();
-                return presetRegionDir;
-            }
-        }
+        // 不再使用预设 DIM{id} 映射，统一依赖动态检测
 
         LOGGER.warn("Could not detect region directory for dimension: {}", normalized);
         return null;
@@ -298,12 +254,9 @@ public class DimensionPathMapping {
             return VANILLA_LEGACY_FORMAT.get(dimPath);
         }
 
-        // Mod 预设
-        if (MOD_LEGACY_MAPPINGS.containsKey(dimPath)) {
-            return MOD_LEGACY_MAPPINGS.get(dimPath);
-        }
+        // Mod 维度不再预设 DIM{id} 映射
+        // 返回 null（表示没有传统格式，依赖动态检测）
 
-        // 无预设，返回 null（表示没有传统格式）
         return null;
     }
 
@@ -401,10 +354,8 @@ public class DimensionPathMapping {
             return vanillaXaero;
         }
 
-        // Mod 预设
-        if (MOD_XAERO_MAPPINGS.containsKey(normalized)) {
-            return MOD_XAERO_MAPPINGS.get(normalized);
-        }
+        // Mod 维度不再预设 DIM{id} 映射
+        // 直接使用 namespace$path 格式（Xaero 新格式）
 
         // 无预设时，使用 namespace$path 格式（Xaero 新格式）
         if (normalized.contains(":")) {
@@ -622,13 +573,7 @@ public class DimensionPathMapping {
             }
         }
 
-        // 传统格式路径：检查是否有预设映射
-        String presetXaero = MOD_XAERO_MAPPINGS.get(dimPath);
-        if (presetXaero != null) {
-            LOGGER.debug("Legacy format for {}: using preset Xaero folder {}", dimPath, presetXaero);
-            return presetXaero; // 使用预设的 DIM{id} 格式
-        }
-
+        // 传统格式路径：不再检查预设映射
         // 如果文件夹名已经是 DIM 格式，直接使用
         if (folderName.startsWith("DIM") || folderName.startsWith("DIM-")) {
             return folderName;
@@ -760,13 +705,7 @@ public class DimensionPathMapping {
             return reverseMapped;
         }
 
-        // 从 mod 预设查找
-        for (Map.Entry<String, String> entry : MOD_LEGACY_MAPPINGS.entrySet()) {
-            if (entry.getValue().equals(folderName)) {
-                return entry.getKey();
-            }
-        }
-
+        // 不再从预设映射查找
         // 未知的 DIM{id} 格式，返回原始
         if (folderName.startsWith("DIM")) {
             return folderName;
@@ -776,10 +715,12 @@ public class DimensionPathMapping {
     }
 
     /**
-     * 获取预设的 Mod 维度映射列表
+     * 获取预设的 Mod 维度映射列表（已移除）
+     * @deprecated 预设映射已清理，返回空 Map
      */
+    @Deprecated
     public static Map<String, String> getModPresets() {
-        return new LinkedHashMap<>(MOD_LEGACY_MAPPINGS);
+        return new LinkedHashMap<>();
     }
 
     /**
