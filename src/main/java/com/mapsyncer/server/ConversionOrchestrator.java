@@ -3,6 +3,7 @@ package com.mapsyncer.server;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig.ScanMode;
+import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.RegionConverterStandalone;
 import com.mapsyncer.mca.RegionConverterStandalone.CaveModeParams;
@@ -284,15 +285,18 @@ public class ConversionOrchestrator {
             outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
         }
 
-        int minBuildHeight = level.getMinBuildHeight();
-        int worldTopY = level.getMaxBuildHeight();
+        // 从运行时获取准确的维度类型信息
+        DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+        LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
+            dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
+            dimTypeInfo.minY(), dimTypeInfo.height());
 
         // 根据配置选择光照模式和洞穴参数
         LightMode lightMode;
         CaveModeParams caveParams;
         if (scanMode == ScanMode.CAVE) {
             lightMode = LightMode.CAVE;
-            int caveDepth = scanConfig.getCaveDepth(minBuildHeight);
+            int caveDepth = scanConfig.getCaveDepth(dimTypeInfo.minY());
             caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
             LOGGER.info("Single region generation: using CAVE mode with caveStart={}, caveLayer={}",
                 scanConfig.caveStart(), caveLayer);
@@ -306,7 +310,7 @@ public class ConversionOrchestrator {
         try {
             Files.createDirectories(outputDir);
             ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, regionX, regionZ, minBuildHeight, worldTopY, lightMode, caveParams);
+                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams);
             if (converted != null) {
                 XaeroWriter.writeRegionFile(outputDir, converted);
                 processedCount = 1;
@@ -378,16 +382,18 @@ public class ConversionOrchestrator {
             return;
         }
 
-        // 获取世界高度参数
-        int minBuildHeight = level.getMinBuildHeight();
-        int worldTopY = level.getMaxBuildHeight();
+        // 从运行时获取准确的维度类型信息
+        DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+        LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
+            dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
+            dimTypeInfo.minY(), dimTypeInfo.height());
 
-        // 根据配置选择光照模式和和洞穴参数
+        // 根据配置选择光照模式和洞穴参数
         LightMode lightMode;
         CaveModeParams caveParams;
         if (scanMode == ScanMode.CAVE) {
             lightMode = LightMode.CAVE;
-            int caveDepth = scanConfig.getCaveDepth(minBuildHeight);
+            int caveDepth = scanConfig.getCaveDepth(dimTypeInfo.minY());
             caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
             LOGGER.info("Dimension {}: using CAVE mode with caveStart={}, caveLayer={}, caveDepth={}",
                 xaeroDimName, scanConfig.caveStart(), caveLayer, caveDepth);
@@ -419,9 +425,9 @@ public class ConversionOrchestrator {
             currentStatus = "Converting region (" + coords.x() + ", " + coords.z() + ")";
             Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
-            // 使用独立解析器直接读取 MCA 文件（不依赖 Minecraft API）
+            // 使用独立解析器直接读取 MCA 文件（使用维度类型信息）
             ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY, lightMode, caveParams);
+                mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
 
             if (converted != null) {
                 try {
@@ -466,9 +472,9 @@ public class ConversionOrchestrator {
                 currentStatus = "Generating new region (" + coords.x() + ", " + coords.z() + ")";
                 Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
-                // 使用当前维度的扫描配置
+                // 使用维度类型信息进行转换
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY, lightMode, caveParams);
+                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
 
                 if (converted != null) {
                     try {
@@ -568,13 +574,13 @@ public class ConversionOrchestrator {
     public static ResourceKey<Level> parseDimensionId(String id, MinecraftServer server) {
         String normalized = id.toLowerCase();
 
-        // 原版维度快捷名称
+        // 原版维度标准名称（支持多种输入格式，但内部使用标准名称）
         switch (normalized) {
             case "overworld", "minecraft:overworld":
                 return Level.OVERWORLD;
-            case "the_nether", "nether", "minecraft:the_nether":
+            case "the_nether", "minecraft:the_nether":
                 return Level.NETHER;
-            case "the_end", "end", "minecraft:the_end":
+            case "the_end", "minecraft:the_end":
                 return Level.END;
         }
 
@@ -657,15 +663,15 @@ public class ConversionOrchestrator {
                 outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
             }
 
-            int minBuildHeight = level.getMinBuildHeight();
-            int worldTopY = level.getMaxBuildHeight();
+            // 从运行时获取准确的维度类型信息
+            DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
 
             // 获取光照模式和洞穴参数
             LightMode lightMode;
             CaveModeParams caveParams;
             if (scanMode == ScanMode.CAVE) {
                 lightMode = LightMode.CAVE;
-                int caveDepth = scanConfig.getCaveDepth(minBuildHeight);
+                int caveDepth = scanConfig.getCaveDepth(dimTypeInfo.minY());
                 caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
             } else {
                 lightMode = LightMode.SURFACE;
@@ -680,7 +686,8 @@ public class ConversionOrchestrator {
                 continue;
             }
 
-            LOGGER.info("Dimension {}: {} regions need incremental update (mode={})", dimPath, needsUpdate.size(), scanMode);
+            LOGGER.info("Dimension {}: {} regions need incremental update (mode={}, hasSkylight={})",
+                dimPath, needsUpdate.size(), scanMode, dimTypeInfo.hasSkylight());
 
             try {
                 Files.createDirectories(outputDir);
@@ -694,7 +701,7 @@ public class ConversionOrchestrator {
                 if (!Files.exists(mcaPath)) continue;
 
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), minBuildHeight, worldTopY, lightMode, caveParams);
+                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
 
                 if (converted != null) {
                     try {

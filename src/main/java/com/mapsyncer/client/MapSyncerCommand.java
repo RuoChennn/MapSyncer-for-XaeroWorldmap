@@ -48,10 +48,10 @@ public class MapSyncerCommand {
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .then(net.minecraft.commands.Commands.argument("dim", StringArgumentType.string())
                                         .suggests((context, builder) -> {
-                                            // 原版维度快捷名称
+                                            // 原版维度标准名称
                                             builder.suggest("overworld");
-                                            builder.suggest("nether");
-                                            builder.suggest("end");
+                                            builder.suggest("the_nether");
+                                            builder.suggest("the_end");
                                             builder.suggest("all");
 
                                             // 扫描 Xaero 目录列出已有维度数据
@@ -91,22 +91,12 @@ public class MapSyncerCommand {
     }
 
     /**
-     * 将 Xaero 的维度目录名转换为维度建议名称
+     * 将 Xaero 的维度目录名转换为维度建议名称（使用标准名称）
      */
     private static String xaeroDirToDimensionSuggestion(String dirName) {
-        // 使用统一映射获取服务端维度名
+        // 使用统一映射获取服务端维度名（已经是标准名称）
         String serverDim = DimensionPathMapping.getInstance().toServerDimension(dirName);
-        // 转换为用户友好的命令名称
-        switch (serverDim) {
-            case "overworld":
-                return "overworld";
-            case "the_nether":
-                return "nether";
-            case "the_end":
-                return "end";
-            default:
-                return serverDim;
-        }
+        return serverDim;
     }
 
     private static int executeSync(CommandContext<CommandSourceStack> context) {
@@ -166,17 +156,17 @@ public class MapSyncerCommand {
         // 计算本地文件的元数据（时间戳+哈希）
         Map<String, ClientMeta> metaMap;
 
-        // 转换用户友好名称到 Xaero 格式（服务端缓存目录使用 Xaero 格式）
+        // dimension 已是标准名称，转换为 Xaero 格式（服务端缓存目录使用 Xaero 格式）
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         String xaeroDim;
         switch (dimension) {
             case "overworld":
                 xaeroDim = "null";
                 break;
-            case "nether":
+            case "the_nether":
                 xaeroDim = "DIM-1";
                 break;
-            case "end":
+            case "the_end":
                 xaeroDim = "DIM1";
                 break;
             default:
@@ -242,14 +232,14 @@ public class MapSyncerCommand {
 
     private static String normalizeDimension(String dim) {
         String lower = dim.toLowerCase();
-        // 原版维度快捷名称（用户友好名称）
+        // 原版维度：支持多种输入格式，统一转换为标准名称
         switch (lower) {
             case "overworld", "minecraft:overworld", "null":
                 return "overworld";
             case "nether", "the_nether", "minecraft:the_nether", "dim-1":
-                return "nether";
+                return "the_nether";
             case "end", "the_end", "minecraft:the_end", "dim1":
-                return "end";
+                return "the_end";
             case "all", "*":
                 return "all";
         }
@@ -259,19 +249,8 @@ public class MapSyncerCommand {
     }
 
     private static String normalizeDimensionFromResource(String resourceLocation) {
-        // 使用统一映射转换
-        String serverDim = DimensionPathMapping.getInstance().toServerDimension(resourceLocation);
-        // 转换为用户友好的命令名称
-        switch (serverDim) {
-            case "overworld":
-                return "overworld";
-            case "the_nether":
-                return "nether";
-            case "the_end":
-                return "end";
-            default:
-                return serverDim;
-        }
+        // 使用统一映射转换（已经是标准名称）
+        return DimensionPathMapping.getInstance().toServerDimension(resourceLocation);
     }
 
     private static Path getDimensionDir(Path baseDir, String dimension) {
@@ -279,24 +258,8 @@ public class MapSyncerCommand {
             return baseDir;
         }
 
-        // 转换用户友好名称到服务端维度名
-        String serverDim;
-        switch (dimension) {
-            case "overworld":
-                serverDim = "overworld";
-                break;
-            case "nether":
-                serverDim = "the_nether";
-                break;
-            case "end":
-                serverDim = "the_end";
-                break;
-            default:
-                serverDim = dimension;
-        }
-
-        // 使用统一映射获取 Xaero 目录名
-        String xaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(serverDim);
+        // dimension 已经是标准名称，直接使用统一映射获取 Xaero 目录名
+        String xaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(dimension);
         return baseDir.resolve(xaeroDim);
     }
 

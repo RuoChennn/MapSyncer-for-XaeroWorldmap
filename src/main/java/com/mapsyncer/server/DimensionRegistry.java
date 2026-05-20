@@ -3,6 +3,7 @@ package com.mapsyncer.server;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig.ScanMode;
+import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -39,34 +40,47 @@ public class DimensionRegistry {
     /**
      * 已知维度的推荐配置（系统预设）
      * 原版维度使用特定配置，mod 维度使用预设或默认地表模式
+     * 包含维度类型信息用于离线解析时的光照计算和高度范围确定
      */
     private static final Map<String, DimensionScanConfig> PRESET_CONFIGS = new LinkedHashMap<>();
 
     static {
         // 原版维度预设配置（region_folder 为空，由自动检测决定）
+        // 主世界：地表模式，有天空光照，minY=-64, height=384
         PRESET_CONFIGS.put("minecraft:overworld",
-                new DimensionScanConfig("minecraft:overworld", "", ScanMode.SURFACE, 63));
+                new DimensionScanConfig("minecraft:overworld", "", ScanMode.SURFACE, 63,
+                    DimensionTypeInfo.overworld()));
+
+        // 地狱：洞穴模式，无天空光照，有顶棚，minY=0, height=256
         PRESET_CONFIGS.put("minecraft:the_nether",
-                new DimensionScanConfig("minecraft:the_nether", "", ScanMode.CAVE, 63));
+                new DimensionScanConfig("minecraft:the_nether", "", ScanMode.CAVE, 63,
+                    DimensionTypeInfo.nether()));
+
+        // 末地：地表模式，无天空光照，无顶棚，minY=0, height=256
         PRESET_CONFIGS.put("minecraft:the_end",
-                new DimensionScanConfig("minecraft:the_end", "", ScanMode.SURFACE, 63));
+                new DimensionScanConfig("minecraft:the_end", "", ScanMode.SURFACE, 63,
+                    DimensionTypeInfo.theEnd()));
 
         // Mod 维度预设配置
-        // Twilight Forest: 地表模式（森林地形）
+        // Twilight Forest: 地表模式（森林地形），类似主世界
         PRESET_CONFIGS.put("twilightforest:twilight_forest",
-                new DimensionScanConfig("twilightforest:twilight_forest", "", ScanMode.SURFACE, 63));
+                new DimensionScanConfig("twilightforest:twilight_forest", "", ScanMode.SURFACE, 63,
+                    new DimensionTypeInfo(true, false, 0, 256, 256)));
 
         // Aether: 天空维度，使用地表模式
         PRESET_CONFIGS.put("aether:the_aether",
-                new DimensionScanConfig("aether:the_aether", "", ScanMode.SURFACE, 63));
+                new DimensionScanConfig("aether:the_aether", "", ScanMode.SURFACE, 63,
+                    new DimensionTypeInfo(true, false, 0, 256, 256)));
 
         // Betweenlands: 地下沼泽维度，可能需要洞穴模式
         PRESET_CONFIGS.put("thebetweenlands:betweenlands",
-                new DimensionScanConfig("thebetweenlands:betweenlands", "", ScanMode.CAVE, 32));
+                new DimensionScanConfig("thebetweenlands:betweenlands", "", ScanMode.CAVE, 32,
+                    new DimensionTypeInfo(false, true, 0, 256, 256)));
 
         // Erebus: 昆虫洞穴维度，使用洞穴模式
         PRESET_CONFIGS.put("erebus:erebus",
-                new DimensionScanConfig("erebus:erebus", "", ScanMode.CAVE, 32));
+                new DimensionScanConfig("erebus:erebus", "", ScanMode.CAVE, 32,
+                    new DimensionTypeInfo(false, true, 0, 256, 256)));
     }
 
     /**
@@ -129,7 +143,7 @@ public class DimensionRegistry {
         // 创建新的配置列表（保留原有配置 + 新增配置）
         List<String> updatedConfigs = new ArrayList<>(currentConfigs);
 
-        // 添加新发现的维度（使用检测到的 region_folder）
+        // 添加新发现的维度（使用检测到的 region_folder 和维度类型信息）
         for (String dimId : newDimensions) {
             // 检测实际的 region_folder
             String detectedFolder = detectRegionFolder(worldRoot, dimId);
@@ -137,18 +151,32 @@ public class DimensionRegistry {
             // 获取推荐配置（扫描模式等）
             DimensionScanConfig preset = getRecommendedConfig(dimId);
 
-            // 使用检测到的路径替换预设的 region_folder
+            // 从 ServerLevel 获取真实的维度类型信息
+            ServerLevel level = getLevelForDimension(server, dimId);
+            DimensionTypeInfo dimTypeInfo;
+            if (level != null) {
+                dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+                LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
+                    dimId, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
+                    dimTypeInfo.minY(), dimTypeInfo.height());
+            } else {
+                // 无法获取维度信息，使用预设或推断值
+                dimTypeInfo = preset.dimTypeInfo() != null ? preset.dimTypeInfo() : DimensionTypeInfo.fromDimensionId(dimId);
+            }
+
+            // 使用检测到的路径、推荐配置和维度类型信息创建最终配置
             DimensionScanConfig finalConfig = new DimensionScanConfig(
                     dimId,
                     detectedFolder,
                     preset.scanMode(),
-                    preset.caveStart()
+                    preset.caveStart(),
+                    dimTypeInfo
             );
 
             String configStr = configToString(finalConfig);
             updatedConfigs.add(configStr);
-            LOGGER.info("Added dimension config: {} (region_folder={}, scan_mode={})",
-                    dimId, detectedFolder, finalConfig.scanMode());
+            LOGGER.info("Added dimension config: {} (region_folder={}, scan_mode={}, hasSkylight={})",
+                    dimId, detectedFolder, finalConfig.scanMode(), dimTypeInfo.hasSkylight());
         }
 
         // 更新配置值
@@ -206,27 +234,55 @@ public class DimensionRegistry {
     }
 
     /**
+     * 获取维度的 ServerLevel 实例
+     * @param server MinecraftServer 实例
+     * @param dimId 维度 ID（如 "minecraft:overworld"）
+     * @return ServerLevel 实例，未找到返回 null
+     */
+    private static ServerLevel getLevelForDimension(MinecraftServer server, String dimId) {
+        for (ServerLevel level : server.getAllLevels()) {
+            if (level.dimension().location().toString().equals(dimId)) {
+                return level;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 获取维度的推荐配置（扫描模式等）
      * region_folder 由 detectRegionFolder() 决定，不使用预设值
      */
     private static DimensionScanConfig getRecommendedConfig(String dimId) {
-        // 检查是否有预设配置（扫描模式）
+        // 检查是否有预设配置（扫描模式和维度类型信息）
         for (Map.Entry<String, DimensionScanConfig> entry : PRESET_CONFIGS.entrySet()) {
             if (normalizeDimensionId(entry.getKey()).equals(normalizeDimensionId(dimId))) {
                 return entry.getValue();
             }
         }
 
-        // 非原版维度：使用默认地表模式
-        return new DimensionScanConfig(dimId, "", ScanMode.SURFACE, 63);
+        // 非原版维度：使用默认地表模式，维度类型信息自动推断
+        return new DimensionScanConfig(dimId, "", ScanMode.SURFACE, 63,
+            DimensionTypeInfo.fromDimensionId(dimId));
     }
 
     /**
      * 将 DimensionScanConfig 转换为字符串格式（用于配置文件）
-     * 格式：dimension|region_folder|scan_mode|cave_start
+     * 格式：dimension|region_folder|scan_mode|cave_start|dim_type_info
+     * dim_type_info 格式：hasSkylight|hasCeiling|minY|height|logicalHeight
      */
     private static String configToString(DimensionScanConfig config) {
-        return config.dimension() + "|" + config.regionFolder() + "|" + config.scanMode().name() + "|" + config.caveStart();
+        StringBuilder sb = new StringBuilder();
+        sb.append(config.dimension());
+        sb.append("|").append(config.regionFolder());
+        sb.append("|").append(config.scanMode().name());
+        sb.append("|").append(config.caveStart());
+
+        // 添加维度类型信息
+        if (config.dimTypeInfo() != null) {
+            sb.append("|").append(config.dimTypeInfo().toConfigString());
+        }
+
+        return sb.toString();
     }
 
     /**
@@ -242,20 +298,12 @@ public class DimensionRegistry {
     }
 
     /**
-     * 将维度 ID 转换为用户友好名称
+     * 将维度 ID 转换为用户友好名称（使用标准名称）
      */
     private static String toFriendlyName(String dimId) {
         String normalized = normalizeDimensionId(dimId);
-        switch (normalized) {
-            case "overworld":
-                return "overworld";
-            case "the_nether":
-                return "nether";
-            case "the_end":
-                return "end";
-            default:
-                return normalized;
-        }
+        // 直接返回标准名称（移除 minecraft: 前缀）
+        return normalized;
     }
 
     /**

@@ -47,18 +47,41 @@ public enum LightMode {
     CAVE;
 
     /**
+     * 计算有效光照值（不考虑维度天空光照属性）
+     *
+     * @deprecated 使用 {@link #calculateEffectiveLight(byte, byte, boolean, boolean, boolean, boolean)} 代替
+     */
+    @Deprecated
+    public byte calculateEffectiveLight(byte blockLight, byte skyLight,
+                                         boolean hasSkyAccess, boolean hasOverlay,
+                                         boolean isGlowing) {
+        return calculateEffectiveLight(blockLight, skyLight, hasSkyAccess, hasOverlay, isGlowing, true);
+    }
+
+    /**
      * 计算有效光照值
+     *
+     * 参考 Xaero WorldDataReader.java 光照处理逻辑：
+     * - 第186行：worldHasSkylight = serverWorld.dimensionType().hasSkyLight()
+     * - 第353行：skyLightLevels[i] = worldHasSkylight ? 15 : 0
+     * - 第557-559行：cave && dataLight < 15 && worldHasSkylight 时更新 skyLightLevels
+     *
+     * 末地维度特性：
+     * - worldHasSkylight = false（末地没有天空光照）
+     * - skyLightLevels 初始化为 0（而不是 15）
+     * - 不会在光照计算中使用 skyLight = 15 作为默认值
      *
      * @param blockLight 方块光照值 (0-15)
      * @param skyLight 天空光照值 (0-15)
      * @param hasSkyAccess 是否有天空访问（位置高于高度图）
      * @param hasOverlay 是否有覆盖层（水、玻璃等透明方块）
      * @param isGlowing 是否为发光方块
+     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
      * @return 有效光照值 (0-15)
      */
     public byte calculateEffectiveLight(byte blockLight, byte skyLight,
                                          boolean hasSkyAccess, boolean hasOverlay,
-                                         boolean isGlowing) {
+                                         boolean isGlowing, boolean worldHasSkylight) {
         // 发光方块强制光照15
         if (isGlowing) {
             return 15;
@@ -75,8 +98,9 @@ public enum LightMode {
                     return blockLight;
                 }
 
-                // 有天空访问时 SkyLight = 15（直接日照）
-                byte effectiveSkyLight = hasSkyAccess ? 15 : skyLight;
+                // 参考 Xaero: 只有在有天空光照的维度，有天空访问时才使用 SkyLight = 15
+                // 末地维度 worldHasSkylight = false，所以不会使用 15
+                byte effectiveSkyLight = (hasSkyAccess && worldHasSkylight) ? 15 : skyLight;
 
                 // 无 overlay 且 SkyLight 更亮时使用 SkyLight
                 if (!hasOverlay && effectiveSkyLight > blockLight) {

@@ -62,11 +62,28 @@ public class RegionConverterStandalone {
     public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
                                                   int minBuildHeight, int worldTopY) {
         return convertRegion(mcaPath, regionX, regionZ, minBuildHeight, worldTopY,
-                             LightMode.SURFACE, CaveModeParams.NONE);
+                             LightMode.SURFACE, CaveModeParams.NONE, true);
     }
 
     /**
-     * 转换单个区域文件（支持光照模式）
+     * 转换单个区域文件（支持光照模式，默认有天空光照）
+     * @deprecated 使用 {@link #convertRegion(Path, int, int, int, int, LightMode, CaveModeParams, boolean)} 代替
+     */
+    @Deprecated
+    public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
+                                                  int minBuildHeight, int worldTopY,
+                                                  LightMode lightMode,
+                                                  CaveModeParams caveParams) {
+        return convertRegion(mcaPath, regionX, regionZ, minBuildHeight, worldTopY,
+                             lightMode, caveParams, true);
+    }
+
+    /**
+     * 转换单个区域文件（完整参数）
+     *
+     * 参考 Xaero WorldDataReader.java 第186行：
+     * worldHasSkylight = serverWorld.dimensionType().hasSkyLight()
+     *
      * @param mcaPath .mca 文件路径
      * @param regionX 区域 X 坐标
      * @param regionZ 区域 Z 坐标
@@ -74,17 +91,19 @@ public class RegionConverterStandalone {
      * @param worldTopY 世界最高高度 (通常是 320)
      * @param lightMode 光照模式（SURFACE 或 CAVE）
      * @param caveParams 洞穴模式参数（仅洞穴模式使用）
+     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
      */
     public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
                                                   int minBuildHeight, int worldTopY,
                                                   LightMode lightMode,
-                                                  CaveModeParams caveParams) {
+                                                  CaveModeParams caveParams,
+                                                  boolean worldHasSkylight) {
         if (!Files.exists(mcaPath)) {
             return null;
         }
 
         try {
-            MapRegionData regionData = readMcaFile(mcaPath, minBuildHeight, worldTopY, lightMode, caveParams);
+            MapRegionData regionData = readMcaFile(mcaPath, minBuildHeight, worldTopY, lightMode, caveParams, worldHasSkylight);
             if (regionData == null) return null;
 
             byte[] xaeroData = serializeToXaeroFormat(regionData, minBuildHeight);
@@ -96,17 +115,55 @@ public class RegionConverterStandalone {
     }
 
     /**
+     * 转换单个区域文件（使用 DimensionTypeInfo）
+     *
+     * DimensionTypeInfo 包含维度的所有核心属性：
+     * - minY: 最低建筑高度
+     * - height: 维度总高度（maxY = minY + height）
+     * - hasSkylight: 是否有天空光照
+     * - hasCeiling: 是否有顶棚
+     *
+     * @param mcaPath .mca 文件路径
+     * @param regionX 区域 X 坐标
+     * @param regionZ 区域 Z 坐标
+     * @param dimTypeInfo 维度类型信息
+     * @param lightMode 光照模式（SURFACE 或 CAVE）
+     * @param caveParams 洞穴模式参数（仅洞穴模式使用）
+     */
+    public static ConvertedRegion convertRegion(Path mcaPath, int regionX, int regionZ,
+                                                  DimensionTypeInfo dimTypeInfo,
+                                                  LightMode lightMode,
+                                                  CaveModeParams caveParams) {
+        return convertRegion(mcaPath, regionX, regionZ,
+                             dimTypeInfo.minY(), dimTypeInfo.maxY(),
+                             lightMode, caveParams, dimTypeInfo.hasSkylight());
+    }
+
+    /**
      * 使用独立 MCA 解析器读取区域文件（默认地表模式）
      */
     static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY) throws IOException {
-        return readMcaFile(mcaPath, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE);
+        return readMcaFile(mcaPath, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE, true);
     }
 
     /**
      * 使用独立 MCA 解析器读取区域文件（支持光照模式）
+     * @deprecated 使用带 worldHasSkylight 参数的方法代替
      */
+    @Deprecated
     static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY,
                                        LightMode lightMode, CaveModeParams caveParams) throws IOException {
+        return readMcaFile(mcaPath, minBuildHeight, worldTopY, lightMode, caveParams, true);
+    }
+
+    /**
+     * 使用独立 MCA 解析器读取区域文件（完整参数）
+     *
+     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
+     */
+    static MapRegionData readMcaFile(Path mcaPath, int minBuildHeight, int worldTopY,
+                                       LightMode lightMode, CaveModeParams caveParams,
+                                       boolean worldHasSkylight) throws IOException {
         MapRegionData data = new MapRegionData(minBuildHeight, lightMode);
 
         try (McaReader reader = new McaReader(mcaPath.toString())) {
@@ -118,7 +175,7 @@ public class RegionConverterStandalone {
 
                 if (chunkInfo == null) continue;
 
-                processChunk(data, chunkInfo, minBuildHeight, worldTopY, lightMode, caveParams);
+                processChunk(data, chunkInfo, minBuildHeight, worldTopY, lightMode, caveParams, worldHasSkylight);
             }
         }
 
@@ -130,11 +187,22 @@ public class RegionConverterStandalone {
      */
     private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
                                        int minBuildHeight, int worldTopY) {
-        processChunk(data, chunk, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE);
+        processChunk(data, chunk, minBuildHeight, worldTopY, LightMode.SURFACE, CaveModeParams.NONE, true);
     }
 
     /**
      * 处理单个 Chunk 的数据（支持光照模式）
+     * @deprecated 使用带 worldHasSkylight 参数的方法代替
+     */
+    @Deprecated
+    private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
+                                       int minBuildHeight, int worldTopY,
+                                       LightMode lightMode, CaveModeParams caveParams) {
+        processChunk(data, chunk, minBuildHeight, worldTopY, lightMode, caveParams, true);
+    }
+
+    /**
+     * 处理单个 Chunk 的数据（完整参数）
      *
      * 光照计算逻辑：
      *
@@ -145,14 +213,18 @@ public class RegionConverterStandalone {
      *
      * 洞穴模式 (CAVE):
      * - 同时使用 BlockLight 和 SkyLight
-     * - 露天区域（高于高度图）：SkyLight = 15
+     * - 露天区域（高于高度图）：SkyLight = 15（仅当 worldHasSkylight=true）
+     * - 末地维度：worldHasSkylight=false，不使用 SkyLight = 15
      * - 水下区域：使用 BlockLight
      * - 其他地下区域：取 max(BlockLight, SkyLight)
      * - 检测洞穴开始位置和深度
+     *
+     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
      */
     private static void processChunk(MapRegionData data, ChunkDataParser.ChunkInfo chunk,
                                        int minBuildHeight, int worldTopY,
-                                       LightMode lightMode, CaveModeParams caveParams) {
+                                       LightMode lightMode, CaveModeParams caveParams,
+                                       boolean worldHasSkylight) {
         int chunkX = chunk.chunkX();
         int chunkZ = chunk.chunkZ();
 
@@ -295,7 +367,7 @@ public class RegionConverterStandalone {
 
                             // 计算光照（使用光照模式）
                             surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
-                                heightMapValue, overlayList, lightMode);
+                                heightMapValue, overlayList, lightMode, worldHasSkylight);
 
                             biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
                             break;
@@ -382,7 +454,7 @@ public class RegionConverterStandalone {
 
                         // 计算光照（使用光照模式）
                         surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
-                            heightMapValue, overlayList, lightMode);
+                            heightMapValue, overlayList, lightMode, worldHasSkylight);
 
                         biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
                         break;
@@ -411,6 +483,10 @@ public class RegionConverterStandalone {
     /**
      * 计算表面有效光照值
      *
+     * 参考 Xaero WorldDataReader.java 第557-559行：
+     * - cave && dataLight < 15 && worldHasSkylight 时才更新 skyLightLevels
+     * - 末地维度 worldHasSkylight=false，不会使用 SkyLight
+     *
      * @param section Section 数据
      * @param lx 局部 X
      * @param ly 局部 Y
@@ -419,13 +495,15 @@ public class RegionConverterStandalone {
      * @param heightMapValue 高度图值
      * @param overlayList overlay 列表
      * @param lightMode 光照模式
+     * @param worldHasSkylight 维度是否有天空光照（末地为 false）
      * @return 有效光照值 (0-15)
      */
     private static byte calculateSurfaceLight(ChunkSectionParser.SectionData section,
                                                 int lx, int ly, int lz, int worldY,
                                                 int heightMapValue,
                                                 List<OverlayData> overlayList,
-                                                LightMode lightMode) {
+                                                LightMode lightMode,
+                                                boolean worldHasSkylight) {
         byte blockLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
         byte skyLight = ChunkSectionParser.getSkyLight(section, lx, ly, lz);
 
@@ -441,7 +519,7 @@ public class RegionConverterStandalone {
             ChunkSectionParser.getBlockStateAt(section, lx, ly, lz).name());
 
         return lightMode.calculateEffectiveLight(
-            blockLight, skyLight, hasSkyAccess, hasFluidOverlay, isGlowing);
+            blockLight, skyLight, hasSkyAccess, hasFluidOverlay, isGlowing, worldHasSkylight);
     }
 
     /**
@@ -468,18 +546,19 @@ public class RegionConverterStandalone {
                             int baseX = tileChunkO * BLOCKS_PER_TILE_CHUNK + tileI * BLOCKS_PER_TILE;
                             int baseZ = tileChunkP * BLOCKS_PER_TILE_CHUNK + tileJ * BLOCKS_PER_TILE;
 
-                            // 检查 tile 是否有数据
-                            boolean hasTile = false;
-                            for (int bx = 0; bx < BLOCKS_PER_TILE && !hasTile; bx++) {
-                                for (int bz = 0; bz < BLOCKS_PER_TILE && !hasTile; bz++) {
-                                    if (data.hasData[baseX + bx][baseZ + bz]) hasTile = true;
+                            // 检查 tile 是否有任何有效数据（非空白像素）
+                            // 注意：空白像素（AIR + null biome）也需要写入，这样才能正确渲染虚空区域
+                            // 参考 Xaero：空白像素写入 AIR 方块，渲染时使用 VOID_COLOR（深紫色）
+                            boolean hasAnyValidData = false;
+                            for (int bx = 0; bx < BLOCKS_PER_TILE && !hasAnyValidData; bx++) {
+                                for (int bz = 0; bz < BLOCKS_PER_TILE && !hasAnyValidData; bz++) {
+                                    if (data.hasData[baseX + bx][baseZ + bz]) hasAnyValidData = true;
                                 }
                             }
 
-                            if (!hasTile) {
-                                dos.writeInt(-1);
-                                continue;
-                            }
+                            // 即使没有有效数据，也要写入空白 Tile（AIR 方块组成的虚空区域）
+                            // 这样客户端才能正确渲染虚空为深紫色（VOID_COLOR）
+                            // 参考 Xaero WorldDataReader：空白区域写入 AIR 方块，height=minBuildHeight
 
                             // 16x16 pixels
                             for (int bx = 0; bx < BLOCKS_PER_TILE; bx++) {
@@ -488,12 +567,37 @@ public class RegionConverterStandalone {
                                     int rz = baseZ + bz;
 
                                     if (!data.hasData[rx][rz]) {
-                                        // 空白像素：只写入高度参数
-                                        // 参考 Xaero: prepareForWriting 设置 state=AIR, biome=null, height=defaultHeight
-                                        // biome=null 时不设置 0x100000 标志，客户端默认使用 the_void biome 的颜色
+                                        // 空白像素：写入 AIR 方块 + null biome（参考 Xaero prepareForWriting）
+                                        // prepareForWriting 设置 state=AIR, biome=null, height=defaultHeight
+                                        // MapBlock.getParametres() 会设置 params |= 1（非 grass）
+                                        // 当 biome=null 时，不设置 0x100000 标志，客户端使用默认虚空颜色
+                                        String emptyBlockName = "minecraft:air";
                                         int emptyHeight = minBuildHeight;
-                                        int emptyParams = encodeHeightToParams(emptyHeight);
+                                        int emptyParams = 0;
+
+                                        // 非 grass 方块标志
+                                        emptyParams |= 1;
+                                        // light = 0
+                                        emptyParams |= 0 << 8;
+                                        // height 编码
+                                        emptyParams |= encodeHeightToParams(emptyHeight);
+                                        // biome = null，不设置 0x100000
+                                        // topHeight == height，不设置 0x1000000
+                                        // 新 palette 条目标志
+                                        if (!blockPalette.containsKey(emptyBlockName)) {
+                                            emptyParams |= 0x200000;
+                                        }
+
                                         dos.writeInt(emptyParams);
+
+                                        // 写入方块状态 NBT（仅当不在 palette 中时）
+                                        if (!blockPalette.containsKey(emptyBlockName)) {
+                                            writeBlockStateNbt(emptyBlockName, dos);
+                                            blockPalette.put(emptyBlockName, blockPalette.size());
+                                        } else {
+                                            dos.writeInt(blockPalette.get(emptyBlockName));
+                                        }
+
                                         continue;
                                     }
 
