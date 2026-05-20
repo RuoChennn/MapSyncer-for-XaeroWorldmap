@@ -49,7 +49,7 @@ public class ChunkMapData {
     }
 
     /**
-     * 编码为网络数据包
+     * 序列化到网络缓冲区
      *
      * 使用标记位实现向后兼容：
      * - 先写入基本字段（regionX, regionZ, dimension, data, timestampSeconds）
@@ -72,7 +72,7 @@ public class ChunkMapData {
     }
 
     /**
-     * 从网络数据包解码
+     * 从网络缓冲区反序列化
      *
      * 向后兼容处理：
      * - 读取标记位判断是否有 caveLayer
