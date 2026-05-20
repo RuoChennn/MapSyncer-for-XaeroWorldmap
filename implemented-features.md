@@ -425,13 +425,21 @@ DIM-1/caves/3/-1_-1=1779192130:667bcc3c  # 地狱洞穴层
 
 ---
 
-**文档版本**: 4.1
+**文档版本**: 4.2
 **最后更新**: 2026-05-20
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
 ---
 
 ### 历史更新记录
+
+**2026-05-20 更新 (v4.2)**:
+
+- ✅ **聊天消息风格统一**: 所有消息使用 `[MapSyncer] 消息内容` 格式
+  - 客户端：MapSyncerCommand、XaeroMapIntegrator 统一使用 `prefix()` 方法
+  - 服务端：ServerSyncHandler、CacheGenerateCommand 统一添加 `prefix()` 前缀
+  - 本地化：移除硬编码的 `§e[MapSyncer]` 前缀和格式代码
+  - 效果：所有聊天消息显示统一的黄色 `[MapSyncer]` 前缀
 
 **2026-05-20 更新 (v4.1)**:
 
