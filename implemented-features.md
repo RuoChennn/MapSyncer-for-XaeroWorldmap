@@ -29,7 +29,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 单维度生成-主世界 | ✅ | 支持 `overworld`/`nether`/`end` 及完整维度 ID |
 | 单维度生成-地狱 | ⚠️ | 生成的文件存在差异，区块中间出现竖线（有待改进） |
 | 单维度生成-末地 | ✅ | 末地虚空区域正确渲染为深紫色（已修复边缘空白填充问题） |
-| Mod 维度生成 | 🧪 | 支持 mod 维度 ResourceLocation 格式，待测试 |
+| Mod 维度生成 | ✅ | 支持 mod 维度 ResourceLocation 格式，使用 namespace$path 格式保存（暮光森林测试通过） |
 | 单区域生成 | ✅ | 指定坐标生成单个区域，用于测试或针对性更新 |
 | 强制生成 | ✅ | 强制重新生成，忽略缓存 |
 | 强制保存机制 | ✅ | 生成前强制保存区块，兼容 C2ME |
@@ -86,7 +86,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | `/mapsyncer sync <dim>` | ⚠️ | 同步指定维度（存在问题：无法确定目录） |
 | `/mapsyncer sync all` | ✅ | 同步所有维度（应提示具体同步了哪些维度） |
 | 维度名称别名 | ⚠️ | 支持 `overworld`/`null`/`nether`/`dim-1` 等（存在问题） |
-| Mod 维度同步 | 🧪 | 支持任意维度 ID |
+| Mod 维度同步 | ✅ | 支持任意维度 ID（暮光森林测试通过） |
 | 维度目录建议 | ✅ | 动态扫描 Xaero 目录列出已有维度（原版通过） |
 | 单维度精确同步 | 🧪 | 不 fallback 到其他维度 |
 
@@ -211,7 +211,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | 功能 | 状态 | 描述 |
 |------|------|------|
 | 原版维度映射 | ✅ | the_nether → DIM-1, the_end → DIM1, overworld → null |
-| Mod 维度映射 | ✅ | namespace:path → namespace$path（新格式）或 DIM{id}（传统格式） |
+| Mod 维度映射 | ✅ | namespace:path → namespace$path（动态检测新格式） |
 | 双向转换 | ✅ | 文件系统目录 ↔ Xaero 目录 ↔ ResourceLocation path |
 | 统一映射类 | ✅ | DimensionPathMapping 类管理所有映射逻辑 |
 | 新旧格式兼容 | ✅ | 支持 Minecraft 26.1+ 新格式和传统格式自动检测 |
@@ -364,7 +364,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 | LZ4 压缩 | ⏳ | 不支持 |
 | 大地图耗时 | ⚠️ | 同步需要时间，增量较快 |
 | 单人世界 | 🧪 | 主要针对多人服务器 |
-| Mod 维度 | 🧪 | 理论支持，建议小范围测试 |
+| Mod 维度 | ✅ | 暮光森林测试通过，路径格式正确 |
 | 其他维度测试 | ⚠️ | 地狱、末地生成存在渲染问题 |
 | 洞穴模式测试 | ✅ | 基本功能通过，内容有一定异常 |
 | 增量更新指令 | ⚠️ | 使用指令后未同步更改配置文件 |
@@ -396,7 +396,7 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
 
 ---
 
-**文档版本**: 3.1
+**文档版本**: 3.2
 **最后更新**: 2026-05-20
 **模组版本**: MapSyncer for XaeroWorldmap NeoForge 1.21.X
 
@@ -411,6 +411,12 @@ MapSyncer 是一个 Minecraft NeoForge 1.21.X 模组，核心功能是将服务�
   - 空白 Tile 也写入 256 个像素数据，不再跳过
   - 客户端渲染时使用 VOID_COLOR（深紫色）显示虚空区域
   - 参考 Xaero 的 `prepareForWriting` 和 `savePixel` 逻辑
+
+- ✅ **Mod 维度路径映射修复**: 清理预设 DIM{id} 映射
+  - 移除预设的 Mod 维度 DIM{id} 映射（如 DIM7）
+  - 统一使用动态检测的 namespace$path 格式（如 twilightforest$twilight_forest）
+  - 服务端缓存和客户端保存路径保持一致
+  - 暮光森林维度生成与同步测试通过
 
 ---
 
