@@ -865,21 +865,23 @@ public class XaeroMapIntegrator {
     /**
      * Build relative path for timestamp cache in server format.
      *
-     * 格式：
-     * - 地表：dimension/regionX_regionZ
-     * - 洞穴：dimension/caves/layer/regionX_regionZ
-     * （匹配服务端 GenerationCache 格式）
+     * 格式（匹配服务端 GenerationCache 格式）：
+     * - 地表：xaeroDim/regionX_regionZ（如 twilightforest$twilight_forest/0_0）
+     * - 洞穴：xaeroDim/caves/layer/regionX_regionZ
+     *
+     * 注意：chunk.dimension 已经是 Xaero 格式，直接使用即可，无需转换。
      */
     private static String buildRelativePathForCache(ChunkMapData chunk) {
-        // Convert dimension to server format using unified mapping
-        String serverDim = DimensionPathMapping.getInstance().toServerDimension(chunk.dimension);
+        // chunk.dimension 已经是 Xaero 格式（如 twilightforest$twilight_forest）
+        // 直接使用，与服务端 GenerationCache 的 key 格式保持一致
+        String xaeroDim = chunk.dimension;
 
         if (chunk.caveLayer == Integer.MAX_VALUE) {
             // 地表层
-            return serverDim + "/" + chunk.regionX + "_" + chunk.regionZ;
+            return xaeroDim + "/" + chunk.regionX + "_" + chunk.regionZ;
         } else {
             // 洞穴层
-            return serverDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
+            return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
         }
     }
 
