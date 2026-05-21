@@ -32,8 +32,7 @@
 **服务端** `/mapsyncer`（需 OP）：
 - `generate` - 生成所有维度
 - `generate <维度>` - 生成指定维度
-- `status` - 查看进度
-- `incremental status` - 增量更新状态
+- `status` - 查看生成任务和增量更新状态
 
 ## 配置
 
