@@ -201,7 +201,7 @@ public class CacheGenerateCommand {
     }
 
     /**
-     * 显示当前生成状态和增量更新状态
+     * 显示当前生成状态和增量更新状态（合并为一行）
      *
      * @param ctx 命令上下文
      * @return 命令执行结果
@@ -210,42 +210,40 @@ public class CacheGenerateCommand {
         IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
         UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
 
-        // 合并显示生成状态和增量更新状态
+        // 构建完整状态消息
+        String genStatus;
+        String incStatus;
+
         if (ConversionOrchestrator.isRunning()) {
-            // 有生成任务运行时，分开显示
-            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.in_progress",
+            genStatus = String.format("转换进行中：%d/%d 个区域 - %s",
                     ConversionOrchestrator.getProcessedCount(),
                     ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getStatus()), false);
-            sendIncrementalStatus(ctx, handler, mode);
-        } else if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
-            // 无生成任务 + 增量更新禁用，合并显示
-            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.no_task_disabled"), false);
+                    ConversionOrchestrator.getStatus());
         } else {
-            // 无生成任务 + 增量更新启用
-            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.no_progress"), false);
-            sendIncrementalStatus(ctx, handler, mode);
+            genStatus = "无转换任务";
         }
 
-        return Command.SINGLE_SUCCESS;
-    }
-
-    /**
-     * 发送增量更新状态消息
-     */
-    private static void sendIncrementalStatus(CommandContext<CommandSourceStack> ctx, IncrementalUpdateHandler handler, UpdateMode mode) {
-        if (mode == UpdateMode.TICK) {
+        if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
+            incStatus = "增量更新未启用";
+        } else if (mode == UpdateMode.TICK) {
             int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
             int remainingTicks = interval - handler.getTickCounter();
             int remainingSeconds = remainingTicks / 20;
             int minutes = remainingSeconds / 60;
             int seconds = remainingSeconds % 60;
-            ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.tick_mode", minutes, seconds), false);
+            incStatus = String.format("增量更新TICK模式，下次 %d分%d秒后", minutes, seconds);
         } else if (mode == UpdateMode.SCHEDULED) {
             int hour = ModConfig.SERVER.scheduledUpdateHour.get();
             int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
-            ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.scheduled_mode", hour, minute), false);
+            incStatus = String.format("增量更新定时模式，每日 %02d:%02d", hour, minute);
+        } else {
+            incStatus = "增量更新未启用";
         }
+
+        // 合并为一行显示
+        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.combined", genStatus, incStatus), false);
+
+        return Command.SINGLE_SUCCESS;
     }
 
     /**

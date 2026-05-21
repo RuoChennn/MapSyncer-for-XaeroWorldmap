@@ -70,6 +70,7 @@
   "mapsyncer.generate.in_progress": "Conversion in progress: %d/%d regions - %s",
   "mapsyncer.generate.no_progress": "No conversion in progress",
   "mapsyncer.status.no_task_disabled": "No conversion task, incremental updates disabled",
+  "mapsyncer.status.combined": "%s, %s",
   "mapsyncer.status.incremental_disabled": "Incremental updates: Disabled",
   "mapsyncer.status.tick_mode": "Incremental updates: TICK mode, next update in %d min %d sec",
   "mapsyncer.status.scheduled_mode": "Incremental updates: SCHEDULED mode, daily at %02d:%02d"
