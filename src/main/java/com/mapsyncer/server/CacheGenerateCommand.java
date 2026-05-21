@@ -207,23 +207,34 @@ public class CacheGenerateCommand {
      * @return 命令执行结果
      */
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
-        // 显示生成任务状态
+        IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
+        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
+
+        // 合并显示生成状态和增量更新状态
         if (ConversionOrchestrator.isRunning()) {
+            // 有生成任务运行时，分开显示
             ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.in_progress",
                     ConversionOrchestrator.getProcessedCount(),
                     ConversionOrchestrator.getTotalCount(),
                     ConversionOrchestrator.getStatus()), false);
+            sendIncrementalStatus(ctx, handler, mode);
+        } else if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
+            // 无生成任务 + 增量更新禁用，合并显示
+            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.no_task_disabled"), false);
         } else {
+            // 无生成任务 + 增量更新启用
             ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.no_progress"), false);
+            sendIncrementalStatus(ctx, handler, mode);
         }
 
-        // 显示增量更新状态
-        IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
-        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
+        return Command.SINGLE_SUCCESS;
+    }
 
-        if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
-            ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.incremental_disabled"), false);
-        } else if (mode == UpdateMode.TICK) {
+    /**
+     * 发送增量更新状态消息
+     */
+    private static void sendIncrementalStatus(CommandContext<CommandSourceStack> ctx, IncrementalUpdateHandler handler, UpdateMode mode) {
+        if (mode == UpdateMode.TICK) {
             int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
             int remainingTicks = interval - handler.getTickCounter();
             int remainingSeconds = remainingTicks / 20;
@@ -235,8 +246,6 @@ public class CacheGenerateCommand {
             int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
             ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.scheduled_mode", hour, minute), false);
         }
-
-        return Command.SINGLE_SUCCESS;
     }
 
     /**
