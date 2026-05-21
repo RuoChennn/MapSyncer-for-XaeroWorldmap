@@ -227,11 +227,6 @@ public class ModConfig {
          */
         public final IntValue syncSpeedLimitKBps;
 
-        /**
-         * 启用断点续传
-         */
-        public final BooleanValue enableResumeSync;
-
         // ========== 增量更新设置 ==========
 
         /**
@@ -298,10 +293,6 @@ public class ModConfig {
                     .comment("Sync speed limit in KB/s (0 = unlimited, default 100 KB/s)",
                              "同步速度限制 KB/s（0 = 无限制，默认 100 KB/s）")
                     .defineInRange("syncSpeedLimitKBps", 100, 0, 10000);
-            enableResumeSync = builder
-                    .comment("Enable resume sync when player reconnects",
-                             "启用断点续传（玩家重新连接时恢复同步进度）")
-                    .define("enableResumeSync", true);
 
             builder.pop();
 

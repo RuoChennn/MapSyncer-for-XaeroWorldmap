@@ -78,9 +78,6 @@ public class PlayerJoinHandler {
     public static void onServerStopped(ServerStoppedEvent event) {
         LOGGER.info("Server stopped, cleaning up singleton cache instances");
 
-        // Clear stale sync progress first (before full cleanup)
-        ServerSyncHandler.clearStaleProgress();
-
         // Reset singleton instances to release memory
         GenerationCache.resetInstance();
         McaTimestampCache.resetInstance();

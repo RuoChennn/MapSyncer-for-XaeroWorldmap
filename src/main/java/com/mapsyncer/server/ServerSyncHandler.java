@@ -40,14 +40,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 接收客户端同步请求，包含客户端缓存的元数据（时间戳+哈希）
  * - 比对服务端缓存与客户端元数据，确定需要同步的区域
  * - 分批发送差异区域数据到客户端
- * - 支持同步中断恢复（玩家断线后重新连接可继续）
  * - 支持速度限制，避免网络拥塞
  *
- * 同步逻辑：
+ * 同步逻辑（基于哈希比对，自动断点续传）：
  * 1. 哈希值一致 → 不同步（文件内容相同）
  * 2. 哈希值不一致 + 客户端时间戳旧于服务端 → 同步
  * 3. 哈希值不一致 + 客户端时间戳新于服务端 → 不同步（客户端有新数据）
  * 4. 客户端无该区域的元数据 → 同步（新区域）
+ *
+ * 断点续传机制：
+ * - 完全依赖哈希比对，客户端时间戳缓存（sync_timestamps.cache）记录已接收区域
+ * - 断线重连后，客户端发送已接收区域的哈希，服务端比对后只同步差异
+ * - 无需服务端保留进度索引，简化实现并避免内存泄漏
  *
  * 注意：此类通过主mod类的modBus.addListener()手动注册，
  * 因为RegisterPayloadHandlersEvent是MOD总线事件。
@@ -75,59 +79,6 @@ public class ServerSyncHandler {
 
     /** 玩家同步开始时的维度（用于维度切换时中断同步） */
     private static final Map<UUID, ResourceKey<Level>> playerSyncDimensions = new ConcurrentHashMap<>();
-
-    /** 玩家同步进度（用于断线恢复） */
-    private static final Map<UUID, SyncProgress> playerSyncProgress = new ConcurrentHashMap<>();
-
-    /**
-     * 同步进度记录 - 用于断线恢复
-     *
-     * 仅存储元数据（总数、起始索引），不缓存实际的区块数据，
-     * 以最小化内存占用并防止内存泄漏。
-     */
-    public static class SyncProgress {
-        /** 需同步的总区块数 */
-        public final int totalChunks;
-
-        /** 恢复起始位置 */
-        public final int startIndex;
-
-        /** 世界ID */
-        public final int worldId;
-
-        /** 同步开始时间 */
-        public final long startTime;
-
-        /** 最后活动时间（用于检测过期） */
-        public final long lastActivityTime;
-
-        /**
-         * 构造同步进度记录
-         *
-         * @param totalChunks 需同步的总区块数
-         * @param startIndex 恢复起始位置
-         * @param worldId 世界ID
-         */
-        public SyncProgress(int totalChunks, int startIndex, int worldId) {
-            this.totalChunks = totalChunks;
-            this.startIndex = startIndex;
-            this.worldId = worldId;
-            this.startTime = System.currentTimeMillis();
-            this.lastActivityTime = System.currentTimeMillis();
-        }
-
-        /**
-         * 检查同步进度是否过期（无活动时间过长）
-         *
-         * 过期进度将被清除以防止内存泄漏。
-         *
-         * @param timeoutMs 过期超时时间（毫秒）
-         * @return true表示已过期
-         */
-        public boolean isStale(long timeoutMs) {
-            return System.currentTimeMillis() - lastActivityTime > timeoutMs;
-        }
-    }
 
     /**
      * 注册网络数据包处理器
@@ -159,15 +110,16 @@ public class ServerSyncHandler {
     /**
      * 玩家断线事件处理
      *
-     * 标记同步为已中断但保留进度，用于断线恢复。
+     * 哈希比对机制会自动处理断点续传：
+     * - 客户端重连后发送已接收区域的哈希（从 sync_timestamps.cache 读取）
+     * - 服务端比对后只同步差异区域
      *
      * @param playerId 玩家UUID
      */
     public static void onPlayerDisconnect(UUID playerId) {
-        if (syncingPlayers.remove(playerId)) {
-            playerSyncDimensions.remove(playerId);
-            LOGGER.info("Player {} disconnected, sync paused (progress preserved for resume)", playerId);
-        }
+        syncingPlayers.remove(playerId);
+        playerSyncDimensions.remove(playerId);
+        LOGGER.info("Player {} disconnected, sync interrupted. Resume via hash comparison on reconnect.", playerId);
     }
 
     /**
@@ -191,7 +143,6 @@ public class ServerSyncHandler {
                     playerId, startDimension.location(), player.level().dimension().location());
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
-            playerSyncProgress.remove(playerId);
             return false;
         }
 
@@ -259,6 +210,7 @@ public class ServerSyncHandler {
      * 处理客户端同步请求
      *
      * 接收客户端元数据，比对服务端缓存，发送差异数据。
+     * 基于哈希比对实现自动断点续传，无需索引恢复。
      *
      * @param payload 同步请求数据包
      * @param context 数据包上下文
@@ -274,7 +226,7 @@ public class ServerSyncHandler {
         syncingPlayers.add(playerId);
         playerSyncDimensions.put(playerId, startDimension);
 
-        // Client metadata (timestamp + hash)
+        // Client metadata (timestamp + hash) - contains already received regions for resume
         Map<String, ClientMeta> clientMeta = payload.clientMeta();
 
         // Read worldId from xaeromap.txt (Xaero's official method)
@@ -294,7 +246,6 @@ public class ServerSyncHandler {
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "no_cache"));
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
-            playerSyncProgress.remove(playerId);
             return;
         }
 
@@ -302,23 +253,20 @@ public class ServerSyncHandler {
         // 1. Hash match → skip (file content identical)
         // 2. Hash mismatch + client timestamp older → sync
         // 3. Hash mismatch + client timestamp newer → skip (client has newer data)
-        // 4. Client has no metadata for this dimension → skip (not requested)
+        // 4. Client has no metadata for this region → sync (new region)
         int hashMatchCount = 0;
         int timestampSkipCount = 0;
 
         // Determine which dimensions the client is requesting (based on their metadata keys)
-        // 客户端发送的维度名是 Xaero 格式（如 null, DIM-1, DIM1, twilightforest$twilight_forest）
         Set<String> requestedDimensions = new java.util.HashSet<>();
         for (String key : clientMeta.keySet()) {
             LOGGER.info("Client meta key: {}", key);
             String[] parts = key.split("[/\\\\]");
             if (parts.length > 1) {
                 String dim = parts[0];
-                // Skip placeholder entries (used when client has no local data)
                 if (!key.contains("_placeholder_")) {
-                    requestedDimensions.add(dim);  // First part is dimension name (Xaero format)
+                    requestedDimensions.add(dim);
                 } else {
-                    // Placeholder indicates client wants full sync for this dimension
                     requestedDimensions.add(dim);
                     LOGGER.info("Found placeholder for dimension {}, will sync all regions", dim);
                 }
@@ -326,17 +274,14 @@ public class ServerSyncHandler {
         }
         LOGGER.info("Client requesting dimensions (Xaero format): {}", requestedDimensions);
 
-        // 记录已经跳过的维度，避免重复打印日志
+        // Check if requested dimensions have cache data
         Set<String> skippedDimensions = new HashSet<>();
-
-        // 检查请求的维度是否有缓存数据
-        // 客户端发送的是 Xaero 格式，服务端缓存目录也是 Xaero 格式
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
-        boolean hasValidDimension = false;  // 是否至少有一个维度存在缓存
+        boolean hasValidDimension = false;
+
         for (String xaeroDim : requestedDimensions) {
             Path dimCacheDir = cacheDir.resolve(xaeroDim);
             if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
-                // 检查目录是否包含 zip 文件
                 try {
                     boolean hasZipFiles = Files.walk(dimCacheDir)
                             .anyMatch(p -> p.toString().endsWith(".zip"));
@@ -347,56 +292,41 @@ public class ServerSyncHandler {
                     LOGGER.warn("Failed to check dimension {} cache directory", xaeroDim, e);
                 }
             } else {
-                // 维度缓存不存在，发送错误提示
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
             }
         }
 
-        // 如果所有请求的维度都不存在缓存，立即返回（不显示 uptodate 消息）
         if (!hasValidDimension) {
             LOGGER.info("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
-            playerSyncProgress.remove(playerId);
             return;
         }
 
+        // Compare server cache with client metadata to find differences
         try {
             Files.walk(cacheDir)
                     .filter(p -> p.toString().endsWith(".zip"))
                     .forEach(zipPath -> {
-                        // Convert path to relative format: dimension/regionX_regionZ
                         String relativePath = cacheDir.relativize(zipPath).toString();
-                        // Remove .zip extension and normalize path separator
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
 
-                        // Parse dimension from path (服务端缓存目录使用 Xaero 格式)
                         String[] parts = normalizedPath.split("[/\\\\]");
                         String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
 
-                        LOGGER.info("Checking cache file: normalizedPath={}, xaeroDimName={}", normalizedPath, xaeroDimName);
-
-                        // 兼容旧版本缓存：将 Minecraft 格式的维度名转换为 Xaero 格式
-                        // 旧版本可能生成 overworld, the_nether, the_end 目录
-                        // 新版本使用 null, DIM-1, DIM1 目录
                         String normalizedXaeroDim = dimMapping.toXaeroDimension(xaeroDimName);
                         if (!normalizedXaeroDim.equals(xaeroDimName)) {
-                            LOGGER.info("Legacy cache dir detected: {} -> {}", xaeroDimName, normalizedXaeroDim);
-                            // 更新 normalizedPath 使用正确的 Xaero 格式
                             normalizedPath = normalizedXaeroDim + normalizedPath.substring(xaeroDimName.length());
-                            LOGGER.info("Updated normalizedPath: {}", normalizedPath);
                         }
 
-                        // Skip if client didn't request this dimension (直接用 Xaero 格式匹配)
                         if (!requestedDimensions.contains(normalizedXaeroDim)) {
-                            // 只打印一次维度级别的跳过信息，避免重复日志
                             if (!skippedDimensions.contains(normalizedXaeroDim)) {
                                 skippedDimensions.add(normalizedXaeroDim);
-                                LOGGER.info("Skipping dimension {}: not in requestedDimensions {}", normalizedXaeroDim, requestedDimensions);
+                                LOGGER.info("Skipping dimension {}: not requested", normalizedXaeroDim);
                             }
                             return;
                         }
@@ -404,63 +334,38 @@ public class ServerSyncHandler {
                         RegionMeta serverMeta = serverCache.get(normalizedPath);
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
 
-                        LOGGER.info("Comparing {}: serverMeta={}, clientMetaEntry={}", normalizedPath,
-                                serverMeta != null ? "ts=" + serverMeta.timestampSeconds() + ",hash=" + serverMeta.hash() : "null",
-                                clientMetaEntry != null ? "ts=" + clientMetaEntry.timestampSeconds() + ",hash=" + clientMetaEntry.hash() : "null");
-
-                        // Server has no GenerationCache entry → compute hash from file and compare
-                        // This handles legacy cache that doesn't have generation_cache.properties
+                        // Server has no cache entry → compute hash from file
                         if (serverMeta == null) {
                             String serverHash = HashUtils.computeFileHash(zipPath);
                             long fileTimestamp = System.currentTimeMillis() / 1000;
 
-                            LOGGER.info("No server cache entry, computed hash from file: {}, ts={}", serverHash, fileTimestamp);
-
-                            // Client has no metadata → sync (new region for client)
                             if (clientMetaEntry == null) {
-                                LOGGER.info("Will sync {}: client has no metadata (new region)", normalizedPath);
                                 addChunkData(diffs, zipPath, normalizedPath, fileTimestamp);
                                 return;
                             }
 
-                            // Hash match → skip sync (file content identical)
                             if (serverHash.equals(clientMetaEntry.hash())) {
-                                LOGGER.info("Skipping {}: hash match (computed server={}, client={})",
-                                        normalizedPath, serverHash, clientMetaEntry.hash());
-                                return;
+                                return; // Hash match, skip
                             }
 
-                            // Hash mismatch → sync (server has newer data from file)
-                            LOGGER.info("Will sync {}: hash mismatch (computed server={}, client={})",
-                                    normalizedPath, serverHash, clientMetaEntry.hash());
                             addChunkData(diffs, zipPath, normalizedPath, fileTimestamp);
                             return;
                         }
 
-                        // Client has no metadata → sync (new region for client)
+                        // Client has no metadata → sync (new region)
                         if (clientMetaEntry == null) {
-                            LOGGER.info("Will sync {}: client has no metadata (new region)", normalizedPath);
                             addChunkData(diffs, zipPath, normalizedPath, serverMeta.timestampSeconds());
                             return;
                         }
 
-                        // Hash match → skip sync (file content identical)
+                        // Hash match → skip
                         if (serverMeta.hash().equals(clientMetaEntry.hash())) {
-                            LOGGER.info("Skipping {}: hash match (server={}, client={})",
-                                    normalizedPath, serverMeta.hash(), clientMetaEntry.hash());
-                            return;  // hashMatchCount incremented outside lambda
+                            return;
                         }
 
                         // Hash mismatch → check timestamps
-                        // Client timestamp older than server → sync
                         if (clientMetaEntry.timestampSeconds() < serverMeta.timestampSeconds()) {
-                            LOGGER.info("Will sync {}: hash mismatch, client ts={}s < server ts={}s",
-                                    normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
                             addChunkData(diffs, zipPath, normalizedPath, serverMeta.timestampSeconds());
-                        } else {
-                            // Client timestamp newer → skip (client explored newer content)
-                            LOGGER.info("Skipping {}: hash mismatch but client ts={}s >= server ts={}s",
-                                    normalizedPath, clientMetaEntry.timestampSeconds(), serverMeta.timestampSeconds());
                         }
                     });
         } catch (IOException e) {
@@ -479,7 +384,7 @@ public class ServerSyncHandler {
 
         int total = diffs.size();
 
-        LOGGER.info("Sync request from {}: {} regions to sync, {} hash match (identical), {} timestamp skip (client newer)",
+        LOGGER.info("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
                 serverPlayer.getName().getString(), total, hashMatchCount, timestampSkipCount);
 
         if (total == 0) {
@@ -488,60 +393,32 @@ public class ServerSyncHandler {
                     new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "uptodate"));
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
-            playerSyncProgress.remove(playerId);
             return;
         }
 
-        // 直接开始同步，不发送开始消息（服务端消息将在完成时发送）
-
-        // Check if this is a resumed sync
-        SyncProgress existingProgress = playerSyncProgress.get(playerId);
-        int startIndex = 0;
-        if (existingProgress != null && ModConfig.SERVER.enableResumeSync.get()) {
-            // Resume from last progress if same total count
-            if (existingProgress.totalChunks == total) {
-                startIndex = Math.min(existingProgress.totalChunks - 1, total - 1);
-                LOGGER.info("Resuming sync for player {} from index {}", playerId, startIndex);
-            } else {
-                LOGGER.info("Sync total changed for player {}, starting fresh", playerId);
-                playerSyncProgress.remove(playerId);
-            }
-        }
-
-        // Store progress for potential resume (only metadata, not chunk data)
-        playerSyncProgress.put(playerId, new SyncProgress(total, startIndex, worldId));
-
-        // Send progress updates and data in batches with speed limiting
-        int processed = startIndex;
+        // Send data in batches with speed limiting
         List<ChunkMapData> batch = new ArrayList<>();
         int batchSize = 0;
         int batchBytes = 0;
+        int processed = 0;
 
-        for (int i = startIndex; i < diffs.size(); i++) {
-            ChunkMapData chunk = diffs.get(i);
-
-            // Check if player is still valid (connected + same dimension)
+        for (ChunkMapData chunk : diffs) {
             if (!isPlayerStillValid(serverPlayer)) {
-                LOGGER.info("Player {} became invalid during sync, pausing at index {}", playerId, i);
-                return;  // Progress preserved for resume
+                LOGGER.info("Player {} disconnected during sync", playerId);
+                return;
             }
 
-            // Check if adding this chunk would exceed packet size limit
             if (batchSize + chunk.data.length > getMaxPacketSize() && !batch.isEmpty()) {
-                // Apply speed limit before sending
                 applySpeedLimit(batchBytes);
 
-                // Send current batch
                 PacketDistributor.sendToPlayer(serverPlayer,
                         new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), false, worldId, "ok"));
                 processed += batch.size();
 
-                // Send progress update
                 PacketDistributor.sendToPlayer(serverPlayer,
                         new PacketHandler.SyncProgressPayload(processed, total,
                                 String.format("Sending regions %d/%d", processed, total)));
 
-                // Clear batch and reset size
                 batch.clear();
                 batchSize = 0;
                 batchBytes = 0;
@@ -552,15 +429,13 @@ public class ServerSyncHandler {
             batchBytes += chunk.data.length;
         }
 
-        // Check player validity before final batch
         if (!isPlayerStillValid(serverPlayer)) {
-            LOGGER.info("Player {} became invalid before final batch, pausing at index {}", playerId, processed);
-            return;  // Progress preserved for resume
+            LOGGER.info("Player {} disconnected before final batch", playerId);
+            return;
         }
 
-        // Send final batch with completion flag
+        // Send final batch
         if (!batch.isEmpty()) {
-            // Apply speed limit before sending final batch
             applySpeedLimit(batchBytes);
 
             PacketDistributor.sendToPlayer(serverPlayer,
@@ -572,21 +447,14 @@ public class ServerSyncHandler {
                 new PacketHandler.SyncProgressPayload(total, total, "completed"));
 
         serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
-        LOGGER.info("Map sync complete for player {}: {} regions",
-                serverPlayer.getName().getString(), total);
+        LOGGER.info("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
 
-        // Remove from tracking sets
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
-        playerSyncProgress.remove(playerId);
     }
 
     /**
      * 从zip文件添加区块数据
-     *
-     * 路径格式解析：
-     * - 地表：dim/regionX_regionZ
-     * - 洞穴：dim/caves/layer/regionX_regionZ
      *
      * @param diffs 差异数据列表
      * @param zipPath zip文件路径
@@ -596,21 +464,17 @@ public class ServerSyncHandler {
     private static void addChunkData(List<ChunkMapData> diffs, Path zipPath, String normalizedPath, long timestampSeconds) {
         try {
             byte[] data = Files.readAllBytes(zipPath);
-            // Parse dimension, caveLayer, and coordinates from path
             String[] parts = normalizedPath.split("[/\\\\]");
 
-            // 解析维度名、洞穴层和坐标
             String dimension;
-            int caveLayer = Integer.MAX_VALUE;  // 默认地表
+            int caveLayer = Integer.MAX_VALUE;
             String fileName;
 
             if (parts.length >= 4 && parts[1].equals("caves")) {
-                // 洞穴层格式：dim/caves/layer/regionX_regionZ
                 dimension = parts[0];
                 caveLayer = Integer.parseInt(parts[2]);
                 fileName = parts[3];
             } else {
-                // 地表格式：dim/regionX_regionZ
                 dimension = parts[0];
                 fileName = parts[parts.length - 1];
             }
@@ -635,29 +499,6 @@ public class ServerSyncHandler {
     public static void cleanup() {
         syncingPlayers.clear();
         playerSyncDimensions.clear();
-        playerSyncProgress.clear();
         LOGGER.info("ServerSyncHandler tracking data cleared");
-    }
-
-    /**
-     * 清除过期的同步进度记录
-     *
-     * 无活动超过5分钟的进度被视为过期，将被清除以防止内存泄漏。
-     */
-    public static void clearStaleProgress() {
-        final long STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-        int cleared = 0;
-        for (Map.Entry<UUID, SyncProgress> entry : playerSyncProgress.entrySet()) {
-            if (entry.getValue().isStale(STALE_TIMEOUT_MS)) {
-                playerSyncProgress.remove(entry.getKey());
-                syncingPlayers.remove(entry.getKey());
-                playerSyncDimensions.remove(entry.getKey());
-                cleared++;
-                LOGGER.info("Cleared stale sync progress for player {}", entry.getKey());
-            }
-        }
-        if (cleared > 0) {
-            LOGGER.info("Cleared {} stale sync progress entries", cleared);
-        }
     }
 }
