@@ -335,6 +335,8 @@ public class MapPacketReceiver {
             }
 
             // Step 2: 处理视距外的 region
+            // - 设置 loadState=4（实时生成不会写入）
+            // - requestLoad 开始加载渲染（不需要 pauseWriterPause 保护）
             LOGGER.info("[DEBUG] === Step 2: 处理视距外 region ===");
             for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
                 if (viewRegions.contains(coord)) continue; // 已在 Step 1 处理
@@ -351,11 +353,14 @@ public class MapPacketReceiver {
 
                 // 设置 loadState=4，实时生成不会写入
                 loadStateField.setByte(mapRegion, (byte) 4);
+
+                // requestLoad 开始加载渲染（prioritize=false，正常队列顺序）
+                requestLoad.invoke(mapSaveLoad, mapRegion, "sync reload", false);
                 outsideViewCount++;
             }
 
             LOGGER.info("[DEBUG] === 区域处理完成 ===");
-            LOGGER.info("[DEBUG] 视距内: {} 个 (pauseWriting + requestLoad), 视距外: {} 个 (loadState=4)", viewDistanceCount, outsideViewCount);
+            LOGGER.info("[DEBUG] 视距内: {} 个 (pauseWriting + requestLoad 优先), 视距外: {} 个 (loadState=4 + requestLoad)", viewDistanceCount, outsideViewCount);
 
             // 清除预卸载记录
             XaeroMapIntegrator.clearPreUnloadedRegions();
