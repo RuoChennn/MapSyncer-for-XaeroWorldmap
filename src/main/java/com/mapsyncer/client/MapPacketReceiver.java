@@ -224,9 +224,12 @@ public class MapPacketReceiver {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null) return;
 
+            LOGGER.info("[DEBUG] === 开始 triggerXaeroReloadAndResume ===");
+
             // Clear cache for synced regions and get all regions to reload
             // All synced regions (including view distance regions) need reload
             java.util.Set<XaeroMapIntegrator.RegionCoord> regionsToReload = clearXaeroCacheSelective();
+            LOGGER.info("[DEBUG] regionsToReload: {} 个 region", regionsToReload.size());
 
             if (regionsToReload.isEmpty()) {
                 LOGGER.info("No regions need reload, all caches were cleared");
@@ -239,6 +242,7 @@ public class MapPacketReceiver {
             Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
             Method getCurrentSession = worldMapSessionClass.getMethod("getCurrentSession");
             Object session = getCurrentSession.invoke(null);
+            LOGGER.info("[DEBUG] WorldMapSession: {}", session != null ? "获取成功" : "null");
 
             if (session == null) {
                 LOGGER.warn("Could not get Xaero WorldMapSession");
@@ -249,6 +253,7 @@ public class MapPacketReceiver {
             // Get MapProcessor from session
             Method getMapProcessor = worldMapSessionClass.getMethod("getMapProcessor");
             Object mapProcessor = getMapProcessor.invoke(session);
+            LOGGER.info("[DEBUG] MapProcessor: {}", mapProcessor != null ? "获取成功" : "null");
 
             if (mapProcessor == null) {
                 LOGGER.warn("Could not get Xaero MapProcessor");
@@ -260,6 +265,7 @@ public class MapPacketReceiver {
             Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
             Method getMapSaveLoad = mapProcessorClass.getMethod("getMapSaveLoad");
             Object mapSaveLoad = getMapSaveLoad.invoke(mapProcessor);
+            LOGGER.info("[DEBUG] MapSaveLoad: {}", mapSaveLoad != null ? "获取成功" : "null");
 
             if (mapSaveLoad == null) {
                 LOGGER.warn("Could not get Xaero MapSaveLoad");
@@ -271,170 +277,107 @@ public class MapPacketReceiver {
             Class<?> mapSaveLoadClass = Class.forName("xaero.map.file.MapSaveLoad");
             Method detectRegions = mapSaveLoadClass.getMethod("detectRegions", int.class);
             detectRegions.invoke(mapSaveLoad, 20);
-            LOGGER.info("Triggered region detection for {} synced regions", regionsToReload.size());
+            LOGGER.info("[DEBUG] detectRegions 已调用，等待 {} 个 region", regionsToReload.size());
 
-            // Directly request load for each region that needs reload
-            // This is more efficient than startFullMapReload which iterates all regions
+            // 方案 B：对所有同步 region 设置 loadState=4，取消全局暂停
+            // - 视距内 region：loadState=4 + region.pauseWriting + requestLoad（优先加载）
+            // - 视距外 region：loadState=4（只标记需要重载，不主动加载）
+            // - 实时生成恢复后：loadState!=2 的 region 不会被写入
+
             Method getLeafMapRegion = mapProcessorClass.getMethod("getLeafMapRegion", int.class, int.class, int.class, boolean.class);
-            // Use requestLoad with prioritize parameter for view distance regions
             Method requestLoad = mapSaveLoadClass.getMethod("requestLoad", Class.forName("xaero.map.region.MapRegion"), String.class, boolean.class);
+            Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
+            java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
+            loadStateField.setAccessible(true);
 
             // 获取视距范围内的 region（优先加载）
             java.util.Set<XaeroMapIntegrator.RegionCoord> viewRegions = XaeroMapIntegrator.getViewDistanceRegions();
-
-            // 获取预卸载的 region（原本已加载的）
-            java.util.Set<XaeroMapIntegrator.RegionCoord> preUnloadedRegions = XaeroMapIntegrator.getPreUnloadedRegions();
+            LOGGER.info("[DEBUG] viewRegions: {} 个视距内 region", viewRegions.size());
 
             // 用于追踪视距内已暂停的 region，以便稍后恢复
             java.util.List<Object> pausedViewRegions = new java.util.ArrayList<>();
 
-            int priorityCount = 0;    // 视距范围内优先加载的 region 数量
-            int normalCount = 0;      // 其他 region 数量
-            int reloadedCount = 0;    // 原本已加载的（使用 loadState=4）
-            int newCount = 0;         // 新增的（使用 loadState=0）
+            int viewDistanceCount = 0;   // 视距内 region 数量
+            int outsideViewCount = 0;    // 视距外 region 数量
 
-            // Step 1: 优先处理视距范围内的 region（prioritize=true）
-            // 并对这些 region 使用 region 级别的 pauseWriting 保护，防止实时生成覆盖
+            // Step 1: 处理视距范围内的 region
+            LOGGER.info("[DEBUG] === Step 1: 处理视距内 region ===");
             for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
                 if (!viewRegions.contains(coord)) continue;
 
                 Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
                 if (mapRegion == null) {
-                    LOGGER.debug("Could not get/create MapRegion for ({}, {})", coord.x(), coord.z());
+                    LOGGER.warn("[DEBUG] 视距内 region ({}, {}) 无法创建 MapRegion", coord.x(), coord.z());
                     continue;
                 }
 
-                // Set loadState
-                Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
-                java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
-                loadStateField.setAccessible(true);
+                // 检查当前 loadState
                 byte currentLoadState = loadStateField.getByte(mapRegion);
+                LOGGER.info("[DEBUG] 视距内 region ({}, {}) 当前 loadState={}, 将设置为 4", coord.x(), coord.z(), currentLoadState);
 
-                boolean wasPreLoaded = preUnloadedRegions.contains(coord);
-                if (wasPreLoaded) {
-                    loadStateField.setByte(mapRegion, (byte) 4);
-                    reloadedCount++;
-                } else {
-                    if (currentLoadState == 2 || currentLoadState == 4) {
-                        loadStateField.setByte(mapRegion, (byte) 0);
-                        try {
-                            java.lang.reflect.Field hasHadTerrainField = mapRegionClass.getDeclaredField("hasHadTerrain");
-                            hasHadTerrainField.setAccessible(true);
-                            hasHadTerrainField.setBoolean(mapRegion, false);
-                        } catch (NoSuchFieldException ignored) {}
-                    }
-                    newCount++;
-                }
+                // 设置 loadState=4（需要重载），实时生成不会写入 loadState!=2 的 region
+                loadStateField.setByte(mapRegion, (byte) 4);
 
-                // 对视距内的 region 使用 region 级别的 pushWriterPause 保护
-                // 这样即使全局恢复后，这些 region 也不会被实时生成覆盖
+                // region 级别 pauseWriting 双重保护
                 try {
                     Method pushWriterPauseRegion = mapRegionClass.getMethod("pushWriterPause");
                     pushWriterPauseRegion.invoke(mapRegion);
                     pausedViewRegions.add(mapRegion);
-                    LOGGER.debug("Paused region-level writing for view region ({}, {})", coord.x(), coord.z());
+                    LOGGER.info("[DEBUG] 视距内 region ({}, {}) 已 pauseWriterPause", coord.x(), coord.z());
                 } catch (Exception e) {
-                    LOGGER.warn("Could not pause region-level writing: {}", e.getMessage());
+                    LOGGER.warn("[DEBUG] 视距内 region ({}, {}) pauseWriterPause 失败: {}", coord.x(), coord.z(), e.getMessage());
                 }
 
-                // Request load with prioritize=true (adds to front of queue)
+                // 优先加载
                 requestLoad.invoke(mapSaveLoad, mapRegion, "sync priority", true);
-                priorityCount++;
-                LOGGER.debug("Priority load requested for view region ({}, {})", coord.x(), coord.z());
+                LOGGER.info("[DEBUG] 视距内 region ({}, {}) 已 requestLoad (prioritize=true)", coord.x(), coord.z());
+                viewDistanceCount++;
             }
 
-            // Step 2: 处理其他 region（prioritize=false）
+            // Step 2: 处理视距外的 region
+            LOGGER.info("[DEBUG] === Step 2: 处理视距外 region ===");
             for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
                 if (viewRegions.contains(coord)) continue; // 已在 Step 1 处理
 
                 Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
                 if (mapRegion == null) {
-                    LOGGER.debug("Could not get/create MapRegion for ({}, {})", coord.x(), coord.z());
+                    LOGGER.warn("[DEBUG] 视距外 region ({}, {}) 无法创建 MapRegion", coord.x(), coord.z());
                     continue;
                 }
 
-                // Set loadState
-                Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
-                java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
-                loadStateField.setAccessible(true);
+                // 检查当前 loadState
                 byte currentLoadState = loadStateField.getByte(mapRegion);
+                LOGGER.info("[DEBUG] 视距外 region ({}, {}) 当前 loadState={}, 将设置为 4", coord.x(), coord.z(), currentLoadState);
 
-                boolean wasPreLoaded = preUnloadedRegions.contains(coord);
-                if (wasPreLoaded) {
-                    loadStateField.setByte(mapRegion, (byte) 4);
-                    reloadedCount++;
-                } else {
-                    if (currentLoadState == 2 || currentLoadState == 4) {
-                        loadStateField.setByte(mapRegion, (byte) 0);
-                        try {
-                            java.lang.reflect.Field hasHadTerrainField = mapRegionClass.getDeclaredField("hasHadTerrain");
-                            hasHadTerrainField.setAccessible(true);
-                            hasHadTerrainField.setBoolean(mapRegion, false);
-                        } catch (NoSuchFieldException ignored) {}
-                    }
-                    newCount++;
-                }
-
-                // Request load with prioritize=false (normal queue order)
-                requestLoad.invoke(mapSaveLoad, mapRegion, "sync reload", false);
-                normalCount++;
+                // 设置 loadState=4，实时生成不会写入
+                loadStateField.setByte(mapRegion, (byte) 4);
+                outsideViewCount++;
             }
 
-            int totalRequested = priorityCount + normalCount;
-            LOGGER.info("Reload requested: {} pre-loaded (loadState=4), {} new (loadState=0), total {} regions",
-                    reloadedCount, newCount, totalRequested);
+            LOGGER.info("[DEBUG] === 区域处理完成 ===");
+            LOGGER.info("[DEBUG] 视距内: {} 个 (pauseWriting + requestLoad), 视距外: {} 个 (loadState=4)", viewDistanceCount, outsideViewCount);
 
             // 清除预卸载记录
             XaeroMapIntegrator.clearPreUnloadedRegions();
 
-            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.direct_reload", totalRequested), false);
+            int totalRegions = viewDistanceCount + outsideViewCount;
+            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.direct_reload", totalRegions), false);
+            LOGGER.info("[DEBUG] 发送消息: {} 个 region 已标记", totalRegions);
 
-            // 使用 addToRefresh 强制立即刷新玩家周围的 region（优先加载）
-            // 注意：viewRegions 已在前面定义，这里直接使用
-            try {
-                Method addToRefresh = mapProcessorClass.getMethod("addToRefresh", int.class, int.class, int.class, String.class);
-                int priorityRefreshCount = 0;
-                for (XaeroMapIntegrator.RegionCoord viewRegion : viewRegions) {
-                    if (regionsToReload.contains(viewRegion)) {
-                        addToRefresh.invoke(mapProcessor, Integer.MAX_VALUE, viewRegion.x(), viewRegion.z(), "sync priority");
-                        priorityRefreshCount++;
-                        LOGGER.debug("Priority refresh for view region ({}, {})", viewRegion.x(), viewRegion.z());
-                    }
-                }
-                LOGGER.info("Priority refresh requested for {} view distance regions", priorityRefreshCount);
-            } catch (Exception e) {
-                LOGGER.warn("Could not call addToRefresh for priority regions: {}", e.getMessage());
-            }
-
-            // 延迟恢复 chunk updates，让 region 加载优先执行
-            // Step 1: 先恢复全局写入（不影响被保护的 region）
-            // Step 2: 等待一段时间让 region 加载完成
-            // Step 3: 恢复 region 级别写入并刷新纹理
+            // 方案 B：立即恢复全局写入，不等待
+            LOGGER.info("[DEBUG] === 立即恢复全局写入 ===");
             final java.util.List<Object> finalPausedRegions = pausedViewRegions;
             final Object finalMapProcessor = mapProcessor;
-            new Thread(() -> {
-                try {
-                    // 等待 5s 让 region 加载
-                    Thread.sleep(5000);
-                    Minecraft.getInstance().execute(() -> {
-                        // 恢复全局写入
-                        resumeChunkUpdates();
-                        LOGGER.info("Global chunk updates resumed");
 
-                        // 再等待 5s，确保 region 加载完成后恢复 region 级别写入
-                        new Thread(() -> {
-                            try {
-                                Thread.sleep(5000);
-                                Minecraft.getInstance().execute(() -> {
-                                    // 恢复 region 级别写入
-                                    resumeRegionWriting(finalPausedRegions, finalMapProcessor);
-                                    LOGGER.info("Region-level writing resumed for {} view regions", finalPausedRegions.size());
-                                });
-                            } catch (InterruptedException ignored) {}
-                        }, "MapSyncer-ResumeRegions").start();
-                    });
-                } catch (InterruptedException ignored) {}
-            }, "MapSyncer-ResumeDelay").start();
+            // 立即恢复全局写入
+            resumeChunkUpdates();
+            LOGGER.info("[DEBUG] 全局 chunk updates 已恢复，pausedViewRegions: {} 个", finalPausedRegions.size());
+
+            // 启动 tick 监听器，等待视距内 region 加载完成后解除 region 级别写保护
+            if (!finalPausedRegions.isEmpty()) {
+                RegionLoadListener.startListening(finalPausedRegions, finalMapProcessor);
+                LOGGER.info("Started region load listener for {} view regions", finalPausedRegions.size());
+            }
 
         } catch (Exception e) {
             LOGGER.error("Failed to trigger Xaero map reload", e);
@@ -456,8 +399,7 @@ public class MapPacketReceiver {
 
     /**
      * 恢复 region 级别的写入保护。
-     * 对之前使用 pushWriterPause 暂停的 region 调用 popWriterPause 恢复写入，
-     * 并刷新纹理以显示加载的数据。
+     * 对之前使用 pushWriterPause 暂停的 region 调用 popWriterPause 恢复写入。
      *
      * @param pausedRegions 已暂停的 region 列表
      * @param mapProcessor MapProcessor 实例
@@ -466,29 +408,26 @@ public class MapPacketReceiver {
         try {
             Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
             Method popWriterPause = mapRegionClass.getMethod("popWriterPause");
-            Method addToRefresh = Class.forName("xaero.map.MapProcessor").getMethod("addToRefresh", int.class, int.class, int.class, String.class);
+            Method getRegionX = mapRegionClass.getMethod("getRegionX");
+            Method getRegionZ = mapRegionClass.getMethod("getRegionZ");
 
             for (Object region : pausedRegions) {
                 try {
                     // 恢复 region 写入
                     popWriterPause.invoke(region);
 
-                    // 刷新 region 纹理以显示加载的数据
-                    java.lang.reflect.Field regionXField = mapRegionClass.getDeclaredField("regionX");
-                    java.lang.reflect.Field regionZField = mapRegionClass.getDeclaredField("regionZ");
-                    regionXField.setAccessible(true);
-                    regionZField.setAccessible(true);
-                    int rx = regionXField.getInt(region);
-                    int rz = regionZField.getInt(region);
-
-                    addToRefresh.invoke(mapProcessor, Integer.MAX_VALUE, rx, rz, "sync resume");
-                    LOGGER.debug("Resumed writing and refreshed region ({}, {})", rx, rz);
+                    // 获取坐标用于日志
+                    int rx = (int) getRegionX.invoke(region);
+                    int rz = (int) getRegionZ.invoke(region);
+                    LOGGER.debug("Resumed writing for region ({}, {})", rx, rz);
                 } catch (Exception e) {
                     LOGGER.warn("Failed to resume region writing: {}", e.getMessage());
                 }
             }
+
+            LOGGER.info("Resumed writing for {} regions", pausedRegions.size());
         } catch (Exception e) {
-            LOGGER.error("Failed to resume region-level writing", e);
+            LOGGER.error("Failed to resume region writing", e);
         }
     }
 

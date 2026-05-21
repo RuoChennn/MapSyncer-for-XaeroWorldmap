@@ -187,6 +187,13 @@ public class XaeroMapIntegrator {
      * 计算视距范围内的区域坐标。
      * 根据玩家的位置和视距设置，计算需要关注的区域集合。
      *
+     * <p>计算逻辑：</p>
+     * <ul>
+     *   <li>视距 = 渲染距离（chunks 半径）</li>
+     *   <li>一个 region = 32 chunks</li>
+     *   <li>根据玩家位置计算视距范围可能跨越的 region</li>
+     * </ul>
+     *
      * @return 视距范围内的区域坐标集合
      */
     public static Set<RegionCoord> getViewDistanceRegions() {
@@ -196,30 +203,42 @@ public class XaeroMapIntegrator {
             return new HashSet<>();
         }
 
-        // Get player position
+        // Get player position in chunks
         int playerChunkX = player.getBlockX() >> 4;  // 16 blocks per chunk
         int playerChunkZ = player.getBlockZ() >> 4;
 
-        // Get view distance (render distance)
+        // Get view distance (render distance) in chunks (radius)
         int viewDistance = mc.options.renderDistance().get();
-        // Convert to region radius: 32 chunks per region, add buffer
-        int regionRadius = (viewDistance >> 5) + 2;  // +2 for safety margin
 
-        // Player's current region
-        int playerRegionX = playerChunkX >> 5;  // 32 chunks per region
-        int playerRegionZ = playerChunkZ >> 5;
+        // 计算视距范围（chunks）
+        // 从 playerChunkX - viewDistance 到 playerChunkX + viewDistance
+        int minChunkX = playerChunkX - viewDistance;
+        int maxChunkX = playerChunkX + viewDistance;
+        int minChunkZ = playerChunkZ - viewDistance;
+        int maxChunkZ = playerChunkZ + viewDistance;
+
+        // 转换为 region 坐标
+        // region 边界: regionX * 32 到 (regionX + 1) * 32 - 1
+        int minRegionX = minChunkX >> 5;  // floor division for negative numbers
+        int maxRegionX = maxChunkX >> 5;
+        int minRegionZ = minChunkZ >> 5;
+        int maxRegionZ = maxChunkZ >> 5;
+
+        // 处理负数情况的 floor division
+        // Java 的 >> 5 对负数是 floor，正数也是 floor，所以这里正确
 
         Set<RegionCoord> viewRegions = new HashSet<>();
 
-        // Add all regions within view distance
-        for (int rx = playerRegionX - regionRadius; rx <= playerRegionX + regionRadius; rx++) {
-            for (int rz = playerRegionZ - regionRadius; rz <= playerRegionZ + regionRadius; rz++) {
+        // 添加视距范围内的所有 region
+        for (int rx = minRegionX; rx <= maxRegionX; rx++) {
+            for (int rz = minRegionZ; rz <= maxRegionZ; rz++) {
                 viewRegions.add(new RegionCoord(rx, rz));
             }
         }
 
-        LOGGER.debug("View distance regions: player at ({}, {}), radius {}, total {} regions",
-                playerRegionX, playerRegionZ, regionRadius, viewRegions.size());
+        LOGGER.debug("View distance regions: viewDistance={}, chunks ({},{}) to ({},{}), regions ({},{}) to ({},{}), total {}",
+                viewDistance, minChunkX, minChunkZ, maxChunkX, maxChunkZ,
+                minRegionX, minRegionZ, maxRegionX, maxRegionZ, viewRegions.size());
 
         return viewRegions;
     }
