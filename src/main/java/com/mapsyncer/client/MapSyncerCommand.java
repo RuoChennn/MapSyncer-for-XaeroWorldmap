@@ -316,8 +316,8 @@ public class MapSyncerCommand {
     private static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
         Map<String, ClientMeta> metaMap;
 
-        // Step 1: 先暂停实时生成，防止卸载 region 后立即被重新写入
-        XaeroMapIntegrator.disableChunkUpdates();
+        // 新流程：先发送请求，等服务端确认有数据后再暂停区块更新
+        // 不在这里禁用区块更新，改为在收到服务端 status="ok" 后再暂停
 
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
 
@@ -326,18 +326,6 @@ public class MapSyncerCommand {
 
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         String xaeroDim = syncAll ? null : dimMapping.toXaeroDimension(dimensionId);
-
-        // Step 2: 卸载视野范围内的 region（此时实时生成已暂停）
-        if (!syncAll && xaeroDim != null) {
-            MapPacketReceiver.prepareSyncForDimension(xaeroDim);
-        } else if (syncAll) {
-            // For sync all, check if syncing current dimension as part of all
-            String currentXaeroDim = mc.level != null ?
-                    dimMapping.toXaeroDimension(mc.level.dimension().location().toString()) : null;
-            if (currentXaeroDim != null) {
-                MapPacketReceiver.prepareSyncForDimension(currentXaeroDim);
-            }
-        }
 
         if (syncAll) {
             if (serverDir != null && tsCache != null && tsCache.cacheFileExists()) {
@@ -367,12 +355,6 @@ public class MapSyncerCommand {
         }
 
         LOGGER.info("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
-
-        if (metaMap.isEmpty()) {
-            mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.no_regions"), false);
-        } else {
-            mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.checking_regions", metaMap.size()), false);
-        }
 
         PacketDistributor.sendToServer(new PacketHandler.SyncRequestPayload(metaMap));
         SyncProgressTracker.startTracking();

@@ -13,9 +13,11 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.config.ModConfig.Type;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -48,6 +50,11 @@ public class MapSyncer {
     public static final String MOD_ID = "mapsyncer";
 
     /**
+     * 模组版本号，从 modContainer 获取。
+     */
+    public static String VERSION = "unknown";
+
+    /**
      * 日志记录器，用于输出模组运行日志。
      */
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
@@ -63,19 +70,41 @@ public class MapSyncer {
      * @param modContainer 模组容器，用于注册配置文件
      */
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
+        VERSION = modContainer.getModInfo().getVersion().toString();
         modBus.addListener(this::commonSetup);
 
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            // 客户端初始化：注册网络包接收器
+            // 客户端初始化：注册网络包接收器和事件监听器
             modBus.addListener(MapPacketReceiver::register);
+            NeoForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode)");
         } else {
             // 服务端初始化：注册网络包处理器和事件监听器
             modBus.addListener(ServerSyncHandler::register);
             NeoForge.EVENT_BUS.register(this);
             LOGGER.info("MapSyncer initialized (server mode)");
+        }
+    }
+
+    /**
+     * 客户端事件处理器 - 处理客户端玩家断开连接事件
+     */
+    @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+    public static class ClientEventHandler {
+        /**
+         * 玩家断开连接事件处理
+         *
+         * 重置服务端安装状态和同步数据
+         *
+         * @param event 玩家断开连接事件
+         */
+        @SubscribeEvent
+        public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
+            MapPacketReceiver.resetServerStatus();
+            MapPacketReceiver.clearSyncData();
+            LOGGER.info("Client disconnected from server, reset server status");
         }
     }
 

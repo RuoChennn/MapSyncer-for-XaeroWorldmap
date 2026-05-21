@@ -38,6 +38,10 @@ public class PacketHandler {
     public static final ResourceLocation SYNC_PROGRESS_ID = ResourceLocation.fromNamespaceAndPath(
             MapSyncer.MOD_ID, "sync_progress");
 
+    /** 服务端已安装通知包的资源定位符 */
+    public static final ResourceLocation SERVER_INSTALLED_ID = ResourceLocation.fromNamespaceAndPath(
+            MapSyncer.MOD_ID, "server_installed");
+
     /**
      * 初始化网络包处理器
      *
@@ -214,6 +218,41 @@ public class PacketHandler {
          *
          * @return 包类型标识
          */
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * 服务端已安装通知包 - 服务端在玩家加入时发送
+     *
+     * <p>用于告知客户端服务端已安装 MapSyncer，客户端可以据此提前知道服务端状态。</p>
+     *
+     * @param version 服务端模组版本号
+     */
+    public record ServerInstalledPayload(String version) implements CustomPacketPayload {
+        /** 包类型标识 */
+        public static final Type<ServerInstalledPayload> TYPE = new Type<>(SERVER_INSTALLED_ID);
+        /** 流编解码器 */
+        public static final StreamCodec<RegistryFriendlyByteBuf, ServerInstalledPayload> STREAM_CODEC = StreamCodec.of(
+                ServerInstalledPayload::encode, ServerInstalledPayload::decode
+        );
+
+        /**
+         * 编码到网络缓冲区
+         */
+        public static void encode(RegistryFriendlyByteBuf buf, ServerInstalledPayload payload) {
+            buf.writeUtf(payload.version);
+        }
+
+        /**
+         * 从网络缓冲区解码
+         */
+        public static ServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
+            return new ServerInstalledPayload(buf.readUtf());
+        }
+
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;

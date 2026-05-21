@@ -41,6 +41,12 @@ public class MapPacketReceiver {
     /** 同步是否正在进行中，用于协调区块更新的禁用 */
     private static volatile boolean syncInProgress = false;
 
+    /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
+    private static volatile boolean serverInstalled = false;
+
+    /** 服务端版本号 */
+    private static volatile String serverVersion = "";
+
     /** 最后写入的 mw 目录，用于缓存清除 */
     private static volatile Path lastMwDir = null;
 
@@ -141,6 +147,43 @@ public class MapPacketReceiver {
                 PacketHandler.SyncProgressPayload.STREAM_CODEC,
                 MapPacketReceiver::handleProgressUpdate
         );
+
+        // Client receives server installed notification when joining server
+        registrar.playToClient(
+                PacketHandler.ServerInstalledPayload.TYPE,
+                PacketHandler.ServerInstalledPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    serverInstalled = true;
+                    serverVersion = payload.version();
+                    LOGGER.info("Server has MapSyncer installed, version: {}", serverVersion);
+                }
+        );
+    }
+
+    /**
+     * 检查服务端是否已安装 MapSyncer
+     *
+     * @return true 表示服务端已安装
+     */
+    public static boolean isServerInstalled() {
+        return serverInstalled;
+    }
+
+    /**
+     * 获取服务端版本号
+     *
+     * @return 服务端版本号字符串
+     */
+    public static String getServerVersion() {
+        return serverVersion;
+    }
+
+    /**
+     * 重置服务端安装状态（离开服务器时调用）
+     */
+    public static void resetServerStatus() {
+        serverInstalled = false;
+        serverVersion = "";
     }
 
     /**

@@ -2,6 +2,8 @@ package com.mapsyncer.server;
 
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
+import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.MapSyncer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -9,6 +11,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +41,10 @@ public class PlayerJoinHandler {
         ServerPlayer player = (ServerPlayer) event.getEntity();
         MinecraftServer server = player.getServer();
         if (server == null) return;
+
+        // 发送服务端已安装通知给客户端
+        PacketDistributor.sendToPlayer(player,
+                new PacketHandler.ServerInstalledPayload(MapSyncer.VERSION));
 
         UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {

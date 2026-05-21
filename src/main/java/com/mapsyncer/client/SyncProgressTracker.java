@@ -17,12 +17,11 @@ import java.util.concurrent.TimeUnit;
  *   <li>追踪同步的开始、进行中和完成状态</li>
  *   <li>定期显示进度百分比（每10%）</li>
  *   <li>计算同步耗时</li>
- *   <li>检测服务端响应超时，提示服务端可能未安装模组</li>
+ *   <li>检测服务端响应超时</li>
  * </ul>
  *
  * <p>进度显示：</p>
  * <ul>
- *   <li>开始同步时显示开始消息</li>
  *   <li>每10%进度显示一次进度更新</li>
  *   <li>同步完成时显示总耗时和处理的区域数</li>
  * </ul>
@@ -74,7 +73,7 @@ public class SyncProgressTracker {
 
     /**
      * 启动超时检查器。
-     * 如果在5秒内未收到服务端响应，提示服务端可能未安装模组。
+     * 如果在5秒内未收到服务端响应，根据服务端安装状态显示不同提示。
      */
     private static void startTimeoutChecker() {
         if (timeoutChecker != null) {
@@ -85,7 +84,14 @@ public class SyncProgressTracker {
             if (tracking && !receivedFirstResponse) {
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
-                    mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"), false);
+                    // 根据服务端安装状态显示不同错误
+                    if (MapPacketReceiver.isServerInstalled()) {
+                        // 服务端已安装但响应超时，可能是网络问题或服务端处理出错
+                        mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
+                    } else {
+                        // 服务端未安装
+                        mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"), false);
+                    }
                 }
                 cancelTracking();
             }
