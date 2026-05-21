@@ -43,10 +43,10 @@ public class ModConfig {
      * 获取原版维度的默认配置（系统预设）
      *
      * <p>使用字符串格式避免 NightConfig 序列化问题</p>
-     * <p>格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
+     * <p>格式："dimension|scan_mode|cave_start|dim_type_info"</p>
      * <p>dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
      *
-     * <p>例如："minecraft:the_nether|DIM-1|CAVE|63|false|true|0|256|256"</p>
+     * <p>例如："minecraft:the_nether|CAVE|63|false|true|0|256|256"</p>
      *
      * @return 默认维度配置字符串列表
      */
@@ -55,15 +55,15 @@ public class ModConfig {
 
         // 主世界：地表模式，有天空光照
         // hasSkylight=true, hasCeiling=false, minY=-64, height=384
-        defaults.add("minecraft:overworld||SURFACE|63|true|false|-64|384|384");
+        defaults.add("minecraft:overworld|SURFACE|63|true|false|-64|384|384");
 
         // 地狱：洞穴模式，有顶棚，无天空光照
         // hasSkylight=false, hasCeiling=true, minY=0, height=256
-        defaults.add("minecraft:the_nether|DIM-1|CAVE|63|false|true|0|256|256");
+        defaults.add("minecraft:the_nether|CAVE|63|false|true|0|256|256");
 
         // 末地：地表模式，无天空光照，无顶棚
         // hasSkylight=false, hasCeiling=false, minY=0, height=256
-        defaults.add("minecraft:the_end|DIM1|SURFACE|63|false|false|0|256|256");
+        defaults.add("minecraft:the_end|SURFACE|63|false|false|0|256|256");
 
         return defaults;
     }
@@ -126,15 +126,12 @@ public class ModConfig {
      * <p>存储单个维度的扫描参数</p>
      *
      * @param dimension 维度 ID（如 "minecraft:the_nether"）
-     * @param regionFolder MCA 文件存放目录（如 "DIM-1"，默认在 world 目录下）
-     *                     用于适配 mod 修改维度 ID 后的文件路径
      * @param scanMode 扫描模式（SURFACE 或 CAVE）
      * @param caveStart 洞穴起始高度（SURFACE 模式忽略此参数）
      * @param dimTypeInfo 维度类型信息（可选，用于离线解析时确定高度范围和光照属性）
      */
     public record DimensionScanConfig(
         String dimension,
-        String regionFolder,
         ScanMode scanMode,
         int caveStart,
         DimensionTypeInfo dimTypeInfo
@@ -145,12 +142,11 @@ public class ModConfig {
          * <p>维度类型信息将根据维度 ID 自动推断</p>
          *
          * @param dimension 维度 ID
-         * @param regionFolder MCA 文件存放目录
          * @param scanMode 扫描模式
          * @param caveStart 洞穴起始高度
          */
-        public DimensionScanConfig(String dimension, String regionFolder, ScanMode scanMode, int caveStart) {
-            this(dimension, regionFolder, scanMode, caveStart, null);
+        public DimensionScanConfig(String dimension, ScanMode scanMode, int caveStart) {
+            this(dimension, scanMode, caveStart, null);
         }
 
         /**
@@ -295,13 +291,13 @@ public class ModConfig {
                              "同时转换的最大区域数量")
                     .defineInRange("maxConcurrentRegions", 4, 1, 16);
             maxSyncPacketSize = builder
-                    .comment("Maximum sync packet size in bytes (default 1MB)",
-                             "同步数据包最大字节数（默认 1MB）")
-                    .defineInRange("maxSyncPacketSize", 1048576, 65536, 10485760);
+                    .comment("Maximum sync packet size in bytes (default 1MB, max 1MB to avoid NeoForge limits)",
+                             "同步数据包最大字节数（默认 1MB，最大 1MB 以避免超过 NeoForge 限制）")
+                    .defineInRange("maxSyncPacketSize", 1048576, 65536, 1048576);
             syncSpeedLimitKBps = builder
-                    .comment("Sync speed limit in KB/s (0 = unlimited, recommended 500-2000)",
-                             "同步速度限制 KB/s（0 = 无限制，建议 500-2000）")
-                    .defineInRange("syncSpeedLimitKBps", 0, 0, 10000);
+                    .comment("Sync speed limit in KB/s (0 = unlimited, default 100 KB/s)",
+                             "同步速度限制 KB/s（0 = 无限制，默认 100 KB/s）")
+                    .defineInRange("syncSpeedLimitKBps", 100, 0, 10000);
             enableResumeSync = builder
                     .comment("Enable resume sync when player reconnects",
                              "启用断点续传（玩家重新连接时恢复同步进度）")
@@ -349,15 +345,13 @@ public class ModConfig {
 
             dimensionConfigs = builder
                     .comment("Per-dimension scan configuration list (string format)",
-                             "Format: \"dimension|region_folder|scan_mode|cave_start|dim_type_info\"",
+                             "Format: \"dimension|scan_mode|cave_start|dim_type_info\"",
                              "dim_type_info format: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
-                             "Example: \"minecraft:the_nether|DIM-1|CAVE|63|false|true|0|256|256\"",
-                             "region_folder specifies where MCA files are stored, empty means default path",
+                             "Example: \"minecraft:the_nether|CAVE|63|false|true|0|256|256\"",
                              "维度扫描配置列表（字符串格式）",
-                             "格式：\"dimension|region_folder|scan_mode|cave_start|dim_type_info\"",
+                             "格式：\"dimension|scan_mode|cave_start|dim_type_info\"",
                              "dim_type_info 格式：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
-                             "例如：\"minecraft:the_nether|DIM-1|CAVE|63|false|true|0|256|256\"",
-                             "region_folder 指定 MCA 文件存放目录，空表示使用默认路径")
+                             "例如：\"minecraft:the_nether|CAVE|63|false|true|0|256|256\"")
                     .defineList("dimension_configs", getDefaultDimensionConfigStrings(),
                         obj -> obj instanceof String);
 
@@ -368,7 +362,7 @@ public class ModConfig {
          * 解析维度配置列表
          *
          * <p>将字符串格式的配置转换为 DimensionScanConfig 对象列表</p>
-         * <p>字符串格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
+         * <p>字符串格式："dimension|scan_mode|cave_start|dim_type_info"</p>
          *
          * @return DimensionScanConfig 对象列表
          */
@@ -386,9 +380,9 @@ public class ModConfig {
         /**
          * 解析单个配置字符串
          *
-         * <p>格式："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
+         * <p>新格式："dimension|scan_mode|cave_start|dim_type_info"</p>
+         * <p>旧格式（向后兼容）："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
          * <p>dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
-         * <p>向后兼容：不包含 dim_type_info 时自动推断</p>
          *
          * @param configStr 配置字符串
          * @return DimensionScanConfig 对象，如果无效则返回 null
@@ -404,37 +398,40 @@ public class ModConfig {
             }
 
             String dimension = parts[0];
-            String regionFolder = parts.length > 1 ? parts[1] : "";
-            String modeStr = parts.length > 2 ? parts[2] : "SURFACE";
             int caveStart = 63;
-            // 默认从维度 ID 推断维度类型信息
             DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimension);
 
             try {
-                // 解析 caveStart（第4个字段）
-                if (parts.length > 3) {
-                    caveStart = Integer.parseInt(parts[3]);
+                // 检测格式：如果 parts[1] 是扫描模式，则为新格式；否则为旧格式（跳过 region_folder）
+                boolean isNewFormat = parts.length > 1 &&
+                    (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
+
+                int scanModeIndex = isNewFormat ? 1 : 2;
+                int caveStartIndex = isNewFormat ? 2 : 3;
+                int dimTypeStartIndex = isNewFormat ? 3 : 4;
+
+                String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
+
+                if (parts.length > caveStartIndex) {
+                    caveStart = Integer.parseInt(parts[caveStartIndex]);
                 }
 
-                // 解析维度类型信息（第5-9个字段，可选）
-                // 格式：hasSkylight|hasCeiling|minY|height|logicalHeight
-                if (parts.length >= 9) {
-                    boolean hasSkylight = Boolean.parseBoolean(parts[4]);
-                    boolean hasCeiling = Boolean.parseBoolean(parts[5]);
-                    int minY = Integer.parseInt(parts[6]);
-                    int height = Integer.parseInt(parts[7]);
-                    int logicalHeight = Integer.parseInt(parts[8]);
+                // 解析维度类型信息
+                if (parts.length >= dimTypeStartIndex + 5) {
+                    boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex]);
+                    boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1]);
+                    int minY = Integer.parseInt(parts[dimTypeStartIndex + 2]);
+                    int height = Integer.parseInt(parts[dimTypeStartIndex + 3]);
+                    int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4]);
                     dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
                 }
 
                 ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
-                return new DimensionScanConfig(dimension, regionFolder, mode, caveStart, dimTypeInfo);
+                return new DimensionScanConfig(dimension, mode, caveStart, dimTypeInfo);
             } catch (NumberFormatException e) {
-                // 无效的数字格式，使用默认值
-                return new DimensionScanConfig(dimension, regionFolder, ScanMode.SURFACE, 63, dimTypeInfo);
+                return new DimensionScanConfig(dimension, ScanMode.SURFACE, 63, dimTypeInfo);
             } catch (IllegalArgumentException e) {
-                // 无效的扫描模式，使用默认值
-                return new DimensionScanConfig(dimension, regionFolder, ScanMode.SURFACE, caveStart, dimTypeInfo);
+                return new DimensionScanConfig(dimension, ScanMode.SURFACE, caveStart, dimTypeInfo);
             }
         }
 
@@ -465,7 +462,7 @@ public class ModConfig {
                     }
                 }
                 // 返回内置默认配置（地狱：洞穴模式，有顶棚）
-                return new DimensionScanConfig("minecraft:the_nether", "DIM-1", ScanMode.CAVE, 63,
+                return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, 63,
                     DimensionTypeInfo.nether());
             }
 
@@ -477,7 +474,7 @@ public class ModConfig {
                         return config;
                     }
                 }
-                return new DimensionScanConfig("minecraft:overworld", "", ScanMode.SURFACE, 63,
+                return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, 63,
                     DimensionTypeInfo.overworld());
             }
 
@@ -489,7 +486,7 @@ public class ModConfig {
                         return config;
                     }
                 }
-                return new DimensionScanConfig("minecraft:the_end", "DIM1", ScanMode.SURFACE, 63,
+                return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, 63,
                     DimensionTypeInfo.theEnd());
             }
 
@@ -503,9 +500,9 @@ public class ModConfig {
                     return config;
                 }
             }
-            // 未匹配则返回默认配置（regionFolder 为空，使用默认路径，维度类型信息自动推断）
+            // 未匹配则返回默认配置（维度类型信息自动推断）
             DimensionTypeInfo inferredDimType = DimensionTypeInfo.fromDimensionId(dimensionPath);
-            return new DimensionScanConfig(dimensionPath, "", defaultScanMode.get(), defaultCaveStart.get(), inferredDimType);
+            return new DimensionScanConfig(dimensionPath, defaultScanMode.get(), defaultCaveStart.get(), inferredDimType);
         }
     }
 }

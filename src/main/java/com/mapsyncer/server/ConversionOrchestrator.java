@@ -16,7 +16,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -254,16 +253,7 @@ public class ConversionOrchestrator {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) return null;
 
-        String dimPath = dimension.location().getPath();
-        DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
-
-        Path regionDir;
-        String configRegionFolder = scanConfig.regionFolder();
-        if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
-            regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
-        } else {
-            regionDir = RegionScanner.getRegionDir(level);
-        }
+        Path regionDir = RegionScanner.getRegionDir(level);
 
         if (regionDir == null) return null;
 
@@ -319,14 +309,8 @@ public class ConversionOrchestrator {
         // 使用 Xaero 格式的维度目录名（使用完整维度 ID，确保新格式路径正确转换）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
-        // 获取 MCA 文件存放目录（用于读取）
-        Path regionDir;
-        String configRegionFolder = scanConfig.regionFolder();
-        if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
-            regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
-        } else {
-            regionDir = RegionScanner.getRegionDir(level);
-        }
+        // 获取 MCA 文件存放目录（1.21+ 自动检测路径）
+        Path regionDir = RegionScanner.getRegionDir(level);
 
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", dimension);
@@ -418,19 +402,8 @@ public class ConversionOrchestrator {
         // 获取 Xaero 格式的目录名（使用完整维度 ID，确保新格式路径正确转换）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
-        // 获取 MCA 文件存放目录（用于读取）
-        // 优先使用配置中的 regionFolder，否则使用默认路径
-        Path regionDir;
-        String configRegionFolder = scanConfig.regionFolder();
-        if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
-            // 使用配置指定的 region 目录
-            regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
-            LOGGER.info("Using configured region_folder: {} -> {}", configRegionFolder, regionDir);
-        } else {
-            // 使用 Minecraft 默认路径
-            regionDir = RegionScanner.getRegionDir(level);
-            LOGGER.info("Using default region path for dimension {}", dimPath);
-        }
+        // 获取 MCA 文件存放目录（1.21+ 自动检测路径）
+        Path regionDir = RegionScanner.getRegionDir(level);
 
         // 计算输出目录（包含 caves/<layer> 子目录）
         Path baseOutputDir = CACHE_DIR.resolve(xaeroDimName);
@@ -737,14 +710,8 @@ public class ConversionOrchestrator {
             // 获取 Xaero 格式的目录名（使用完整维度 ID，确保新格式路径正确转换）
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
-            // 获取 MCA 文件存放目录（用于读取）
-            Path regionDir;
-            String configRegionFolder = scanConfig.regionFolder();
-            if (configRegionFolder != null && !configRegionFolder.isEmpty()) {
-                regionDir = server.getWorldPath(LevelResource.ROOT).resolve(configRegionFolder).resolve("region");
-            } else {
-                regionDir = RegionScanner.getRegionDir(level);
-            }
+            // 获取 MCA 文件存放目录（1.21+ 自动检测路径）
+            Path regionDir = RegionScanner.getRegionDir(level);
             if (regionDir == null) continue;
 
             // 计算输出目录（包含 caves/<layer> 子目录）

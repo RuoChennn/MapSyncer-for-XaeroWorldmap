@@ -23,10 +23,9 @@ import java.util.*;
  * 功能：
  * 1. 首次执行地图生成时扫描服务器所有已加载维度
  * 2. 自动检测维度使用的路径格式（新格式 dimensions/ 或传统格式 DIM）
- * 3. 将检测到的 region_folder 写入配置文件
- * 4. 对未配置的维度自动添加推荐配置（扫描模式等）
+ * 3. 对未配置的维度自动添加推荐配置（扫描模式等）
  *
- * Minecraft 26.1 路径格式支持：
+ * Minecraft 1.21+ 路径格式：
  * - 新格式：dimensions/minecraft/overworld/region, dimensions/minecraft/the_nether/region
  * - 传统格式：region/, DIM-1/region/, DIM1/region/, DIM{id}/region/
  */
@@ -46,41 +45,41 @@ public class DimensionRegistry {
     private static final Map<String, DimensionScanConfig> PRESET_CONFIGS = new LinkedHashMap<>();
 
     static {
-        // 原版维度预设配置（region_folder为空，由自动检测决定）
+        // 原版维度预设配置（1.21+ 自动检测路径）
         // 主世界：地表模式，有天空光照，minY=-64, height=384
         PRESET_CONFIGS.put("minecraft:overworld",
-                new DimensionScanConfig("minecraft:overworld", "", ScanMode.SURFACE, 63,
+                new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, 63,
                     DimensionTypeInfo.overworld()));
 
         // 地狱：洞穴模式，无天空光照，有顶棚，minY=0, height=256
         PRESET_CONFIGS.put("minecraft:the_nether",
-                new DimensionScanConfig("minecraft:the_nether", "", ScanMode.CAVE, 63,
+                new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, 63,
                     DimensionTypeInfo.nether()));
 
         // 末地：地表模式，无天空光照，无顶棚，minY=0, height=256
         PRESET_CONFIGS.put("minecraft:the_end",
-                new DimensionScanConfig("minecraft:the_end", "", ScanMode.SURFACE, 63,
+                new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, 63,
                     DimensionTypeInfo.theEnd()));
 
         // Mod维度预设配置
         // Twilight Forest: 地表模式（森林地形），类似主世界
         PRESET_CONFIGS.put("twilightforest:twilight_forest",
-                new DimensionScanConfig("twilightforest:twilight_forest", "", ScanMode.SURFACE, 63,
+                new DimensionScanConfig("twilightforest:twilight_forest", ScanMode.SURFACE, 63,
                     new DimensionTypeInfo(true, false, 0, 256, 256)));
 
         // Aether: 天空维度，使用地表模式
         PRESET_CONFIGS.put("aether:the_aether",
-                new DimensionScanConfig("aether:the_aether", "", ScanMode.SURFACE, 63,
+                new DimensionScanConfig("aether:the_aether", ScanMode.SURFACE, 63,
                     new DimensionTypeInfo(true, false, 0, 256, 256)));
 
         // Betweenlands: 地下沼泽维度，可能需要洞穴模式
         PRESET_CONFIGS.put("thebetweenlands:betweenlands",
-                new DimensionScanConfig("thebetweenlands:betweenlands", "", ScanMode.CAVE, 32,
+                new DimensionScanConfig("thebetweenlands:betweenlands", ScanMode.CAVE, 32,
                     new DimensionTypeInfo(false, true, 0, 256, 256)));
 
         // Erebus: 昆虫洞穴维度，使用洞穴模式
         PRESET_CONFIGS.put("erebus:erebus",
-                new DimensionScanConfig("erebus:erebus", "", ScanMode.CAVE, 32,
+                new DimensionScanConfig("erebus:erebus", ScanMode.CAVE, 32,
                     new DimensionTypeInfo(false, true, 0, 256, 256)));
     }
 
@@ -144,11 +143,8 @@ public class DimensionRegistry {
         // 创建新的配置列表（保留原有配置 + 新增配置）
         List<String> updatedConfigs = new ArrayList<>(currentConfigs);
 
-        // 添加新发现的维度（使用检测到的 region_folder 和维度类型信息）
+        // 添加新发现的维度（1.21+ 自动检测路径）
         for (String dimId : newDimensions) {
-            // 检测实际的 region_folder
-            String detectedFolder = detectRegionFolder(worldRoot, dimId);
-
             // 获取推荐配置（扫描模式等）
             DimensionScanConfig preset = getRecommendedConfig(dimId);
 
@@ -165,10 +161,9 @@ public class DimensionRegistry {
                 dimTypeInfo = preset.dimTypeInfo() != null ? preset.dimTypeInfo() : DimensionTypeInfo.fromDimensionId(dimId);
             }
 
-            // 使用检测到的路径、推荐配置和维度类型信息创建最终配置
+            // 使用推荐配置和维度类型信息创建最终配置
             DimensionScanConfig finalConfig = new DimensionScanConfig(
                     dimId,
-                    detectedFolder,
                     preset.scanMode(),
                     preset.caveStart(),
                     dimTypeInfo
@@ -176,8 +171,8 @@ public class DimensionRegistry {
 
             String configStr = configToString(finalConfig);
             updatedConfigs.add(configStr);
-            LOGGER.info("Added dimension config: {} (region_folder={}, scan_mode={}, hasSkylight={})",
-                    dimId, detectedFolder, finalConfig.scanMode(), dimTypeInfo.hasSkylight());
+            LOGGER.info("Added dimension config: {} (scan_mode={}, hasSkylight={})",
+                    dimId, finalConfig.scanMode(), dimTypeInfo.hasSkylight());
         }
 
         // 更新配置值
@@ -198,33 +193,6 @@ public class DimensionRegistry {
         hasRegistered = false;
         DimensionPathMapping.resetInstance();
         LOGGER.info("Dimension registration state reset");
-    }
-
-    /**
-     * 检测维度的实际region_folder
-     *
-     * 自动检测维度使用的是新格式（dimensions/）还是传统格式（DIM）。
-     *
-     * @param worldRoot 世界根目录
-     * @param dimId 维度ID（如"minecraft:overworld", "twilightforest:twilight_forest"）
-     * @return 检测到的region_folder（如"dimensions/minecraft/overworld", "DIM-1", ""）
-     */
-    private static String detectRegionFolder(Path worldRoot, String dimId) {
-        DimensionPathMapping mapping = DimensionPathMapping.getInstance();
-
-        // 使用 DimensionPathMapping 的检测方法
-        Path regionDir = mapping.detectRegionDir(worldRoot, dimId);
-
-        if (regionDir != null) {
-            // 从检测到的路径提取 region_folder
-            String detectedFolder = mapping.getFolderName(dimId.replace("minecraft:", ""));
-            LOGGER.info("Detected region_folder for {}: {}", dimId, detectedFolder);
-            return detectedFolder;
-        }
-
-        // 无法检测，返回空（使用默认 Minecraft 路径）
-        LOGGER.warn("Could not detect region_folder for {}, using default", dimId);
-        return "";
     }
 
     /**
@@ -256,8 +224,6 @@ public class DimensionRegistry {
     /**
      * 获取维度的推荐配置（扫描模式等）
      *
-     * region_folder由detectRegionFolder()决定，不使用预设值。
-     *
      * @param dimId 维度ID
      * @return 推荐的维度扫描配置
      */
@@ -270,14 +236,14 @@ public class DimensionRegistry {
         }
 
         // 非原版维度：使用默认地表模式，维度类型信息自动推断
-        return new DimensionScanConfig(dimId, "", ScanMode.SURFACE, 63,
+        return new DimensionScanConfig(dimId, ScanMode.SURFACE, 63,
             DimensionTypeInfo.fromDimensionId(dimId));
     }
 
     /**
      * 将DimensionScanConfig转换为字符串格式（用于配置文件）
      *
-     * 格式：dimension|region_folder|scan_mode|cave_start|dim_type_info
+     * 格式：dimension|scan_mode|cave_start|dim_type_info
      * dim_type_info格式：hasSkylight|hasCeiling|minY|height|logicalHeight
      *
      * @param config 维度扫描配置
@@ -286,7 +252,6 @@ public class DimensionRegistry {
     private static String configToString(DimensionScanConfig config) {
         StringBuilder sb = new StringBuilder();
         sb.append(config.dimension());
-        sb.append("|").append(config.regionFolder());
         sb.append("|").append(config.scanMode().name());
         sb.append("|").append(config.caveStart());
 
