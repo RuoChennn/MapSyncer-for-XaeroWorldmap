@@ -108,6 +108,15 @@ public class IncrementalUpdateHandler {
     }
 
     /**
+     * 获取当前tick计数
+     *
+     * @return tick计数器值
+     */
+    public int getTickCounter() {
+        return tickCounter.get();
+    }
+
+    /**
      * 服务器Tick事件处理
      *
      * 每个服务器tick都会调用此方法，根据配置的更新模式

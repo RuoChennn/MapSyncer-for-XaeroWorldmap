@@ -93,11 +93,27 @@ public class MapSyncerCommand {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
+        // 客户端同步命令
         mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.command.help_header")), false);
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync"), false);
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_dim"), false);
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_all"), false);
         mc.player.displayClientMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"), false);
+
+        // 如果玩家有OP权限，显示服务端命令
+        if (context.getSource().hasPermission(4)) {
+            mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_region"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_force"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.status"), false);
+            mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.incremental_header")), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"), false);
+        }
+
         return Command.SINGLE_SUCCESS;
     }
 
@@ -306,6 +322,9 @@ public class MapSyncerCommand {
     private static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
         Map<String, ClientMeta> metaMap;
 
+        // Step 1: 先暂停实时生成，防止卸载 region 后立即被重新写入
+        XaeroMapIntegrator.disableChunkUpdates();
+
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
 
         ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
@@ -313,6 +332,18 @@ public class MapSyncerCommand {
 
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         String xaeroDim = syncAll ? null : dimMapping.toXaeroDimension(dimensionId);
+
+        // Step 2: 卸载视野范围内的 region（此时实时生成已暂停）
+        if (!syncAll && xaeroDim != null) {
+            MapPacketReceiver.prepareSyncForDimension(xaeroDim);
+        } else if (syncAll) {
+            // For sync all, check if syncing current dimension as part of all
+            String currentXaeroDim = mc.level != null ?
+                    dimMapping.toXaeroDimension(mc.level.dimension().location().toString()) : null;
+            if (currentXaeroDim != null) {
+                MapPacketReceiver.prepareSyncForDimension(currentXaeroDim);
+            }
+        }
 
         if (syncAll) {
             if (serverDir != null && tsCache != null && tsCache.cacheFileExists()) {

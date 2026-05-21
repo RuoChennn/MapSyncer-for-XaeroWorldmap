@@ -3,6 +3,7 @@ package com.mapsyncer.client;
 import com.mapsyncer.network.ChunkMapData;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -25,6 +26,7 @@ import java.util.List;
  *   <li>管理同步过程中的区块更新暂停和恢复</li>
  *   <li>清除 Xaero 缓存文件并触发地图重新加载</li>
  *   <li>检测超时和陈旧的同步请求，防止内存泄漏</li>
+ *   <li>同步当前维度时，预先卸载视野范围内的region以便重新加载服务端数据</li>
  * </ul>
  *
  * <p>注意：此类在主模类中通过 modBus.addListener() 手动注册，
@@ -147,6 +149,9 @@ public class MapPacketReceiver {
      * 处理服务端返回的同步响应数据包。
      * 将接收到的区块数据写入地图目录，并在同步完成时触发重新加载。
      *
+     * <p>流程：同步前已卸载视野范围内region并禁用chunk更新，
+     * 同步中写入所有服务端数据，同步后触发重载并恢复更新。</p>
+     *
      * @param payload 同步响应数据包
      * @param context 数据包上下文
      */
@@ -165,11 +170,10 @@ public class MapPacketReceiver {
             List<ChunkMapData> chunks = payload.chunks();
             int serverWorldId = payload.worldId();
 
-            // Disable chunk updates before writing map data
-            XaeroMapIntegrator.disableChunkUpdates();
+            // Chunk updates already disabled before sync started
             syncInProgress = true;
 
-            // Accumulate chunks for selective reset tracking
+            // Accumulate all chunks for tracking (no filtering - write all server data)
             allReceivedChunks.addAll(chunks);
 
             // Log memory usage warning if accumulating too much data
@@ -178,8 +182,10 @@ public class MapPacketReceiver {
                 LOGGER.warn("High memory usage during sync: {}MB accumulated", memoryUsage / 1_000_000);
             }
 
-            // Write map data directly from server (no completeness check)
-            lastMwDir = XaeroMapIntegrator.writeMapDataAndReturnDir(chunks, serverWorldId);
+            // Write all map data from server (覆盖客户端数据)
+            if (!chunks.isEmpty()) {
+                lastMwDir = XaeroMapIntegrator.writeMapDataAndReturnDir(chunks, serverWorldId);
+            }
 
             if (payload.isComplete()) {
                 // Record all updated regions for selective reset
@@ -209,8 +215,8 @@ public class MapPacketReceiver {
     }
 
     /**
-     * 触发 Xaero World Map 重新加载需要更新的区域。
-     * 仅重新加载未找到缓存（服务端新区域）的区域。
+     * 触发 Xaero World Map 重新加载所有同步的区域。
+     * 清除缓存并对每个同步的区域调用 requestLoad，确保服务端数据正确显示。
      * 使用 requestLoad 而非 startFullMapReload 以获得更好的精确度。
      */
     private static void triggerXaeroReloadAndResume() {
@@ -218,8 +224,8 @@ public class MapPacketReceiver {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null) return;
 
-            // Clear cache for synced regions and get regions that need reload
-            // (regions without existing cache need to be loaded from disk)
+            // Clear cache for synced regions and get all regions to reload
+            // All synced regions (including view distance regions) need reload
             java.util.Set<XaeroMapIntegrator.RegionCoord> regionsToReload = clearXaeroCacheSelective();
 
             if (regionsToReload.isEmpty()) {
@@ -270,61 +276,170 @@ public class MapPacketReceiver {
             // Directly request load for each region that needs reload
             // This is more efficient than startFullMapReload which iterates all regions
             Method getLeafMapRegion = mapProcessorClass.getMethod("getLeafMapRegion", int.class, int.class, int.class, boolean.class);
-            Method requestLoad = mapSaveLoadClass.getMethod("requestLoad", Class.forName("xaero.map.region.MapRegion"), String.class);
+            // Use requestLoad with prioritize parameter for view distance regions
+            Method requestLoad = mapSaveLoadClass.getMethod("requestLoad", Class.forName("xaero.map.region.MapRegion"), String.class, boolean.class);
 
-            int loadedCount = 0;
-            int createdCount = 0;
+            // 获取视距范围内的 region（优先加载）
+            java.util.Set<XaeroMapIntegrator.RegionCoord> viewRegions = XaeroMapIntegrator.getViewDistanceRegions();
 
+            // 获取预卸载的 region（原本已加载的）
+            java.util.Set<XaeroMapIntegrator.RegionCoord> preUnloadedRegions = XaeroMapIntegrator.getPreUnloadedRegions();
+
+            // 用于追踪视距内已暂停的 region，以便稍后恢复
+            java.util.List<Object> pausedViewRegions = new java.util.ArrayList<>();
+
+            int priorityCount = 0;    // 视距范围内优先加载的 region 数量
+            int normalCount = 0;      // 其他 region 数量
+            int reloadedCount = 0;    // 原本已加载的（使用 loadState=4）
+            int newCount = 0;         // 新增的（使用 loadState=0）
+
+            // Step 1: 优先处理视距范围内的 region（prioritize=true）
+            // 并对这些 region 使用 region 级别的 pauseWriting 保护，防止实时生成覆盖
             for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
-                // Get or create MapRegion for this coordinate
-                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
+                if (!viewRegions.contains(coord)) continue;
 
+                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
                 if (mapRegion == null) {
                     LOGGER.debug("Could not get/create MapRegion for ({}, {})", coord.x(), coord.z());
                     continue;
                 }
 
-                // Check current loadState
+                // Set loadState
                 Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
                 java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
                 loadStateField.setAccessible(true);
                 byte currentLoadState = loadStateField.getByte(mapRegion);
 
-                // Reset loadState to 0 if currently loaded (state 2 or 4)
-                if (currentLoadState == 2 || currentLoadState == 4) {
-                    loadStateField.setByte(mapRegion, (byte) 0);
-                    loadedCount++;
-
-                    // Also reset hasHadTerrain to force fresh load
-                    try {
-                        java.lang.reflect.Field hasHadTerrainField = mapRegionClass.getDeclaredField("hasHadTerrain");
-                        hasHadTerrainField.setAccessible(true);
-                        hasHadTerrainField.setBoolean(mapRegion, false);
-                    } catch (NoSuchFieldException ignored) {}
-
-                    LOGGER.debug("Reset loadState for region ({}, {})", coord.x(), coord.z());
-                } else if (currentLoadState == 0 || currentLoadState == 1) {
-                    // Region was just created or already pending load
-                    createdCount++;
+                boolean wasPreLoaded = preUnloadedRegions.contains(coord);
+                if (wasPreLoaded) {
+                    loadStateField.setByte(mapRegion, (byte) 4);
+                    reloadedCount++;
+                } else {
+                    if (currentLoadState == 2 || currentLoadState == 4) {
+                        loadStateField.setByte(mapRegion, (byte) 0);
+                        try {
+                            java.lang.reflect.Field hasHadTerrainField = mapRegionClass.getDeclaredField("hasHadTerrain");
+                            hasHadTerrainField.setAccessible(true);
+                            hasHadTerrainField.setBoolean(mapRegion, false);
+                        } catch (NoSuchFieldException ignored) {}
+                    }
+                    newCount++;
                 }
 
-                // Request load for this region
-                requestLoad.invoke(mapSaveLoad, mapRegion, "sync reload");
+                // 对视距内的 region 使用 region 级别的 pushWriterPause 保护
+                // 这样即使全局恢复后，这些 region 也不会被实时生成覆盖
+                try {
+                    Method pushWriterPauseRegion = mapRegionClass.getMethod("pushWriterPause");
+                    pushWriterPauseRegion.invoke(mapRegion);
+                    pausedViewRegions.add(mapRegion);
+                    LOGGER.debug("Paused region-level writing for view region ({}, {})", coord.x(), coord.z());
+                } catch (Exception e) {
+                    LOGGER.warn("Could not pause region-level writing: {}", e.getMessage());
+                }
+
+                // Request load with prioritize=true (adds to front of queue)
+                requestLoad.invoke(mapSaveLoad, mapRegion, "sync priority", true);
+                priorityCount++;
+                LOGGER.debug("Priority load requested for view region ({}, {})", coord.x(), coord.z());
             }
 
-            int totalRequested = loadedCount + createdCount;
-            LOGGER.info("Direct reload requested: {} reset, {} new, total {} regions",
-                    loadedCount, createdCount, totalRequested);
+            // Step 2: 处理其他 region（prioritize=false）
+            for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
+                if (viewRegions.contains(coord)) continue; // 已在 Step 1 处理
+
+                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
+                if (mapRegion == null) {
+                    LOGGER.debug("Could not get/create MapRegion for ({}, {})", coord.x(), coord.z());
+                    continue;
+                }
+
+                // Set loadState
+                Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
+                java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
+                loadStateField.setAccessible(true);
+                byte currentLoadState = loadStateField.getByte(mapRegion);
+
+                boolean wasPreLoaded = preUnloadedRegions.contains(coord);
+                if (wasPreLoaded) {
+                    loadStateField.setByte(mapRegion, (byte) 4);
+                    reloadedCount++;
+                } else {
+                    if (currentLoadState == 2 || currentLoadState == 4) {
+                        loadStateField.setByte(mapRegion, (byte) 0);
+                        try {
+                            java.lang.reflect.Field hasHadTerrainField = mapRegionClass.getDeclaredField("hasHadTerrain");
+                            hasHadTerrainField.setAccessible(true);
+                            hasHadTerrainField.setBoolean(mapRegion, false);
+                        } catch (NoSuchFieldException ignored) {}
+                    }
+                    newCount++;
+                }
+
+                // Request load with prioritize=false (normal queue order)
+                requestLoad.invoke(mapSaveLoad, mapRegion, "sync reload", false);
+                normalCount++;
+            }
+
+            int totalRequested = priorityCount + normalCount;
+            LOGGER.info("Reload requested: {} pre-loaded (loadState=4), {} new (loadState=0), total {} regions",
+                    reloadedCount, newCount, totalRequested);
+
+            // 清除预卸载记录
+            XaeroMapIntegrator.clearPreUnloadedRegions();
 
             mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.direct_reload", totalRequested), false);
 
-            // Re-enable chunk updates after reload requests
-            resumeChunkUpdates();
+            // 使用 addToRefresh 强制立即刷新玩家周围的 region（优先加载）
+            // 注意：viewRegions 已在前面定义，这里直接使用
+            try {
+                Method addToRefresh = mapProcessorClass.getMethod("addToRefresh", int.class, int.class, int.class, String.class);
+                int priorityRefreshCount = 0;
+                for (XaeroMapIntegrator.RegionCoord viewRegion : viewRegions) {
+                    if (regionsToReload.contains(viewRegion)) {
+                        addToRefresh.invoke(mapProcessor, Integer.MAX_VALUE, viewRegion.x(), viewRegion.z(), "sync priority");
+                        priorityRefreshCount++;
+                        LOGGER.debug("Priority refresh for view region ({}, {})", viewRegion.x(), viewRegion.z());
+                    }
+                }
+                LOGGER.info("Priority refresh requested for {} view distance regions", priorityRefreshCount);
+            } catch (Exception e) {
+                LOGGER.warn("Could not call addToRefresh for priority regions: {}", e.getMessage());
+            }
+
+            // 延迟恢复 chunk updates，让 region 加载优先执行
+            // Step 1: 先恢复全局写入（不影响被保护的 region）
+            // Step 2: 等待一段时间让 region 加载完成
+            // Step 3: 恢复 region 级别写入并刷新纹理
+            final java.util.List<Object> finalPausedRegions = pausedViewRegions;
+            final Object finalMapProcessor = mapProcessor;
+            new Thread(() -> {
+                try {
+                    // 等待 5s 让 region 加载
+                    Thread.sleep(5000);
+                    Minecraft.getInstance().execute(() -> {
+                        // 恢复全局写入
+                        resumeChunkUpdates();
+                        LOGGER.info("Global chunk updates resumed");
+
+                        // 再等待 5s，确保 region 加载完成后恢复 region 级别写入
+                        new Thread(() -> {
+                            try {
+                                Thread.sleep(5000);
+                                Minecraft.getInstance().execute(() -> {
+                                    // 恢复 region 级别写入
+                                    resumeRegionWriting(finalPausedRegions, finalMapProcessor);
+                                    LOGGER.info("Region-level writing resumed for {} view regions", finalPausedRegions.size());
+                                });
+                            } catch (InterruptedException ignored) {}
+                        }, "MapSyncer-ResumeRegions").start();
+                    });
+                } catch (InterruptedException ignored) {}
+            }, "MapSyncer-ResumeDelay").start();
 
         } catch (Exception e) {
             LOGGER.error("Failed to trigger Xaero map reload", e);
             Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.cache.reload_failed"), false);
-            // Always re-enable chunk updates, even on error
+            // 错误情况下立即恢复 chunk updates
             resumeChunkUpdates();
         }
     }
@@ -340,10 +455,48 @@ public class MapPacketReceiver {
     }
 
     /**
-     * 选择性清除 Xaero 缓存文件，仅清除已更新的区域。
-     * 如果某区域的缓存不存在，将其标记为需要重新加载。
+     * 恢复 region 级别的写入保护。
+     * 对之前使用 pushWriterPause 暂停的 region 调用 popWriterPause 恢复写入，
+     * 并刷新纹理以显示加载的数据。
      *
-     * @return 需要重新加载的区域集合（未找到缓存）
+     * @param pausedRegions 已暂停的 region 列表
+     * @param mapProcessor MapProcessor 实例
+     */
+    private static void resumeRegionWriting(java.util.List<Object> pausedRegions, Object mapProcessor) {
+        try {
+            Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
+            Method popWriterPause = mapRegionClass.getMethod("popWriterPause");
+            Method addToRefresh = Class.forName("xaero.map.MapProcessor").getMethod("addToRefresh", int.class, int.class, int.class, String.class);
+
+            for (Object region : pausedRegions) {
+                try {
+                    // 恢复 region 写入
+                    popWriterPause.invoke(region);
+
+                    // 刷新 region 纹理以显示加载的数据
+                    java.lang.reflect.Field regionXField = mapRegionClass.getDeclaredField("regionX");
+                    java.lang.reflect.Field regionZField = mapRegionClass.getDeclaredField("regionZ");
+                    regionXField.setAccessible(true);
+                    regionZField.setAccessible(true);
+                    int rx = regionXField.getInt(region);
+                    int rz = regionZField.getInt(region);
+
+                    addToRefresh.invoke(mapProcessor, Integer.MAX_VALUE, rx, rz, "sync resume");
+                    LOGGER.debug("Resumed writing and refreshed region ({}, {})", rx, rz);
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to resume region writing: {}", e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to resume region-level writing", e);
+        }
+    }
+
+    /**
+     * 选择性清除 Xaero 缓存文件，并返回所有同步的区域。
+     * 所有同步的区域都需要重新加载，以确保服务端数据正确显示。
+     *
+     * @return 需要重新加载的区域集合（所有同步的区域）
      */
     private static java.util.Set<XaeroMapIntegrator.RegionCoord> clearXaeroCacheSelective() {
         java.util.Set<XaeroMapIntegrator.RegionCoord> regionsToReload = new java.util.HashSet<>();
@@ -362,23 +515,22 @@ public class MapPacketReceiver {
                 return regionsToReload;
             }
 
-            LOGGER.info("Checking cache for {} synced regions", syncedRegions.size());
+            // All synced regions need to be reloaded (including view distance regions)
+            regionsToReload.addAll(syncedRegions);
+            LOGGER.info("Checking cache for {} synced regions, all will be reloaded", syncedRegions.size());
 
             // Find all cache directories (cache, cache_1, cache_<version>)
             java.util.List<Path> cacheDirs = findCacheDirectories(mwDir);
             if (cacheDirs.isEmpty()) {
-                LOGGER.info("No cache directories found, all {} regions need reload", syncedRegions.size());
-                regionsToReload.addAll(syncedRegions);
+                LOGGER.info("No cache directories found");
                 return regionsToReload;
             }
 
             int cacheClearedCount = 0;
-            int reloadNeededCount = 0;
 
-            // For each synced region, check if cache exists
+            // For each synced region, delete cache if exists
             for (XaeroMapIntegrator.RegionCoord region : syncedRegions) {
                 String cacheFileName = region.x() + "_" + region.z() + ".xwmc";
-                boolean cacheFound = false;
 
                 // Check all cache directories for this region's cache
                 for (Path cacheDir : cacheDirs) {
@@ -386,7 +538,6 @@ public class MapPacketReceiver {
                     if (cacheFile.toFile().exists()) {
                         try {
                             java.nio.file.Files.deleteIfExists(cacheFile);
-                            cacheFound = true;
                             cacheClearedCount++;
                             LOGGER.debug("Deleted cache file: {}", cacheFile);
                         } catch (Exception e) {
@@ -395,19 +546,12 @@ public class MapPacketReceiver {
                         break; // Found and deleted, no need to check other directories
                     }
                 }
-
-                // If no cache found for this region, it needs reload
-                if (!cacheFound) {
-                    regionsToReload.add(region);
-                    reloadNeededCount++;
-                    LOGGER.debug("No cache for region ({}, {}), will trigger reload", region.x(), region.z());
-                }
             }
 
-            LOGGER.info("Cache cleared: {} files, reload needed: {} regions", cacheClearedCount, reloadNeededCount);
+            LOGGER.info("Cache cleared: {} files, {} regions will be reloaded", cacheClearedCount, regionsToReload.size());
 
             if (Minecraft.getInstance().player != null) {
-                Minecraft.getInstance().player.displayClientMessage(ChatUtils.desc("mapsyncer.cache.status", cacheClearedCount, reloadNeededCount), false);
+                Minecraft.getInstance().player.displayClientMessage(ChatUtils.desc("mapsyncer.cache.status", cacheClearedCount, regionsToReload.size()), false);
             }
 
         } catch (Exception e) {
@@ -483,6 +627,33 @@ public class MapPacketReceiver {
             LOGGER.info("Deleted cache files in: {}", cacheDir);
         } catch (Exception e) {
             LOGGER.warn("Failed to clear cache directory: {}", cacheDir, e);
+        }
+    }
+
+    /**
+     * 卸载视野范围内的region以便同步当前维度时重新加载服务端数据。
+     * 在同步当前维度时调用。
+     *
+     * @param targetDimension 目标维度（Xaero格式）
+     */
+    public static void prepareSyncForDimension(String targetDimension) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) {
+            return;
+        }
+
+        // 检查是否同步当前维度
+        String currentXaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(
+                mc.level.dimension().location().toString());
+
+        if (targetDimension.equals(currentXaeroDim)) {
+            // 同步当前维度，卸载视野范围内的region
+            LOGGER.info("Syncing current dimension {}, unloading view distance regions", targetDimension);
+            int unloaded = XaeroMapIntegrator.unloadViewDistanceRegions();
+            if (unloaded > 0 && mc.player != null) {
+                mc.player.displayClientMessage(
+                        ChatUtils.desc("mapsyncer.sync.unloading_regions", unloaded), false);
+            }
         }
     }
 }

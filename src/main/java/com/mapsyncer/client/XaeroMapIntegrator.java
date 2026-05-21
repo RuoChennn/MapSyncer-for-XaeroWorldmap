@@ -50,6 +50,9 @@ public class XaeroMapIntegrator {
     /** 同步期间更新的区域集合，用于选择性重置 */
     private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
 
+    /** 同步前预卸载的区域集合（原本已加载的），用于同步后设置 loadState=4 */
+    private static volatile Set<RegionCoord> preUnloadedRegions = new HashSet<>();
+
     /**
      * 获取同步期间更新的区域集合。
      *
@@ -57,6 +60,23 @@ public class XaeroMapIntegrator {
      */
     public static Set<RegionCoord> getUpdatedRegions() {
         return new HashSet<>(updatedRegions);
+    }
+
+    /**
+     * 获取同步前预卸载的区域集合（原本已加载的）。
+     * 这些区域在同步后应使用 loadState=4（需要重载）而非 loadState=0（未加载）。
+     *
+     * @return 预卸载区域集合的副本
+     */
+    public static Set<RegionCoord> getPreUnloadedRegions() {
+        return new HashSet<>(preUnloadedRegions);
+    }
+
+    /**
+     * 清除预卸载区域集合。
+     */
+    public static void clearPreUnloadedRegions() {
+        preUnloadedRegions.clear();
     }
 
     /**
@@ -89,8 +109,9 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 禁用 Xaero 的区块更新处理（同步期间）。
+     * 暂停 Xaero 的区块更新处理（同步期间）。
      * 防止 Xaero 在我们替换文件时写入新的区块数据。
+     * 使用 MapProcessor.pushWriterPause() 来正确暂停写入。
      */
     public static void disableChunkUpdates() {
         // Skip if already disabled (avoid duplicate messages)
@@ -104,10 +125,10 @@ public class XaeroMapIntegrator {
         try {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
-                mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.chunk.paused"), false);
+                mc.player.displayClientMessage(ChatUtils.message("mapsyncer.chunk.paused"), false);
             }
 
-            // Try to pause Xaero's MapWriter thread via reflection
+            // Use MapProcessor.pushWriterPause() to properly pause writing
             pauseMapWriter();
         } catch (Exception e) {
             LOGGER.warn("Could not pause Xaero chunk processing: {}", e.getMessage());
@@ -128,7 +149,7 @@ public class XaeroMapIntegrator {
                 mc.player.displayClientMessage(ChatUtils.success("mapsyncer.chunk.resumed"), false);
             }
 
-            // Resume Xaero's MapWriter thread
+            // Use MapProcessor.popWriterPause() to resume writing
             resumeMapWriter();
         } catch (Exception e) {
             LOGGER.warn("Could not resume Xaero chunk processing: {}", e.getMessage());
@@ -249,6 +270,7 @@ public class XaeroMapIntegrator {
         int nearbyLimit = 10;  // Limit to avoid too many resets
         for (RegionCoord viewRegion : viewRegions) {
             if (regionsToReset.size() >= nearbyLimit) break;
+
             // Add regions close to player position
             if (Math.abs(viewRegion.x() - playerRegionX) <= 1 &&
                 Math.abs(viewRegion.z() - playerRegionZ) <= 1) {
@@ -259,8 +281,58 @@ public class XaeroMapIntegrator {
         LOGGER.info("Selective reset: {} updated regions, {} view regions, {} to reset",
                 updatedRegions.size(), viewRegions.size(), regionsToReset.size());
 
-        // Perform the reset only for selected regions
         return resetSpecificRegionLoadStates(regionsToReset);
+    }
+
+    /**
+     * 卸载玩家视野范围内的所有region。
+     * 在同步当前维度时调用，让视野范围内的region可以重新加载服务端数据。
+     *
+     * @return 卸载的区域数量
+     */
+    public static int unloadViewDistanceRegions() {
+        Set<RegionCoord> viewRegions = getViewDistanceRegions();
+        if (viewRegions.isEmpty()) {
+            LOGGER.info("No view distance regions to unload");
+            return 0;
+        }
+
+        LOGGER.info("Unloading {} view distance regions before sync", viewRegions.size());
+        return resetSpecificRegionLoadStates(viewRegions);
+    }
+
+    /**
+     * 检查chunk是否在玩家当前维度的视野范围内。
+     * 用于过滤同步数据，跳过视野范围内的region以保留本地实时更新。
+     *
+     * <p>注意：只过滤地表层（caveLayer == Integer.MAX_VALUE），
+     * 洞穴层不进行过滤，因为洞穴不是玩家实时探索的区域。</p>
+     *
+     * @param chunk 要检查的区块数据
+     * @return 如果在视野范围内返回true，否则返回false
+     */
+    public static boolean isInViewDistance(ChunkMapData chunk) {
+        Minecraft mc = Minecraft.getInstance();
+        Player player = mc.player;
+        if (player == null || mc.level == null) {
+            return false;
+        }
+
+        // 只过滤地表层，洞穴层不进行过滤
+        if (!chunk.isSurfaceLayer()) {
+            return false;
+        }
+
+        // 检查维度是否匹配
+        String currentXaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(
+                mc.level.dimension().location().toString());
+        if (!chunk.dimension.equals(currentXaeroDim)) {
+            return false; // 不同维度，不在视野范围内
+        }
+
+        // 获取视野范围内的region（地表层）
+        Set<RegionCoord> viewRegions = getViewDistanceRegions();
+        return viewRegions.contains(new RegionCoord(chunk.regionX, chunk.regionZ));
     }
 
     /**
@@ -370,6 +442,8 @@ public class XaeroMapIntegrator {
 
     /**
      * 遍历区域并选择性重置目标集合中的区域。
+     * 记录原本已加载的 region（loadState==2）到 preUnloadedRegions，
+     * 用于同步后区分使用 loadState=4（需要重载）或 loadState=0（未加载）。
      *
      * @param region 区域对象
      * @param regionsToReset 需要重置的区域集合
@@ -399,17 +473,18 @@ public class XaeroMapIntegrator {
                     byte currentLoadState = loadStateField.getByte(region);
 
                     if (currentLoadState == 2) {  // Only reset loaded regions
+                        // 记录原本已加载的 region，同步后使用 loadState=4
+                        preUnloadedRegions.add(coord);
+
                         loadStateField.setByte(region, (byte) 0);
                         count++;
 
-                        // Reset hasHadTerrain
-                        try {
-                            Field hasHadTerrainField = regionClass.getDeclaredField("hasHadTerrain");
-                            hasHadTerrainField.setAccessible(true);
-                            hasHadTerrainField.setBoolean(region, false);
-                        } catch (NoSuchFieldException ignored) {}
-
-                        LOGGER.debug("Reset region ({}, {}) loadState", rx, rz);
+                        LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
+                    } else if (currentLoadState == 4) {
+                        // 需要重载的状态也记录为已加载
+                        preUnloadedRegions.add(coord);
+                        loadStateField.setByte(region, (byte) 0);
+                        count++;
                     }
                 }
             } else if (regionClass.getName().equals("xaero.map.region.BranchLeveledRegion")) {
@@ -441,8 +516,8 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 暂停 Xaero 的 MapWriter 线程。
-     * 通过反射设置暂停标志或中断线程。
+     * 暂停 Xaero 的 MapWriter 写入操作。
+     * 使用 MapProcessor.pushWriterPause() 来正确暂停实时生成。
      */
     private static void pauseMapWriter() {
         try {
@@ -450,48 +525,33 @@ public class XaeroMapIntegrator {
             Method getCurrentSession = worldMapSessionClass.getMethod("getCurrentSession");
             Object session = getCurrentSession.invoke(null);
 
-            if (session == null) return;
+            if (session == null) {
+                LOGGER.warn("Could not get WorldMapSession for pause");
+                return;
+            }
 
             Method getMapProcessor = worldMapSessionClass.getMethod("getMapProcessor");
             Object mapProcessor = getMapProcessor.invoke(session);
 
-            if (mapProcessor == null) return;
-
-            // Try to get and pause the MapWriter
-            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
-            Method getMapWriter = mapProcessorClass.getMethod("getMapWriter");
-            Object mapWriter = getMapWriter.invoke(mapProcessor);
-
-            if (mapWriter != null) {
-                // Try to set paused flag or interrupt the thread
-                Class<?> mapWriterClass = Class.forName("xaero.map.writer.MapWriter");
-                try {
-                    Field pausedField = mapWriterClass.getDeclaredField("paused");
-                    pausedField.setAccessible(true);
-                    pausedField.setBoolean(mapWriter, true);
-                    LOGGER.info("Paused Xaero MapWriter via reflection");
-                } catch (NoSuchFieldException e) {
-                    // Alternative: try to get the thread and interrupt
-                    try {
-                        Method getThread = mapWriterClass.getMethod("getThread");
-                        Object thread = getThread.invoke(mapWriter);
-                        if (thread instanceof Thread) {
-                            ((Thread) thread).interrupt();
-                            LOGGER.info("Interrupted Xaero MapWriter thread");
-                        }
-                    } catch (Exception ex) {
-                        LOGGER.debug("Could not interrupt MapWriter thread: {}", ex.getMessage());
-                    }
-                }
+            if (mapProcessor == null) {
+                LOGGER.warn("Could not get MapProcessor for pause");
+                return;
             }
+
+            // Use pushWriterPause() to increment pauseWriting counter
+            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
+            Method pushWriterPause = mapProcessorClass.getMethod("pushWriterPause");
+            pushWriterPause.invoke(mapProcessor);
+            LOGGER.info("Paused Xaero MapWriter via pushWriterPause()");
+
         } catch (Exception e) {
-            LOGGER.debug("Failed to pause MapWriter: {}", e.getMessage());
+            LOGGER.warn("Failed to pause MapWriter: {}", e.getMessage());
         }
     }
 
     /**
-     * 恢复 Xaero 的 MapWriter 线程。
-     * 通过反射清除暂停标志。
+     * 恢复 Xaero 的 MapWriter 写入操作。
+     * 使用 MapProcessor.popWriterPause() 来恢复实时生成。
      */
     private static void resumeMapWriter() {
         try {
@@ -499,30 +559,27 @@ public class XaeroMapIntegrator {
             Method getCurrentSession = worldMapSessionClass.getMethod("getCurrentSession");
             Object session = getCurrentSession.invoke(null);
 
-            if (session == null) return;
+            if (session == null) {
+                LOGGER.warn("Could not get WorldMapSession for resume");
+                return;
+            }
 
             Method getMapProcessor = worldMapSessionClass.getMethod("getMapProcessor");
             Object mapProcessor = getMapProcessor.invoke(session);
 
-            if (mapProcessor == null) return;
-
-            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
-            Method getMapWriter = mapProcessorClass.getMethod("getMapWriter");
-            Object mapWriter = getMapWriter.invoke(mapProcessor);
-
-            if (mapWriter != null) {
-                Class<?> mapWriterClass = Class.forName("xaero.map.writer.MapWriter");
-                try {
-                    Field pausedField = mapWriterClass.getDeclaredField("paused");
-                    pausedField.setAccessible(true);
-                    pausedField.setBoolean(mapWriter, false);
-                    LOGGER.info("Resumed Xaero MapWriter via reflection");
-                } catch (NoSuchFieldException e) {
-                    LOGGER.debug("No paused field found in MapWriter");
-                }
+            if (mapProcessor == null) {
+                LOGGER.warn("Could not get MapProcessor for resume");
+                return;
             }
+
+            // Use popWriterPause() to decrement pauseWriting counter
+            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
+            Method popWriterPause = mapProcessorClass.getMethod("popWriterPause");
+            popWriterPause.invoke(mapProcessor);
+            LOGGER.info("Resumed Xaero MapWriter via popWriterPause()");
+
         } catch (Exception e) {
-            LOGGER.debug("Failed to resume MapWriter: {}", e.getMessage());
+            LOGGER.warn("Failed to resume MapWriter: {}", e.getMessage());
         }
     }
 
