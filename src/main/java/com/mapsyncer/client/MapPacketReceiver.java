@@ -121,12 +121,10 @@ public class MapPacketReceiver {
                         clearSyncData();
                         LOGGER.warn("Cleared stale sync data before starting new sync");
                     }
-                    // Disable chunk updates when sync request is sent
-                    syncInProgress = true;
+                    // 发送请求时暂不暂停区块更新，等收到服务端确认有数据后再暂停
                     syncStartTime = System.currentTimeMillis(); // Track start time
                     // Clear accumulated chunks for new sync session
                     allReceivedChunks.clear();
-                    XaeroMapIntegrator.disableChunkUpdates();
                 }
         );
 
@@ -147,16 +145,43 @@ public class MapPacketReceiver {
 
     /**
      * 处理服务端返回的同步响应数据包。
-     * 将接收到的区块数据写入地图目录，并在同步完成时触发重新加载。
+     * 根据服务端状态决定是否暂停区块更新和处理数据。
      *
-     * <p>流程：同步前已卸载视野范围内region并禁用chunk更新，
-     * 同步中写入所有服务端数据，同步后触发重载并恢复更新。</p>
+     * <p>状态处理：</p>
+     * <ul>
+     *   <li>"ok" - 有数据同步，暂停区块更新，处理数据</li>
+     *   <li>"uptodate" - 地图已是最新，不暂停区块更新，显示消息</li>
+     *   <li>"no_cache" - 服务端无缓存，不暂停区块更新</li>
+     *   <li>"dim_not_available" - 维度不存在，不暂停区块更新</li>
+     * </ul>
      *
      * @param payload 同步响应数据包
      * @param context 数据包上下文
      */
     private static void handleSyncResponse(PacketHandler.SyncResponsePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            String status = payload.status();
+            List<ChunkMapData> chunks = payload.chunks();
+            int serverWorldId = payload.worldId();
+
+            LOGGER.info("Received sync response: status={}, chunks={}, isComplete={}", status, chunks.size(), payload.isComplete());
+
+            // 根据状态决定处理方式
+            if ("no_cache".equals(status) || "dim_not_available".equals(status)) {
+                // 服务端无缓存或维度不存在，不暂停区块更新，直接返回
+                LOGGER.info("Server returned error status: {}, no sync needed", status);
+                clearSyncData();
+                return;
+            }
+
+            if ("uptodate".equals(status)) {
+                // 地图已是最新，不暂停区块更新
+                LOGGER.info("Map is up-to-date, no sync needed");
+                clearSyncData();
+                return;
+            }
+
+            // status == "ok"，有数据需要同步
             // Check for stale sync (running too long) and clear if needed
             if (isSyncStale()) {
                 clearSyncData();
@@ -167,11 +192,12 @@ public class MapPacketReceiver {
                 return;
             }
 
-            List<ChunkMapData> chunks = payload.chunks();
-            int serverWorldId = payload.worldId();
-
-            // Chunk updates already disabled before sync started
-            syncInProgress = true;
+            // 首次收到数据时才暂停区块更新
+            if (!syncInProgress) {
+                syncInProgress = true;
+                XaeroMapIntegrator.disableChunkUpdates();
+                LOGGER.info("Starting sync, chunk updates disabled");
+            }
 
             // Accumulate all chunks for tracking (no filtering - write all server data)
             allReceivedChunks.addAll(chunks);
@@ -188,13 +214,16 @@ public class MapPacketReceiver {
             }
 
             if (payload.isComplete()) {
-                // Record all updated regions for selective reset
-                XaeroMapIntegrator.recordUpdatedRegions(allReceivedChunks);
-
-                SyncProgressTracker.complete();
-
-                // Trigger reload, then re-enable chunk updates after reload completes
-                triggerXaeroReloadAndResume();
+                // 只有实际收到数据时才记录和显示缓存清除消息
+                if (!allReceivedChunks.isEmpty()) {
+                    XaeroMapIntegrator.recordUpdatedRegions(allReceivedChunks);
+                    SyncProgressTracker.complete();
+                    triggerXaeroReloadAndResume();
+                } else {
+                    // 未收到数据（维度不存在或已是最新），直接恢复区块更新
+                    resumeChunkUpdates();
+                    LOGGER.info("Sync complete with no data received");
+                }
 
                 // Clear accumulated chunks after sync complete
                 allReceivedChunks.clear();
@@ -239,7 +268,6 @@ public class MapPacketReceiver {
 
             if (regionsToReload.isEmpty()) {
                 LOGGER.info("无需重载 region，缓存已清除");
-                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.all_cleared"), false);
                 resumeChunkUpdates();
                 return;
             }
@@ -336,9 +364,6 @@ public class MapPacketReceiver {
 
             XaeroMapIntegrator.clearPreUnloadedRegions();
 
-            int totalRegions = viewDistanceCount + outsideViewCount;
-            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.cache.direct_reload", totalRegions), false);
-
             resumeChunkUpdates();
 
             // 启动 tick 监听器，等待视距内 region 加载完成后解除写保护
@@ -421,10 +446,6 @@ public class MapPacketReceiver {
             }
 
             LOGGER.info("Cache cleared: {} files, {} regions will be reloaded", cacheClearedCount, regionsToReload.size());
-
-            if (Minecraft.getInstance().player != null) {
-                Minecraft.getInstance().player.displayClientMessage(ChatUtils.desc("mapsyncer.cache.status", cacheClearedCount, regionsToReload.size()), false);
-            }
 
         } catch (Exception e) {
             LOGGER.warn("Failed to clear cache: {}", e.getMessage());

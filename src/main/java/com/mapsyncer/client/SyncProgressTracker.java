@@ -69,11 +69,6 @@ public class SyncProgressTracker {
         lastDisplayedPercent = -1;
         receivedFirstResponse = false;
 
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) {
-            mc.player.displayClientMessage(ChatUtils.message("mapsyncer.sync.start"), false);
-        }
-
         startTimeoutChecker();
     }
 

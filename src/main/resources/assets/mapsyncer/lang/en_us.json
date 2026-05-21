@@ -6,6 +6,7 @@
   "mapsyncer.sync.cancelled": "Sync cancelled",
   "mapsyncer.sync.timeout": "Sync timed out, please try again",
   "mapsyncer.sync.server_not_installed": "Server doesn't have MapSyncer installed",
+  "mapsyncer.sync.unloading_regions": "Unloading %d view distance regions for update",
 
   "mapsyncer.command.no_map_dir": "Unable to determine map directory. Are you connected to a server?",
   "mapsyncer.command.sync_dimension": "Starting sync for dimension: %s",
@@ -32,12 +33,11 @@
   "mapsyncer.help.server.generate_dim": "/mapsyncer generate <dim> - Generate cache for specified dimension (incremental)",
   "mapsyncer.help.server.generate_region": "/mapsyncer generate <dim> <x> <z> - Generate single region",
   "mapsyncer.help.server.generate_force": "/mapsyncer generate <dim> force - Force regenerate (ignore existing cache)",
-  "mapsyncer.help.server.status": "/mapsyncer status - Show generation progress and status",
+  "mapsyncer.help.server.status": "/mapsyncer status - Show generation task and incremental update status",
   "mapsyncer.help.server.incremental_header": "Incremental Update Commands:",
   "mapsyncer.help.server.incremental_off": "/mapsyncer incremental off - Disable incremental updates",
   "mapsyncer.help.server.incremental_tick": "/mapsyncer incremental tick [interval] - Set TICK mode",
   "mapsyncer.help.server.incremental_scheduled": "/mapsyncer incremental scheduled [hour] [min] - Set scheduled mode",
-  "mapsyncer.help.server.incremental_status": "/mapsyncer incremental status - Show incremental update status",
 
   "mapsyncer.chunk.paused": "Chunk updates paused...",
   "mapsyncer.chunk.resumed": "Chunk updates resumed",
@@ -62,12 +62,16 @@
   "mapsyncer.server.sync_complete": "Map sync complete: %d regions sent",
 
   "mapsyncer.generate.start_full": "Starting full map generation...",
-  "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions",
+  "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions, %d dimensions completed: %s",
   "mapsyncer.generate.start_dim": "Starting map generation for dimension: %s",
-  "mapsyncer.generate.dim_complete": "Dimension generation completed: %d/%d regions",
+  "mapsyncer.generate.dim_complete": "Dimension generation completed: %d/%d regions, %d updated",
   "mapsyncer.generate.start_force": "Starting forced map generation for dimension: %s (ignoring cache)",
-  "mapsyncer.generate.force_complete": "Forced dimension generation completed: %d/%d regions",
+  "mapsyncer.generate.force_complete": "Forced dimension generation completed: %d/%d regions, %d updated",
   "mapsyncer.generate.in_progress": "Conversion in progress: %d/%d regions - %s",
   "mapsyncer.generate.no_progress": "No conversion in progress",
-  "mapsyncer.generate.incremental_status": "Incremental updates: %s"
+  "mapsyncer.generate.incremental_status": "Incremental updates: %s",
+
+  "mapsyncer.status.incremental_disabled": "Incremental updates: Disabled",
+  "mapsyncer.status.tick_mode": "Incremental updates: TICK mode, next update in %d min %d sec",
+  "mapsyncer.status.scheduled_mode": "Incremental updates: SCHEDULED mode, daily at %02d:%02d"
 }

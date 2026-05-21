@@ -1,7 +1,6 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.network.ChunkMapData;
-import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -123,11 +122,6 @@ public class XaeroMapIntegrator {
         LOGGER.info("Chunk updates disabled for sync");
 
         try {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                mc.player.displayClientMessage(ChatUtils.message("mapsyncer.chunk.paused"), false);
-            }
-
             // Use MapProcessor.pushWriterPause() to properly pause writing
             pauseMapWriter();
         } catch (Exception e) {
@@ -144,11 +138,6 @@ public class XaeroMapIntegrator {
         LOGGER.info("Chunk updates re-enabled");
 
         try {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.chunk.resumed"), false);
-            }
-
             // Use MapProcessor.popWriterPause() to resume writing
             resumeMapWriter();
         } catch (Exception e) {

@@ -46,6 +46,9 @@ public class ConversionOrchestrator {
     /** 已处理的区域数量 */
     private static volatile int processedCount = 0;
 
+    /** 跳过的区域数量（时间戳未变化） */
+    private static volatile int skippedCount = 0;
+
     /** 总区域数量 */
     private static volatile int totalCount = 0;
 
@@ -54,6 +57,9 @@ public class ConversionOrchestrator {
 
     /** 当前正在处理的维度 */
     private static volatile ResourceKey<Level> currentDimension = null;
+
+    /** 已完成的维度列表（用于全量生成完成提示） */
+    private static volatile List<String> completedDimensions = new ArrayList<>();
 
     /** 缓存输出目录 */
     public static final Path CACHE_DIR = Path.of("server_map_cache");
@@ -128,6 +134,8 @@ public class ConversionOrchestrator {
         }
         isRunning = true;
         processedCount = 0;
+        skippedCount = 0;
+        completedDimensions = new ArrayList<>();  // 重置已完成维度列表
 
         // Step 1: Force save all chunks to disk before reading .mca files
         if (!saveAllChunks(server)) {
@@ -171,6 +179,7 @@ public class ConversionOrchestrator {
         }
         isRunning = true;
         processedCount = 0;
+        skippedCount = 0;
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
         if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
         ServerLevel level = server.getLevel(dimKey);
@@ -210,6 +219,7 @@ public class ConversionOrchestrator {
         }
         isRunning = true;
         processedCount = 0;
+        skippedCount = 0;
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
         if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
         ServerLevel level = server.getLevel(dimKey);
@@ -457,7 +467,7 @@ public class ConversionOrchestrator {
         LOGGER.info("Dimension {}: {} total regions, {} need update (force={})", dimPath, regions.size(), needsUpdate.size(), force);
 
         List<RegionCoords> failedRegions = new ArrayList<>();
-        int skippedCount = 0;
+        skippedCount = 0;  // 重置跳过计数
         long generationTimeSeconds = System.currentTimeMillis() / 1000;  // Unified generation timestamp (seconds)
 
         // 使用独立 MCA 解析器转换需要更新的区域（更快，不加载 chunks）
@@ -558,6 +568,10 @@ public class ConversionOrchestrator {
         // 输出汇总信息
         LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA), {} failed",
             dimPath, regions.size(), processedCount - skippedCount, skippedCount, dimRegions.skippedEmptyCount(), failedRegions.size());
+
+        // 记录已完成的维度友好名称（用于全量生成完成提示）
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension());
+        completedDimensions.add(friendlyName);
 
         // 保存时间戳缓存
         mcaCache.saveCache();
@@ -815,6 +829,20 @@ public class ConversionOrchestrator {
     public static int getTotalCount() { return totalCount; }
 
     /**
+     * 获取本次实际更新的区域数量（不含跳过的）
+     *
+     * @return 实际更新数量
+     */
+    public static int getUpdatedCount() { return processedCount - skippedCount; }
+
+    /**
+     * 获取跳过的区域数量（时间戳未变化）
+     *
+     * @return 跳过数量
+     */
+    public static int getSkippedCount() { return skippedCount; }
+
+    /**
      * 获取当前状态描述
      *
      * @return 状态字符串
@@ -827,4 +855,11 @@ public class ConversionOrchestrator {
      * @return 维度ResourceKey，空闲时返回null
      */
     public static ResourceKey<Level> getCurrentDimension() { return currentDimension; }
+
+    /**
+     * 获取已完成的维度列表
+     *
+     * @return 已完成维度的友好名称列表
+     */
+    public static List<String> getCompletedDimensions() { return completedDimensions; }
 }

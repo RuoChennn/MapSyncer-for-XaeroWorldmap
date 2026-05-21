@@ -230,8 +230,6 @@ public class MapSyncerCommand {
 
         String dimensionId = resolveDimensionId(dimInput, mc.level);
 
-        mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.sync_dimension", dimensionId), false);
-
         sendSyncRequest(mc, dimensionId, false);
 
         return Command.SINGLE_SUCCESS;
@@ -247,8 +245,6 @@ public class MapSyncerCommand {
     private static int executeSyncAll(CommandContext<CommandSourceStack> context) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
-
-        mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.sync_all"), false);
 
         sendSyncRequest(mc, "all", true);
 
@@ -268,8 +264,6 @@ public class MapSyncerCommand {
 
         ResourceKey<Level> currentDim = mc.level.dimension();
         String dimensionId = currentDim.location().toString();
-
-        mc.player.displayClientMessage(ChatUtils.message("mapsyncer.command.sync_current", dimensionId), false);
 
         sendSyncRequest(mc, dimensionId, false);
 

@@ -68,9 +68,7 @@ public class CacheGenerateCommand {
                                 .then(Commands.argument("hour", IntegerArgumentType.integer(0, 23))
                                         .executes(CacheGenerateCommand::setScheduledTimeDefaultMinute)
                                         .then(Commands.argument("minute", IntegerArgumentType.integer(0, 59))
-                                                .executes(CacheGenerateCommand::setScheduledTime))))
-                        .then(Commands.literal("status")
-                                .executes(CacheGenerateCommand::showIncrementalStatus))));
+                                                .executes(CacheGenerateCommand::setScheduledTime))))));
     }
 
     private static int showHelp(CommandContext<CommandSourceStack> ctx) {
@@ -84,7 +82,6 @@ public class CacheGenerateCommand {
         ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_off"), false);
         ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_tick"), false);
         ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_status"), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -100,9 +97,12 @@ public class CacheGenerateCommand {
 
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateAll(server);
+            String dimList = String.join(", ", ConversionOrchestrator.getCompletedDimensions());
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.full_complete",
                     ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount()), false);
+                    ConversionOrchestrator.getTotalCount(),
+                    ConversionOrchestrator.getCompletedDimensions().size(),
+                    dimList), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -128,7 +128,8 @@ public class CacheGenerateCommand {
             ConversionOrchestrator.generateDimension(server, dimensionId);
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.dim_complete",
                     ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount()), false);
+                    ConversionOrchestrator.getTotalCount(),
+                    ConversionOrchestrator.getUpdatedCount()), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -156,7 +157,8 @@ public class CacheGenerateCommand {
             ConversionOrchestrator.generateDimensionForce(server, dimensionId);
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.force_complete",
                     ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount()), false);
+                    ConversionOrchestrator.getTotalCount(),
+                    ConversionOrchestrator.getUpdatedCount()), false);
         }, "xaero-map-generator");
         worker.start();
 
@@ -200,20 +202,41 @@ public class CacheGenerateCommand {
     }
 
     /**
-     * 显示当前生成状态
+     * 显示当前生成状态和增量更新状态
      *
      * @param ctx 命令上下文
      * @return 命令执行结果
      */
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
+        // 显示生成任务状态
         if (ConversionOrchestrator.isRunning()) {
             ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.in_progress",
                     ConversionOrchestrator.getProcessedCount(),
                     ConversionOrchestrator.getTotalCount(),
                     ConversionOrchestrator.getStatus()), false);
         } else {
-            ctx.getSource().sendSuccess(() -> ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.generate.no_progress")), false);
+            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.no_progress"), false);
         }
+
+        // 显示增量更新状态
+        IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
+        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
+
+        if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
+            ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.incremental_disabled"), false);
+        } else if (mode == UpdateMode.TICK) {
+            int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+            int remainingTicks = interval - handler.getTickCounter();
+            int remainingSeconds = remainingTicks / 20;
+            int minutes = remainingSeconds / 60;
+            int seconds = remainingSeconds % 60;
+            ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.tick_mode", minutes, seconds), false);
+        } else if (mode == UpdateMode.SCHEDULED) {
+            int hour = ModConfig.SERVER.scheduledUpdateHour.get();
+            int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
+            ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.status.scheduled_mode", hour, minute), false);
+        }
+
         return Command.SINGLE_SUCCESS;
     }
 
@@ -322,17 +345,5 @@ public class CacheGenerateCommand {
      */
     private static void saveConfig() {
         ModConfig.SERVER_SPEC.save();
-    }
-
-    /**
-     * 显示增量更新状态
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
-    private static int showIncrementalStatus(CommandContext<CommandSourceStack> ctx) {
-        String status = IncrementalUpdateHandler.getInstance().getStatusInfo();
-        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.incremental_status", status), false);
-        return Command.SINGLE_SUCCESS;
     }
 }

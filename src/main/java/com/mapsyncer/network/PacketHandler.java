@@ -115,8 +115,9 @@ public class PacketHandler {
      * @param chunks     地图数据列表，包含需要更新的region数据
      * @param isComplete 是否为最后一包（true表示同步完成）
      * @param worldId    世界ID，用于客户端识别当前同步的世界
+     * @param status     同步状态："ok"=有数据同步, "uptodate"=已是最新, "no_cache"=无缓存, "dim_not_available"=维度不存在
      */
-    public record SyncResponsePayload(List<ChunkMapData> chunks, boolean isComplete, int worldId) implements CustomPacketPayload {
+    public record SyncResponsePayload(List<ChunkMapData> chunks, boolean isComplete, int worldId, String status) implements CustomPacketPayload {
         /** 包类型标识 */
         public static final Type<SyncResponsePayload> TYPE = new Type<>(SYNC_RESPONSE_ID);
         /** 流编解码器，用于网络传输的序列化和反序列化 */
@@ -137,6 +138,7 @@ public class PacketHandler {
                 ChunkMapData.encode(buf, data);
             }
             buf.writeBoolean(payload.isComplete);
+            buf.writeUtf(payload.status);
         }
 
         /**
@@ -152,7 +154,9 @@ public class PacketHandler {
             for (int i = 0; i < size; i++) {
                 chunks.add(ChunkMapData.decode(buf));
             }
-            return new SyncResponsePayload(chunks, buf.readBoolean(), worldId);
+            boolean isComplete = buf.readBoolean();
+            String status = buf.readUtf();
+            return new SyncResponsePayload(chunks, isComplete, worldId, status);
         }
 
         /**

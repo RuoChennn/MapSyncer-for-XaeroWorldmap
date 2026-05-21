@@ -291,7 +291,7 @@ public class ServerSyncHandler {
         if (!Files.exists(cacheDir)) {
             serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
             PacketDistributor.sendToPlayer(serverPlayer,
-                    new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
+                    new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "no_cache"));
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
             playerSyncProgress.remove(playerId);
@@ -332,15 +332,37 @@ public class ServerSyncHandler {
         // 检查请求的维度是否有缓存数据
         // 客户端发送的是 Xaero 格式，服务端缓存目录也是 Xaero 格式
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+        boolean hasValidDimension = false;  // 是否至少有一个维度存在缓存
         for (String xaeroDim : requestedDimensions) {
             Path dimCacheDir = cacheDir.resolve(xaeroDim);
-            if (!Files.exists(dimCacheDir) || !dimCacheDir.toFile().isDirectory()) {
-                // 将 Xaero 格式转换为用户友好名称用于提示
+            if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
+                // 检查目录是否包含 zip 文件
+                try {
+                    boolean hasZipFiles = Files.walk(dimCacheDir)
+                            .anyMatch(p -> p.toString().endsWith(".zip"));
+                    if (hasZipFiles) {
+                        hasValidDimension = true;
+                    }
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to check dimension {} cache directory", xaeroDim, e);
+                }
+            } else {
+                // 维度缓存不存在，发送错误提示
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
-                // 继续处理其他维度，而不是直接返回
             }
+        }
+
+        // 如果所有请求的维度都不存在缓存，立即返回（不显示 uptodate 消息）
+        if (!hasValidDimension) {
+            LOGGER.info("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
+            PacketDistributor.sendToPlayer(serverPlayer,
+                    new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
+            syncingPlayers.remove(playerId);
+            playerSyncDimensions.remove(playerId);
+            playerSyncProgress.remove(playerId);
+            return;
         }
 
         try {
@@ -463,14 +485,14 @@ public class ServerSyncHandler {
         if (total == 0) {
             serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", hashMatchCount, timestampSkipCount));
             PacketDistributor.sendToPlayer(serverPlayer,
-                    new PacketHandler.SyncResponsePayload(List.of(), true, worldId));
+                    new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "uptodate"));
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
             playerSyncProgress.remove(playerId);
             return;
         }
 
-        serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start", total, hashMatchCount, timestampSkipCount));
+        // 直接开始同步，不发送开始消息（服务端消息将在完成时发送）
 
         // Check if this is a resumed sync
         SyncProgress existingProgress = playerSyncProgress.get(playerId);
@@ -511,7 +533,7 @@ public class ServerSyncHandler {
 
                 // Send current batch
                 PacketDistributor.sendToPlayer(serverPlayer,
-                        new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), false, worldId));
+                        new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), false, worldId, "ok"));
                 processed += batch.size();
 
                 // Send progress update
@@ -542,7 +564,7 @@ public class ServerSyncHandler {
             applySpeedLimit(batchBytes);
 
             PacketDistributor.sendToPlayer(serverPlayer,
-                    new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), true, worldId));
+                    new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), true, worldId, "ok"));
             processed += batch.size();
         }
 
