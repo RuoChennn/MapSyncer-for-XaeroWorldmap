@@ -108,7 +108,6 @@ public class MapSyncerCommand {
             mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_region"), false);
             mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_force"), false);
             mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.status"), false);
-            mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.incremental_header")), false);
             mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off"), false);
             mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick"), false);
             mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"), false);
