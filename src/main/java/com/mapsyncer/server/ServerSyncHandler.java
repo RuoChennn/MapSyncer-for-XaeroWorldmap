@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,8 +56,19 @@ public class ServerSyncHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerSyncHandler.class);
 
-    /** 最大数据包大小约1MB，避免"Packet too large"错误 */
-    private static final int MAX_PACKET_SIZE = 1_000_000;
+    /** 最大数据包大小上限（1MB），避免超过 NeoForge 网络限制 */
+    private static final int MAX_PACKET_SIZE_LIMIT = 1_000_000;
+
+    /**
+     * 获取实际的最大数据包大小
+     * 从配置读取，但如果超过上限则使用上限值
+     *
+     * @return 最大数据包大小（字节）
+     */
+    private static int getMaxPacketSize() {
+        int configValue = ModConfig.SERVER.maxSyncPacketSize.get();
+        return Math.min(configValue, MAX_PACKET_SIZE_LIMIT);
+    }
 
     /** 正在同步的玩家集合（用于断线或维度切换时中断同步） */
     private static final Set<UUID> syncingPlayers = ConcurrentHashMap.newKeySet();
@@ -314,6 +326,9 @@ public class ServerSyncHandler {
         }
         LOGGER.info("Client requesting dimensions (Xaero format): {}", requestedDimensions);
 
+        // 记录已经跳过的维度，避免重复打印日志
+        Set<String> skippedDimensions = new HashSet<>();
+
         // 检查请求的维度是否有缓存数据
         // 客户端发送的是 Xaero 格式，服务端缓存目录也是 Xaero 格式
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
@@ -356,7 +371,11 @@ public class ServerSyncHandler {
 
                         // Skip if client didn't request this dimension (直接用 Xaero 格式匹配)
                         if (!requestedDimensions.contains(normalizedXaeroDim)) {
-                            LOGGER.info("Skipping {}: xaero dim {} (original {}) not in requestedDimensions {}", normalizedPath, normalizedXaeroDim, xaeroDimName, requestedDimensions);
+                            // 只打印一次维度级别的跳过信息，避免重复日志
+                            if (!skippedDimensions.contains(normalizedXaeroDim)) {
+                                skippedDimensions.add(normalizedXaeroDim);
+                                LOGGER.info("Skipping dimension {}: not in requestedDimensions {}", normalizedXaeroDim, requestedDimensions);
+                            }
                             return;
                         }
 
@@ -486,7 +505,7 @@ public class ServerSyncHandler {
             }
 
             // Check if adding this chunk would exceed packet size limit
-            if (batchSize + chunk.data.length > MAX_PACKET_SIZE && !batch.isEmpty()) {
+            if (batchSize + chunk.data.length > getMaxPacketSize() && !batch.isEmpty()) {
                 // Apply speed limit before sending
                 applySpeedLimit(batchBytes);
 
