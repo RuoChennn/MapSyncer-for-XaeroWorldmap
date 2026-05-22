@@ -75,6 +75,26 @@ public class ServerSyncHandler {
         return Math.min(configValue, MAX_PACKET_SIZE_LIMIT);
     }
 
+    /**
+     * 获取动态批次大小。
+     * 当有限速时，批次大小 = 限速值，实现平滑发送（每秒发送一个批次）。
+     * 同时不超过配置的最大包大小和系统上限。
+     *
+     * @return 批次大小（字节）
+     */
+    private static int getDynamicBatchSize() {
+        int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
+        int maxPacketSize = getMaxPacketSize(); // 考虑配置限制和系统上限
+
+        if (limitKBps > 0) {
+            // 有限速：批次大小 = 每秒发送量，但不超过最大包大小
+            int batchSize = limitKBps * 1024;
+            return Math.min(batchSize, maxPacketSize);
+        }
+        // 无限速：使用最大包大小
+        return maxPacketSize;
+    }
+
     /** 正在同步的玩家集合（用于断线或维度切换时中断同步） */
     private static final Set<UUID> syncingPlayers = ConcurrentHashMap.newKeySet();
 
@@ -533,7 +553,7 @@ public class ServerSyncHandler {
             // 数据发送后立即可以释放，因为 batch 只保存引用
             // 但需要在发送前复制数据，因为异步发送需要数据存活
 
-            if (batchSize + chunk.data.length > getMaxPacketSize() && !batch.isEmpty()) {
+            if (batchSize + chunk.data.length > getDynamicBatchSize() && !batch.isEmpty()) {
                 // 对所有批次执行速度限制（包括第一批）
                 if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
                     LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
