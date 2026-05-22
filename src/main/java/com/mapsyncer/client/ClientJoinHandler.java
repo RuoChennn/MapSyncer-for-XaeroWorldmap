@@ -60,32 +60,41 @@ public class ClientJoinHandler {
     private static void checkInterruptedSync(Minecraft mc) {
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
         if (serverDir == null || !serverDir.toFile().exists()) {
-            LOGGER.debug("Server directory not found, skip sync state check");
+            LOGGER.info("Server directory not found, skip sync state check");
             return;
         }
+        LOGGER.info("Checking sync state in: {}", serverDir);
 
         // 重置实例以重新加载缓存文件
         ClientTimestampCache.resetInstance();
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
-        if (tsCache == null) return;
+        if (tsCache == null) {
+            LOGGER.warn("Failed to get ClientTimestampCache instance");
+            return;
+        }
 
         // 检查缓存文件是否存在（不存在说明从未同步过）
         if (!tsCache.cacheFileExists()) {
-            LOGGER.debug("Cache file not found, never synced before");
+            LOGGER.info("Cache file not found, never synced before");
             return;
         }
 
         String syncState = tsCache.getSyncState();
         String syncCommand = tsCache.getSyncCommand();
+        LOGGER.info("Loaded sync state: {}, command: {}", syncState, syncCommand);
 
         // 检查是否需要断点续传（状态为 in_progress）
         if (tsCache.needsResume()) {
-            LOGGER.info("Found unfinished sync: state={}, command={}", syncState, syncCommand);
+            LOGGER.info("Found unfinished sync, showing prompt");
 
             if (mc.player != null && !syncCommand.isEmpty()) {
                 // 显示可点击的提示信息
                 showResumePrompt(mc, syncCommand);
+            } else {
+                LOGGER.warn("Cannot show prompt: player={}, command={}", mc.player != null, syncCommand);
             }
+        } else {
+            LOGGER.info("No resume needed: state={}", syncState);
         }
     }
 
