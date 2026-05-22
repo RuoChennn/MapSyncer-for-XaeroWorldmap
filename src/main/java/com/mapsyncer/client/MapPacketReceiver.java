@@ -381,6 +381,9 @@ public class MapPacketReceiver {
             java.lang.reflect.Field loadStateField = mapRegionClass.getDeclaredField("loadState");
             loadStateField.setAccessible(true);
 
+            // 添加 cancelRefresh 方法，用于清除可能存在的 refresh 状态
+            Method cancelRefresh = mapRegionClass.getMethod("cancelRefresh", mapProcessorClass);
+
             java.util.Set<XaeroMapIntegrator.RegionCoord> viewRegions = XaeroMapIntegrator.getViewDistanceRegions();
             LOGGER.debug("视距内 region: {} 个", viewRegions.size());
 
@@ -396,6 +399,14 @@ public class MapPacketReceiver {
                 if (mapRegion == null) {
                     LOGGER.warn("视距内 region ({}, {}) 无法创建", coord.x(), coord.z());
                     continue;
+                }
+
+                // 先清除可能存在的 refresh 状态，避免状态不一致
+                try {
+                    cancelRefresh.invoke(mapRegion, mapProcessor);
+                    LOGGER.debug("视距内 ({}, {}) 已 cancelRefresh", coord.x(), coord.z());
+                } catch (Exception e) {
+                    LOGGER.debug("视距内 ({}, {}) cancelRefresh 无需执行: {}", coord.x(), coord.z(), e.getMessage());
                 }
 
                 byte currentLoadState = loadStateField.getByte(mapRegion);
@@ -423,6 +434,14 @@ public class MapPacketReceiver {
                 if (mapRegion == null) {
                     LOGGER.warn("视距外 region ({}, {}) 无法创建", coord.x(), coord.z());
                     continue;
+                }
+
+                // 先清除可能存在的 refresh 状态，避免状态不一致
+                try {
+                    cancelRefresh.invoke(mapRegion, mapProcessor);
+                    LOGGER.debug("视距外 ({}, {}) 已 cancelRefresh", coord.x(), coord.z());
+                } catch (Exception e) {
+                    LOGGER.debug("视距外 ({}, {}) cancelRefresh 无需执行: {}", coord.x(), coord.z(), e.getMessage());
                 }
 
                 byte currentLoadState = loadStateField.getByte(mapRegion);
