@@ -44,16 +44,17 @@ public class ClientJoinHandler {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
-        // 延迟检测，等待服务器目录初始化
-        mc.execute(() -> {
+        // 使用异步线程延迟检测，避免阻塞主线程
+        new Thread(() -> {
             try {
                 Thread.sleep(1000); // 等待1秒让 Xaero 目录初始化
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return;
             }
-
-            checkInterruptedSync(mc);
-        });
+            // 在主线程执行检查（因为涉及 Minecraft API）
+            mc.execute(() -> checkInterruptedSync(mc));
+        }, "mapsyncer-resume-check").start();
     }
 
     /**
