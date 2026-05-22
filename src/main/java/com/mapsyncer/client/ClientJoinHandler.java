@@ -67,9 +67,9 @@ public class ClientJoinHandler {
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
         if (tsCache == null) return;
 
-        // 检查状态文件是否存在（不存在说明从未同步过）
-        if (!tsCache.syncStateFileExists()) {
-            LOGGER.debug("Sync state file not found, never synced before");
+        // 检查缓存文件是否存在（不存在说明从未同步过）
+        if (!tsCache.cacheFileExists()) {
+            LOGGER.debug("Cache file not found, never synced before");
             return;
         }
 
