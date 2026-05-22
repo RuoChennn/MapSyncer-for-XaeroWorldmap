@@ -73,9 +73,6 @@ public class MapPacketReceiver {
     /** 已加载的区域集合（避免重复加载） */
     private static volatile Set<XaeroMapIntegrator.RegionCoord> loadedViewRegions = new HashSet<>();
 
-    /** 已写保护的 MapRegion 对象集合（等待加载完成后解除） */
-    private static volatile List<Object> pausedRegions = new java.util.ArrayList<>();
-
     /** 反射 API 缓存（避免重复反射调用开销） */
     private static volatile Object cachedMapProcessor = null;
     private static volatile Object cachedMapSaveLoad = null;
@@ -91,7 +88,6 @@ public class MapPacketReceiver {
     private static volatile Method cachedCancelRefresh = null;
     private static volatile Method cachedAddRegionDetection = null;
     private static volatile java.lang.reflect.Constructor<?> cachedRegionDetectionConstructor = null;
-    private static volatile Method cachedPushWriterPause = null;
 
     /** 反射 API 是否已初始化 */
     private static volatile boolean reflectionInitialized = false;
@@ -353,12 +349,6 @@ public class MapPacketReceiver {
                     // 清除缓存文件
                     clearCacheForRegions(loadedViewRegions);
 
-                    // 启动 region 加载监听器，等待加载完成后解除写保护
-                    if (!pausedRegions.isEmpty()) {
-                        RegionLoadListener.startListening(new java.util.ArrayList<>(pausedRegions), cachedMapProcessor);
-                        LOGGER.info("已启动 region 加载监听器，等待 {} 个 region", pausedRegions.size());
-                    }
-
                     resumeChunkUpdates();
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
@@ -391,12 +381,10 @@ public class MapPacketReceiver {
 
     /**
      * 同步完成后恢复区块更新状态。
-     * 不再调用全局恢复，因为我们不再使用全局暂停。
-     * 视距内 region 的写保护由 RegionLoadListener 解除。
+     * 不再使用全局暂停或 region 级别写保护。
      */
     private static void resumeChunkUpdates() {
         syncInProgress = false;
-        // 不调用 XaeroMapIntegrator.enableChunkUpdates()，因为不再使用全局暂停
         LOGGER.info("Sync complete");
     }
 
@@ -645,9 +633,6 @@ public class MapPacketReceiver {
             Method setRegionDetectionComplete = mapSaveLoadClass.getMethod("setRegionDetectionComplete", boolean.class);
             setRegionDetectionComplete.invoke(cachedMapSaveLoad, true);
 
-            // 缓存 pushWriterPause 方法（用于写保护）
-            cachedPushWriterPause = mapRegionClass.getMethod("pushWriterPause");
-
             LOGGER.info("反射 API 缓存已初始化: worldId={}, dimId={}, mwId={}, globalVersion={}, regionDetectionComplete=true",
                 cachedCurrentWorldId, cachedCurrentDimId, cachedCurrentMWId, cachedGlobalVersion);
 
@@ -659,11 +644,13 @@ public class MapPacketReceiver {
     /**
      * 立即加载单个区域。
      * 使用缓存的反射 API，避免重复查找开销。
-     * 视距内区域添加写保护，防止加载过程中被实时探索覆盖。
-     * 视距外区域不加写保护，确保能正常上屏显示。
+     *
+     * 注意：不再使用 region 级别的 pushWriterPause 写保护。
+     * 原因：MapWriter 只处理 loadState=2 的 region，loadState=4 时不会被覆盖。
+     * 移除写保护后，region 加载完成即可立即上屏显示。
      *
      * @param coord 区域坐标
-     * @param inViewDistance 是否在视距内（视距内需要写保护）
+     * @param inViewDistance 是否在视距内（保留参数兼容，当前未使用）
      */
     private static void triggerSingleRegionLoad(XaeroMapIntegrator.RegionCoord coord, boolean inViewDistance) {
         if (!reflectionInitialized || cachedMapProcessor == null) {
@@ -680,13 +667,9 @@ public class MapPacketReceiver {
                 return;
             }
 
-            // 写保护：仅对视距内区域，防止加载过程中被实时探索覆盖
-            // 视距外区域不加保护，确保能正常上屏显示
-            if (inViewDistance && cachedPushWriterPause != null) {
-                cachedPushWriterPause.invoke(mapRegion);
-                pausedRegions.add(mapRegion);
-                LOGGER.debug("区域 ({}, {}) 视距内，已加写保护", coord.x(), coord.z());
-            }
+            // 不再使用 pushWriterPause 写保护
+            // 原因：MapWriter 只处理 loadState=2 的 region，loadState=4 时不会被实时探索覆盖
+            // 移除保护后，region 加载完成即可立即上屏
 
             // 清除 refresh 状态
             cachedCancelRefresh.invoke(mapRegion, cachedMapProcessor);
@@ -697,8 +680,7 @@ public class MapPacketReceiver {
             // 触发加载（非优先，排队等待，保持服务端发送顺序）
             cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync streaming", false);
 
-            LOGGER.debug("区域 ({}, {}) 已触发加载（排队，{}）", coord.x(), coord.z(),
-                inViewDistance ? "视距内+写保护" : "视距外");
+            LOGGER.debug("区域 ({}, {}) 已触发加载", coord.x(), coord.z());
 
         } catch (Exception e) {
             LOGGER.warn("立即加载区域 ({}, {}) 失败: {}", coord.x(), coord.z(), e.getMessage());
@@ -767,7 +749,6 @@ public class MapPacketReceiver {
     private static void clearSyncState() {
         updatedRegionCoords.clear();
         loadedViewRegions.clear();
-        pausedRegions.clear();
         lastMwDir = null;
         syncStartTime = 0;
     }
@@ -791,7 +772,6 @@ public class MapPacketReceiver {
         cachedCancelRefresh = null;
         cachedAddRegionDetection = null;
         cachedRegionDetectionConstructor = null;
-        cachedPushWriterPause = null;
     }
 
     /**
