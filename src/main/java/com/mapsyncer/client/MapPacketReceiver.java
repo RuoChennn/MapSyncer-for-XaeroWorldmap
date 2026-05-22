@@ -677,10 +677,11 @@ public class MapPacketReceiver {
             // 设置 loadState = 4（需要重载）
             cachedLoadStateField.setByte(mapRegion, (byte) 4);
 
-            // 触发加载（非优先，排队等待，保持服务端发送顺序）
-            cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync streaming", false);
+            // 触发加载（优先，确保在 loadingFiles=true 时也能进入队列）
+            // 服务端按距离降序发送（最远先），prioritize=true 插入队头，结果：最近先加载
+            cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync streaming", true);
 
-            LOGGER.debug("区域 ({}, {}) 已触发加载", coord.x(), coord.z());
+            LOGGER.debug("区域 ({}, {}) 已触发加载（优先）", coord.x(), coord.z());
 
         } catch (Exception e) {
             LOGGER.warn("立即加载区域 ({}, {}) 失败: {}", coord.x(), coord.z(), e.getMessage());

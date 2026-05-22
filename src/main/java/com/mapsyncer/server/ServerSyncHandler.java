@@ -921,13 +921,15 @@ public class ServerSyncHandler {
 
         LOGGER.debug("Player region: ({}, {})", playerRegionX, playerRegionZ);
 
-        // 统一按距离排序（不区分视距内外）
+        // 按距离降序排序（最远先发送）
+        // 配合客户端 prioritize=true，可得到正确的加载顺序（最近先加载）
+        // 原理：prioritize=true 会插入队头，发送顺序 [最远, 稍远, 最近] → 队列 [最近, 稍远, 最远]
         regions.sort((a, b) -> {
             int distA = Math.max(Math.abs(a.regionX() - playerRegionX), Math.abs(a.regionZ() - playerRegionZ));
             int distB = Math.max(Math.abs(b.regionX() - playerRegionX), Math.abs(b.regionZ() - playerRegionZ));
-            return Integer.compare(distA, distB);
+            return Integer.compare(distB, distA);  // 降序：distB - distA
         });
 
-        LOGGER.info("Sorted {} regions by distance (circle-by-circle)", regions.size());
+        LOGGER.info("Sorted {} regions by distance DESC (farthest first)", regions.size());
     }
 }
