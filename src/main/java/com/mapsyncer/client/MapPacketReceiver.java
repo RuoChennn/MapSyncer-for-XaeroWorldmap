@@ -836,7 +836,7 @@ public class MapPacketReceiver {
             cachedCurrentDimId = (String) mapProcessorClass.getMethod("getCurrentDimId").invoke(cachedMapProcessor);
             cachedCurrentMWId = (String) mapProcessorClass.getMethod("getCurrentMWId").invoke(cachedMapProcessor);
 
-            // 获取 globalVersion
+            // 获取 globalVersion 和设置 RELOAD_VIEWED = false
             Class<?> worldMapClass = Class.forName("xaero.map.WorldMap");
             Object worldMapInstance = worldMapClass.getField("INSTANCE").get(null);
             if (worldMapInstance == null) {
@@ -860,6 +860,16 @@ public class MapPacketReceiver {
             Object globalVersionOption = globalVersionField.get(null);
             Method getEffective = singleConfigManagerClass.getMethod("getEffective", Class.forName("xaero.lib.common.config.option.ConfigOption"));
             cachedGlobalVersion = (Integer) getEffective.invoke(primaryConfigManager, globalVersionOption);
+
+            // 设置 RELOAD_VIEWED = false，确保加载顺序基于玩家位置而非地图视角
+            Class<?> configClass = Class.forName("xaero.lib.common.config.Config");
+            Method getConfig = singleConfigManagerClass.getMethod("getConfig");
+            Object primaryConfig = getConfig.invoke(primaryConfigManager);
+            java.lang.reflect.Field reloadViewedField = worldMapPrimaryOptionsClass.getField("RELOAD_VIEWED");
+            Object reloadViewedOption = reloadViewedField.get(null);
+            Method configSet = configClass.getMethod("set", Class.forName("xaero.lib.common.config.option.ConfigOption"), Object.class);
+            configSet.invoke(primaryConfig, reloadViewedOption, false);
+            LOGGER.info("已设置 RELOAD_VIEWED = false，加载顺序将基于玩家位置");
 
             // 获取地表层 MapLayer
             Method getLayer = layeredRegionManagerClass.getMethod("getLayer", int.class);
