@@ -65,10 +65,10 @@ public class ServerSyncHandler {
     private static final int MAX_PACKET_SIZE_LIMIT = 1_000_000;
 
     /**
-     * 获取实际的最大数据包大小
-     * 从配置读取，但如果超过上限则使用上限值
+     * 获取最大单包大小（用于拆包）。
+     * 这是每个网络包的大小限制。
      *
-     * @return 最大数据包大小（字节）
+     * @return 最大单包大小（字节）
      */
     private static int getMaxPacketSize() {
         int configValue = ModConfig.SERVER.maxSyncPacketSize.get();
@@ -76,23 +76,111 @@ public class ServerSyncHandler {
     }
 
     /**
-     * 获取动态批次大小。
-     * 当有限速时，批次大小 = 限速值，实现平滑发送（每秒发送一个批次）。
-     * 同时不超过配置的最大包大小和系统上限。
+     * 获取批次累积阈值（目标每秒发送量）。
+     * 当有限速时，将限速值向下取整到整包大小，确保每秒发送整数个完整包。
+     * 无限速时，阈值 = 最大包大小。
      *
-     * @return 批次大小（字节）
+     * @return 批次累积阈值（字节）
      */
-    private static int getDynamicBatchSize() {
+    private static int getBatchThreshold() {
         int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
-        int maxPacketSize = getMaxPacketSize(); // 考虑配置限制和系统上限
-
-        if (limitKBps > 0) {
-            // 有限速：批次大小 = 每秒发送量，但不超过最大包大小
-            int batchSize = limitKBps * 1024;
-            return Math.min(batchSize, maxPacketSize);
+        if (limitKBps <= 0) {
+            // 无限速：使用最大包大小
+            return getMaxPacketSize();
         }
-        // 无限速：使用最大包大小
-        return maxPacketSize;
+
+        // 有限速：向下取整到整包大小
+        int maxPacketSize = getMaxPacketSize();
+        int limitBytesPerSec = limitKBps * 1024;
+
+        // 计算每秒可发送的完整包数（向下取整）
+        int packetsPerSecond = limitBytesPerSec / maxPacketSize;
+
+        // 至少允许发送一个包，否则无法发送任何数据
+        if (packetsPerSecond < 1) {
+            packetsPerSecond = 1;
+        }
+
+        // 实际限速 = 整包数 × 包大小
+        int actualThreshold = packetsPerSecond * maxPacketSize;
+
+        LOGGER.debug("Speed limit adjusted: {} KB/s → {} packets/s × {} KB = {} KB/s",
+                limitKBps, packetsPerSecond, maxPacketSize / 1024, actualThreshold / 1024);
+
+        return actualThreshold;
+    }
+
+    /**
+     * 将批次数据按包大小限制拆分发送。
+     * 当批次数据超过单包大小限制时，拆成多个包发送。
+     *
+     * @param batch 待发送的数据列表
+     * @param batchBytes 批次总字节数
+     * @param serverPlayer 玩家实例
+     * @param worldId 世界ID
+     * @param processed 已处理数量
+     * @param total 总数量
+     * @return 发送的包数量
+     */
+    private static int sendBatchInChunks(List<ChunkMapData> batch, int batchBytes,
+            ServerPlayer serverPlayer, int worldId, int processed, int total) {
+        int maxPacketSize = getMaxPacketSize();
+
+        if (batchBytes <= maxPacketSize) {
+            // 单包发送
+            final List<ChunkMapData> batchToSend = new ArrayList<>(batch);
+            serverPlayer.serverLevel().getServer().execute(() -> {
+                PacketDistributor.sendToPlayer(serverPlayer,
+                        new PacketHandler.SyncResponsePayload(batchToSend, false, worldId, "ok"));
+                PacketDistributor.sendToPlayer(serverPlayer,
+                        new PacketHandler.SyncProgressPayload(processed, total,
+                                String.format("Sending regions %d/%d", processed, total)));
+            });
+            return 1;
+        }
+
+        // 拆成多个包发送
+        List<ChunkMapData> currentChunk = new ArrayList<>();
+        int currentSize = 0;
+        int packetCount = 0;
+
+        for (ChunkMapData chunk : batch) {
+            // 如果当前块加上这个数据超过限制，先发送当前块
+            if (currentSize + chunk.data.length > maxPacketSize && !currentChunk.isEmpty()) {
+                final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
+                final int sentProgress = processed + packetCount;
+                serverPlayer.serverLevel().getServer().execute(() -> {
+                    PacketDistributor.sendToPlayer(serverPlayer,
+                            new PacketHandler.SyncResponsePayload(chunkToSend, false, worldId, "ok"));
+                    PacketDistributor.sendToPlayer(serverPlayer,
+                            new PacketHandler.SyncProgressPayload(sentProgress, total,
+                                    String.format("Sending regions %d/%d", sentProgress, total)));
+                });
+                packetCount++;
+
+                currentChunk.clear();
+                currentSize = 0;
+            }
+
+            currentChunk.add(chunk);
+            currentSize += chunk.data.length;
+        }
+
+        // 发送剩余数据
+        if (!currentChunk.isEmpty()) {
+            final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
+            final int sentProgress = processed + packetCount;
+            serverPlayer.serverLevel().getServer().execute(() -> {
+                PacketDistributor.sendToPlayer(serverPlayer,
+                        new PacketHandler.SyncResponsePayload(chunkToSend, false, worldId, "ok"));
+                PacketDistributor.sendToPlayer(serverPlayer,
+                        new PacketHandler.SyncProgressPayload(sentProgress, total,
+                                String.format("Sending regions %d/%d", sentProgress, total)));
+            });
+            packetCount++;
+        }
+
+        return packetCount;
     }
 
     /** 正在同步的玩家集合（用于断线或维度切换时中断同步） */
@@ -103,6 +191,15 @@ public class ServerSyncHandler {
 
     /** 玩家同步线程引用（用于断线时立即中断线程） */
     private static final Map<UUID, Thread> syncThreads = new ConcurrentHashMap<>();
+
+    /** 限速统计：累计发送字节数 */
+    private static final Map<UUID, Long> speedLimitBytesSent = new ConcurrentHashMap<>();
+
+    /** 限速统计：周期开始时间 */
+    private static final Map<UUID, Long> speedLimitCycleStart = new ConcurrentHashMap<>();
+
+    /** 限速周期最大时长（1秒），防止周期过长导致累计量过大 */
+    private static final long MAX_SPEED_LIMIT_CYCLE_MS = 1000;
 
     /**
      * 轻量级的 region 同步信息。
@@ -169,6 +266,9 @@ public class ServerSyncHandler {
     public static void onPlayerDisconnect(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
+
+        // 清理限速状态
+        clearSpeedLimitState(playerId);
 
         // 立即中断同步线程
         Thread syncThread = syncThreads.remove(playerId);
@@ -243,8 +343,17 @@ public class ServerSyncHandler {
     }
 
     /**
-     * 根据发送的数据量计算休眠时间，强制执行速度限制
-     * 使用可中断的循环等待，玩家掉线时可立即退出
+     * 根据发送的数据量计算休眠时间，实现带宽感知的速度限制。
+     *
+     * 核心思路：
+     * 1. 维护一个限速周期的累计发送量和周期开始时间
+     * 2. 每次发送后，计算当前周期的平均带宽
+     * 3. 如果平均带宽超过限速值，计算需要等待的时间
+     * 4. 如果实际发送时间已经超过预期时间（网络瓶颈），则不需要额外等待
+     *
+     * 这种方式能自动适应网络状况：
+     * - 当网络带宽充足时，通过等待来限制发送速度
+     * - 当网络瓶颈导致发送速度低于限速时，不额外等待
      *
      * @param bytesSent 本次发送的字节数
      * @param player 玩家实例（用于中断检查）
@@ -255,23 +364,69 @@ public class ServerSyncHandler {
         int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
         if (limitKBps <= 0) return true; // No limit
 
-        // Calculate how long this batch should take at the limit speed
-        long expectedTimeMs = (bytesSent * 1000L) / (limitKBps * 1024);
-        if (expectedTimeMs <= 0) return true;
+        // 获取或初始化限速周期状态
+        Long cycleStart = speedLimitCycleStart.get(playerId);
+        Long totalBytes = speedLimitBytesSent.get(playerId);
 
-        // Use interruptible wait with periodic player status check
-        long startTime = System.currentTimeMillis();
+        if (cycleStart == null || totalBytes == null) {
+            // 新周期开始
+            cycleStart = System.currentTimeMillis();
+            totalBytes = 0L;
+            speedLimitCycleStart.put(playerId, cycleStart);
+            speedLimitBytesSent.put(playerId, totalBytes);
+        }
+
+        // 累加本次发送量
+        totalBytes += bytesSent;
+        speedLimitBytesSent.put(playerId, totalBytes);
+
+        // 计算当前周期实际耗时
+        long actualTimeMs = System.currentTimeMillis() - cycleStart;
+
+        // 如果周期时间超过上限，重置周期（防止累计量过大）
+        if (actualTimeMs > MAX_SPEED_LIMIT_CYCLE_MS) {
+            LOGGER.debug("Speed limit cycle too long ({} ms), resetting", actualTimeMs);
+            speedLimitCycleStart.put(playerId, System.currentTimeMillis());
+            speedLimitBytesSent.put(playerId, 0L);
+            // 重新计算（使用本次发送量作为新周期的起点）
+            totalBytes = (long) bytesSent;
+            speedLimitBytesSent.put(playerId, totalBytes);
+            cycleStart = System.currentTimeMillis();
+            actualTimeMs = 0;
+        }
+
+        // 计算在限速下，发送这些字节应该花费的时间
+        long expectedTimeMs = (totalBytes * 1000L) / (limitKBps * 1024L);
+
+        // 如果实际耗时 >= 预期耗时，说明网络瓶颈已经限制了发送速度，不需要等待
+        if (actualTimeMs >= expectedTimeMs) {
+            LOGGER.debug("Bandwidth bottleneck detected: sent {} bytes in {} ms (expected {} ms at {} KBps), skipping wait",
+                    totalBytes, actualTimeMs, expectedTimeMs, limitKBps);
+            // 重置周期，因为当前周期的带宽已经低于限速值
+            speedLimitCycleStart.put(playerId, System.currentTimeMillis());
+            speedLimitBytesSent.put(playerId, 0L);
+            return true;
+        }
+
+        // 计算需要等待的剩余时间
+        long remainingTimeMs = expectedTimeMs - actualTimeMs;
+
+        LOGGER.debug("Applying speed limit: sent {} bytes in {} ms, need to wait {} ms more (limit: {} KBps)",
+                totalBytes, actualTimeMs, remainingTimeMs, limitKBps);
+
+        // 执行可中断的等待
         long checkIntervalMs = 100; // Check every 100ms
+        long waitStartTime = System.currentTimeMillis();
 
-        while (System.currentTimeMillis() - startTime < expectedTimeMs) {
+        while (System.currentTimeMillis() - waitStartTime < remainingTimeMs) {
             // Check if player disconnected during speed limit wait
             if (!isPlayerStillValid(player)) {
                 LOGGER.info("Player {} disconnected during speed limit wait, aborting sync", playerId);
                 return false;
             }
 
-            long remainingMs = expectedTimeMs - (System.currentTimeMillis() - startTime);
-            long sleepMs = Math.min(checkIntervalMs, remainingMs);
+            long waitRemainingMs = remainingTimeMs - (System.currentTimeMillis() - waitStartTime);
+            long sleepMs = Math.min(checkIntervalMs, waitRemainingMs);
 
             try {
                 Thread.sleep(sleepMs);
@@ -281,7 +436,33 @@ public class ServerSyncHandler {
             }
         }
 
+        // 等待完成后，重置周期开始新的限速周期
+        speedLimitCycleStart.put(playerId, System.currentTimeMillis());
+        speedLimitBytesSent.put(playerId, 0L);
+
         return true;
+    }
+
+    /**
+     * 清除玩家的限速状态。
+     *
+     * @param playerId 玩家UUID
+     */
+    private static void clearSpeedLimitState(UUID playerId) {
+        speedLimitBytesSent.remove(playerId);
+        speedLimitCycleStart.remove(playerId);
+    }
+
+    /**
+     * 清除玩家的所有同步状态（同步完成或中断时调用）。
+     *
+     * @param playerId 玩家UUID
+     */
+    private static void cleanupSyncState(UUID playerId) {
+        syncingPlayers.remove(playerId);
+        playerSyncDimensions.remove(playerId);
+        syncThreads.remove(playerId);
+        clearSpeedLimitState(playerId);
     }
 
     /**
@@ -300,6 +481,15 @@ public class ServerSyncHandler {
         if (!(player instanceof ServerPlayer serverPlayer)) return;
 
         UUID playerId = serverPlayer.getUUID();
+
+        // 如果玩家已经在同步中，先中断旧的同步线程
+        Thread oldThread = syncThreads.get(playerId);
+        if (oldThread != null && oldThread.isAlive()) {
+            LOGGER.info("Player {} requested new sync while syncing, interrupting old sync", playerId);
+            oldThread.interrupt();
+            cleanupSyncState(playerId);
+        }
+
         ResourceKey<Level> startDimension = serverPlayer.level().dimension();
 
         // Mark player as syncing and record starting dimension (在主线程快速完成)
@@ -348,9 +538,7 @@ public class ServerSyncHandler {
                 PacketDistributor.sendToPlayer(serverPlayer,
                         new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "no_cache"));
             });
-            syncingPlayers.remove(playerId);
-            playerSyncDimensions.remove(playerId);
-            syncThreads.remove(playerId);
+            cleanupSyncState(playerId);
             return;
         }
 
@@ -387,9 +575,8 @@ public class ServerSyncHandler {
         for (String xaeroDim : requestedDimensions) {
             Path dimCacheDir = cacheDir.resolve(xaeroDim);
             if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
-                try {
-                    boolean hasZipFiles = Files.walk(dimCacheDir)
-                            .anyMatch(p -> p.toString().endsWith(".zip"));
+                try (Stream<Path> stream = Files.walk(dimCacheDir)) {
+                    boolean hasZipFiles = stream.anyMatch(p -> p.toString().endsWith(".zip"));
                     if (hasZipFiles) {
                         hasValidDimension = true;
                     }
@@ -413,9 +600,7 @@ public class ServerSyncHandler {
                 PacketDistributor.sendToPlayer(serverPlayer,
                         new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
             });
-            syncingPlayers.remove(playerId);
-            playerSyncDimensions.remove(playerId);
-            syncThreads.remove(playerId);
+            cleanupSyncState(playerId);
             return;
         }
 
@@ -513,9 +698,7 @@ public class ServerSyncHandler {
                 PacketDistributor.sendToPlayer(serverPlayer,
                         new PacketHandler.SyncResponsePayload(List.of(), true, worldId, "uptodate"));
             });
-            syncingPlayers.remove(playerId);
-            playerSyncDimensions.remove(playerId);
-            syncThreads.remove(playerId);
+            cleanupSyncState(playerId);
             return;
         }
 
@@ -532,14 +715,14 @@ public class ServerSyncHandler {
 
         // 流式处理：逐个读取数据并发送，避免一次性加载所有数据到内存
         List<ChunkMapData> batch = new ArrayList<>();
-        int batchSize = 0;
         int batchBytes = 0;
         int processed = 0;
+        int batchThreshold = getBatchThreshold(); // 批次累积阈值（目标每秒发送量）
 
         for (RegionSyncInfo info : regionsToSync) {
             if (!isPlayerStillValid(serverPlayer)) {
                 LOGGER.info("Player {} disconnected during sync", playerId);
-                syncThreads.remove(playerId);
+                cleanupSyncState(playerId);
                 return;
             }
 
@@ -550,43 +733,30 @@ public class ServerSyncHandler {
                 continue;
             }
 
-            // 数据发送后立即可以释放，因为 batch 只保存引用
-            // 但需要在发送前复制数据，因为异步发送需要数据存活
-
-            if (batchSize + chunk.data.length > getDynamicBatchSize() && !batch.isEmpty()) {
-                // 对所有批次执行速度限制（包括第一批）
+            // 累积到批次阈值后发送（拆成多个包，每个包不超过maxPacketSize）
+            if (batchBytes + chunk.data.length > batchThreshold && !batch.isEmpty()) {
+                // 执行速度限制
                 if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
                     LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
-                    syncThreads.remove(playerId);
+                    cleanupSyncState(playerId);
                     return;
                 }
 
-                // 在主线程发送数据包
-                final List<ChunkMapData> batchToSend = new ArrayList<>(batch);
-                final int processedCount = processed;
-                final int totalCount = total;
-                serverPlayer.serverLevel().getServer().execute(() -> {
-                    PacketDistributor.sendToPlayer(serverPlayer,
-                            new PacketHandler.SyncResponsePayload(batchToSend, false, worldId, "ok"));
-                    PacketDistributor.sendToPlayer(serverPlayer,
-                            new PacketHandler.SyncProgressPayload(processedCount, totalCount,
-                                    String.format("Sending regions %d/%d", processedCount, totalCount)));
-                });
+                // 拆包发送
+                sendBatchInChunks(batch, batchBytes, serverPlayer, worldId, processed, total);
                 processed += batch.size();
 
                 batch.clear();
-                batchSize = 0;
                 batchBytes = 0;
             }
 
             batch.add(chunk);
-            batchSize += chunk.data.length;
             batchBytes += chunk.data.length;
         }
 
         if (!isPlayerStillValid(serverPlayer)) {
             LOGGER.info("Player {} disconnected before final batch", playerId);
-            syncThreads.remove(playerId);
+            cleanupSyncState(playerId);
             return;
         }
 
@@ -595,21 +765,62 @@ public class ServerSyncHandler {
             // 对最终批次也执行速度限制
             if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
                 LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
-                syncThreads.remove(playerId);
+                cleanupSyncState(playerId);
                 return;
             }
 
-            // 在主线程发送数据包
-            final List<ChunkMapData> finalBatch = new ArrayList<>(batch);
-            final int finalTotal = total;
-            serverPlayer.serverLevel().getServer().execute(() -> {
-                PacketDistributor.sendToPlayer(serverPlayer,
-                        new PacketHandler.SyncResponsePayload(finalBatch, true, worldId, "ok"));
-                PacketDistributor.sendToPlayer(serverPlayer,
-                        new PacketHandler.SyncProgressPayload(finalTotal, finalTotal, "completed"));
-                serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
-            });
-            processed += batch.size();
+            // 拆包发送最终批次
+            int maxPacketSize = getMaxPacketSize();
+            if (batchBytes <= maxPacketSize) {
+                // 单包发送，标记完成
+                final List<ChunkMapData> finalBatch = new ArrayList<>(batch);
+                final int finalTotal = total;
+                serverPlayer.serverLevel().getServer().execute(() -> {
+                    PacketDistributor.sendToPlayer(serverPlayer,
+                            new PacketHandler.SyncResponsePayload(finalBatch, true, worldId, "ok"));
+                    PacketDistributor.sendToPlayer(serverPlayer,
+                            new PacketHandler.SyncProgressPayload(finalTotal, finalTotal, "completed"));
+                    serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                });
+            } else {
+                // 拆成多个包发送，最后一个标记完成
+                List<ChunkMapData> currentChunk = new ArrayList<>();
+                int currentSize = 0;
+
+                for (ChunkMapData chunk : batch) {
+                    if (currentSize + chunk.data.length > maxPacketSize && !currentChunk.isEmpty()) {
+                        final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
+                        final int sentProgress = processed;
+                        serverPlayer.serverLevel().getServer().execute(() -> {
+                            PacketDistributor.sendToPlayer(serverPlayer,
+                                    new PacketHandler.SyncResponsePayload(chunkToSend, false, worldId, "ok"));
+                            PacketDistributor.sendToPlayer(serverPlayer,
+                                    new PacketHandler.SyncProgressPayload(sentProgress, total,
+                                            String.format("Sending regions %d/%d", sentProgress, total)));
+                        });
+                        processed += currentChunk.size();
+
+                        currentChunk.clear();
+                        currentSize = 0;
+                    }
+
+                    currentChunk.add(chunk);
+                    currentSize += chunk.data.length;
+                }
+
+                // 发送最后一个包，标记完成
+                if (!currentChunk.isEmpty()) {
+                    final List<ChunkMapData> lastChunk = new ArrayList<>(currentChunk);
+                    final int finalTotal = total;
+                    serverPlayer.serverLevel().getServer().execute(() -> {
+                        PacketDistributor.sendToPlayer(serverPlayer,
+                                new PacketHandler.SyncResponsePayload(lastChunk, true, worldId, "ok"));
+                        PacketDistributor.sendToPlayer(serverPlayer,
+                                new PacketHandler.SyncProgressPayload(finalTotal, finalTotal, "completed"));
+                        serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                    });
+                }
+            }
         } else {
             // 没有数据要发送，但仍需发送完成消息
             serverPlayer.serverLevel().getServer().execute(() -> {
@@ -621,9 +832,7 @@ public class ServerSyncHandler {
 
         LOGGER.info("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
 
-        syncingPlayers.remove(playerId);
-        playerSyncDimensions.remove(playerId);
-        syncThreads.remove(playerId);
+        cleanupSyncState(playerId);
     }
 
     /**
@@ -690,6 +899,8 @@ public class ServerSyncHandler {
         syncingPlayers.clear();
         playerSyncDimensions.clear();
         syncThreads.clear();
+        speedLimitBytesSent.clear();
+        speedLimitCycleStart.clear();
         LOGGER.info("ServerSyncHandler tracking data cleared");
     }
 

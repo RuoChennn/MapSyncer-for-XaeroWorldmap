@@ -286,13 +286,47 @@ public class ModConfig {
                              "同时转换的最大区域数量")
                     .defineInRange("maxConcurrentRegions", 4, 1, 16);
             maxSyncPacketSize = builder
-                    .comment("Maximum sync packet size in bytes (default 1MB, max 1MB to avoid NeoForge limits)",
-                             "同步数据包最大字节数（默认 1MB，最大 1MB 以避免超过 NeoForge 限制）")
-                    .defineInRange("maxSyncPacketSize", 1048576, 65536, 1048576);
+                    .comment("Maximum sync packet size in bytes",
+                             "同步数据包最大字节数",
+                             "",
+                             "Size options for quick reference (all divide 1024KB/s evenly):",
+                             "  65536  = 64KB  (conservative, 16 packets/s at 1024KB/s)",
+                             "  131072 = 128KB (balanced, 8 packets/s at 1024KB/s)",
+                             "  262144 = 256KB (recommended, 4 packets/s at 1024KB/s)",
+                             "  524288 = 512KB (efficient, 2 packets/s at 1024KB/s)",
+                             "  1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)",
+                             "",
+                             "大小选项供快速参考（均能被 1024KB/s 整除）：",
+                             "  65536  = 64KB  （保守，1024KB/s 时每秒 16 包）",
+                             "  131072 = 128KB （平衡，1024KB/s 时每秒 8 包）",
+                             "  262144 = 256KB （推荐，1024KB/s 时每秒 4 包）",
+                             "  524288 = 512KB （高效，1024KB/s 时每秒 2 包）",
+                             "  1048576 = 1MB  （最大，1024KB/s 时每秒 1 包）",
+                             "",
+                             "Default: 256KB (recommended), Range: 64KB - 1MB",
+                             "默认：256KB（推荐），范围：64KB - 1MB")
+                    .defineInRange("maxSyncPacketSize", 262144, 65536, 1048576);
             syncSpeedLimitKBps = builder
-                    .comment("Sync speed limit in KB/s (0 = unlimited, default 100 KB/s)",
-                             "同步速度限制 KB/s（0 = 无限制，默认 100 KB/s）")
-                    .defineInRange("syncSpeedLimitKBps", 100, 0, 10000);
+                    .comment("Sync speed limit in KB/s (0 = unlimited)",
+                             "同步速度限制 KB/s（0 = 无限制）",
+                             "",
+                             "Speed options for quick reference:",
+                             "  100  = 100KB/s  (slow, suitable for limited bandwidth)",
+                             "  512  = 512KB/s  (moderate, half MiB)",
+                             "  1024 = 1024KB/s = 1MiB/s (default, recommended)",
+                             "  5120 = 5120KB/s = 5MiB/s (fast, suitable for LAN)",
+                             "  10240 = 10240KB/s = 10MiB/s (very fast)",
+                             "",
+                             "速度选项供快速参考：",
+                             "  100  = 100KB/s  （慢速，适合带宽受限）",
+                             "  512  = 512KB/s  （中等，半 MiB）",
+                             "  1024 = 1024KB/s = 1MiB/s （默认，推荐）",
+                             "  5120 = 5120KB/s = 5MiB/s （快速，适合局域网）",
+                             "  10240 = 10240KB/s = 10MiB/s （非常快）",
+                             "",
+                             "Default: 1024 (1MiB/s), Range: 0 - 10240",
+                             "默认：1024（1MiB/s），范围：0 - 10240")
+                    .defineInRange("syncSpeedLimitKBps", 1024, 0, 10240);
 
             builder.pop();
 
