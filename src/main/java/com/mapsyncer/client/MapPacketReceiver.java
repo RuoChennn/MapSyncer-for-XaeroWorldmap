@@ -247,9 +247,7 @@ public class MapPacketReceiver {
             if (isSyncStale()) {
                 clearSyncData();
                 LOGGER.warn("Sync was stale, cleared accumulated data");
-                if (tsCache != null) {
-                    tsCache.markSyncInterrupted();
-                }
+                // 不改变同步状态（保持 in_progress），下次可断点续传
                 if (Minecraft.getInstance().player != null) {
                     Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
                 }

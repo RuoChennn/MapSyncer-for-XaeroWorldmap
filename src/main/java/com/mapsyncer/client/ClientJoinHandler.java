@@ -15,13 +15,11 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 
-import java.nio.file.Path;
-
 /**
- * 客户端玩家加入事件处理器 - 检测中断的同步并提示断点续传
+ * 客户端玩家加入事件处理器 - 检测未完成的同步并提示断点续传
  *
  * 功能：
- * - 玩家加入服务器时检测上次同步是否中断
+ * - 玩家加入服务器时检测上次同步是否未完成（状态为 in_progress）
  * - 显示可点击的提示信息，让玩家可以继续上次同步
  */
 @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
@@ -29,13 +27,10 @@ public class ClientJoinHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientJoinHandler.class);
 
-    /** 陈旧同步超时时间（5分钟） */
-    private static final long STALE_SYNC_TIMEOUT_MS = 5 * 60 * 1000;
-
     /**
      * 玩家登录事件处理
      *
-     * 检测上次同步是否中断，如果可以断点续传则显示提示。
+     * 检测上次同步是否未完成，如果需要断点续传则显示提示。
      *
      * @param event 玩家登录事件
      */
@@ -58,7 +53,7 @@ public class ClientJoinHandler {
     }
 
     /**
-     * 检测上次同步是否中断
+     * 检测上次同步是否未完成
      *
      * @param mc Minecraft 客户端实例
      */
@@ -72,16 +67,22 @@ public class ClientJoinHandler {
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
         if (tsCache == null) return;
 
+        // 检查状态文件是否存在（不存在说明从未同步过）
+        if (!tsCache.syncStateFileExists()) {
+            LOGGER.debug("Sync state file not found, never synced before");
+            return;
+        }
+
         String syncState = tsCache.getSyncState();
         String syncCommand = tsCache.getSyncCommand();
 
-        // 检查是否可以断点续传
-        if (tsCache.canResume(STALE_SYNC_TIMEOUT_MS)) {
-            LOGGER.info("Found interrupted sync: state={}, command={}", syncState, syncCommand);
+        // 检查是否需要断点续传（状态为 in_progress）
+        if (tsCache.needsResume()) {
+            LOGGER.info("Found unfinished sync: state={}, command={}", syncState, syncCommand);
 
             if (mc.player != null && !syncCommand.isEmpty()) {
                 // 显示可点击的提示信息
-                showResumePrompt(mc, syncCommand, syncState);
+                showResumePrompt(mc, syncCommand);
             }
         }
     }
@@ -93,21 +94,15 @@ public class ClientJoinHandler {
      *
      * @param mc Minecraft 客户端实例
      * @param command 同步指令
-     * @param state 同步状态
      */
-    private static void showResumePrompt(Minecraft mc, String command, String state) {
+    private static void showResumePrompt(Minecraft mc, String command) {
         if (mc.player == null) return;
 
         // 创建提示信息
         Component header = ChatUtils.prefix().append(
                 ChatUtils.header("mapsyncer.sync.resume_header"));
 
-        // 状态描述
-        String stateDesc = ClientTimestampCache.SYNC_STATE_INTERRUPTED.equals(state)
-                ? "上次同步中断"
-                : "上次同步未完成";
-
-        Component message = ChatUtils.message("mapsyncer.sync.resume_prompt", stateDesc);
+        Component message = ChatUtils.message("mapsyncer.sync.resume_prompt", "上次同步未完成");
 
         // 创建可点击的指令按钮
         Component clickButton = Component.literal("[点击继续同步]")
@@ -136,7 +131,7 @@ public class ClientJoinHandler {
     }
 
     /**
-     * 清除同步状态（通过命令调用）
+     * 清除同步状态（用户主动忽略断点续传提示时调用）
      */
     public static void clearSyncState() {
         Minecraft mc = Minecraft.getInstance();

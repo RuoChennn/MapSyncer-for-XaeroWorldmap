@@ -20,11 +20,14 @@ import java.util.Set;
  *
  * <p>缓存文件位置：位于服务器目录（Multiplayer_<server>）下的 sync_timestamps.cache 文件中。</p>
  *
- * <p>用途说明：</p>
+ * <p>同步状态设计（简化版）：</p>
  * <ul>
- *   <li>当客户端从服务器同步区域数据后，记录该区域的时间戳和哈希值</li>
- *   <li>下次同步时，使用缓存的值而非文件修改时间进行比较，避免误同步</li>
- *   <li>服务端和客户端使用相同格式，便于直接比较</li>
+ *   <li>只有两种状态：in_progress（同步进行中）和 completed（同步完成）</li>
+ *   <li>开始同步时标记为 in_progress</li>
+ *   <li>完成同步后标记为 completed</li>
+ *   <li>断开连接不改变状态（保持 in_progress）</li>
+ *   <li>加入游戏时如果状态为 in_progress，显示断点续传提示</li>
+ *   <li>如果状态文件不存在，说明从未同步过，跳过检测</li>
  * </ul>
  */
 public class ClientTimestampCache {
@@ -37,17 +40,11 @@ public class ClientTimestampCache {
     /** 同步状态文件名称 */
     private static final String SYNC_STATE_FILE_NAME = "sync_state.cache";
 
-    /** 同步状态：无同步进行 */
-    public static final String SYNC_STATE_IDLE = "idle";
-
-    /** 同步状态：同步进行中 */
+    /** 同步状态：同步进行中（断点续传可用） */
     public static final String SYNC_STATE_IN_PROGRESS = "in_progress";
 
     /** 同步状态：同步完成 */
     public static final String SYNC_STATE_COMPLETED = "completed";
-
-    /** 同步状态：同步中断（断点续传可用） */
-    public static final String SYNC_STATE_INTERRUPTED = "interrupted";
 
     /** 单例实例 */
     private static volatile ClientTimestampCache instance;
@@ -75,10 +72,7 @@ public class ClientTimestampCache {
     private final Map<String, CacheEntry> cache = new HashMap<>();
 
     /** 当前同步状态 */
-    private volatile String syncState = SYNC_STATE_IDLE;
-
-    /** 同步开始时间（毫秒） */
-    private volatile long syncStartTime = 0;
+    private volatile String syncState = null;
 
     /** 同步涉及的维度列表 */
     private volatile Set<String> syncDimensions = new HashSet<>();
@@ -178,10 +172,12 @@ public class ClientTimestampCache {
     /**
      * 从文件加载同步状态。
      * 用于断点续传检测。
+     * 如果文件不存在，syncState 保持为 null（表示从未同步过）。
      */
     private void loadSyncState() {
         if (!Files.exists(syncStateFile)) {
-            syncState = SYNC_STATE_IDLE;
+            syncState = null;
+            LOGGER.info("Sync state file not found, never synced before");
             return;
         }
 
@@ -191,8 +187,7 @@ public class ClientTimestampCache {
                 props.load(in);
             }
 
-            syncState = props.getProperty("state", SYNC_STATE_IDLE);
-            syncStartTime = Long.parseLong(props.getProperty("startTime", "0"));
+            syncState = props.getProperty("state", null);
 
             String dimsStr = props.getProperty("dimensions", "");
             syncDimensions = new HashSet<>();
@@ -204,10 +199,10 @@ public class ClientTimestampCache {
 
             syncCommand = props.getProperty("command", "");
 
-            LOGGER.info("Loaded sync state: {}, startTime={}, dimensions={}, command={}", syncState, syncStartTime, syncDimensions, syncCommand);
+            LOGGER.info("Loaded sync state: {}, dimensions={}, command={}", syncState, syncDimensions, syncCommand);
         } catch (Exception e) {
             LOGGER.warn("Failed to load sync state file: {}", e.getMessage());
-            syncState = SYNC_STATE_IDLE;
+            syncState = null;
         }
     }
 
@@ -218,13 +213,12 @@ public class ClientTimestampCache {
         try {
             java.util.Properties props = new java.util.Properties();
             props.setProperty("state", syncState);
-            props.setProperty("startTime", String.valueOf(syncStartTime));
             props.setProperty("dimensions", String.join(",", syncDimensions));
             props.setProperty("command", syncCommand);
 
             Files.createDirectories(syncStateFile.getParent());
             try (java.io.OutputStream out = Files.newOutputStream(syncStateFile)) {
-                props.store(out, "Sync state for resume detection\nstate: idle/in_progress/completed/interrupted");
+                props.store(out, "Sync state for resume detection\nstate: in_progress/completed");
             }
 
             LOGGER.debug("Saved sync state: {}", syncState);
@@ -241,7 +235,6 @@ public class ClientTimestampCache {
      */
     public void markSyncStart(Set<String> dimensions, String command) {
         syncState = SYNC_STATE_IN_PROGRESS;
-        syncStartTime = System.currentTimeMillis();
         syncDimensions = new HashSet<>(dimensions);
         syncCommand = command;
         saveSyncState();
@@ -258,35 +251,20 @@ public class ClientTimestampCache {
     }
 
     /**
-     * 标记同步中断（断点续传可用）。
-     */
-    public void markSyncInterrupted() {
-        syncState = SYNC_STATE_INTERRUPTED;
-        saveSyncState();
-        LOGGER.info("Marked sync interrupted - resume available");
-    }
-
-    /**
-     * 清除同步状态（重置为空闲）。
+     * 清除同步状态（用户主动忽略断点续传提示时调用）。
      */
     public void clearSyncState() {
-        syncState = SYNC_STATE_IDLE;
-        syncStartTime = 0;
+        syncState = SYNC_STATE_COMPLETED;
         syncDimensions.clear();
         syncCommand = "";
         saveSyncState();
-        try {
-            Files.deleteIfExists(syncStateFile);
-        } catch (Exception e) {
-            LOGGER.warn("Failed to delete sync state file: {}", e.getMessage());
-        }
-        LOGGER.info("Cleared sync state");
+        LOGGER.info("Cleared sync state (marked as completed)");
     }
 
     /**
      * 获取当前同步状态。
      *
-     * @return 同步状态字符串
+     * @return 同步状态字符串，null 表示从未同步过
      */
     public String getSyncState() {
         return syncState;
@@ -302,24 +280,13 @@ public class ClientTimestampCache {
     }
 
     /**
-     * 检查是否可以断点续传。
-     * 状态为 INTERRUPTED 或 IN_PROGRESS（陈旧）时可以续传。
+     * 检查是否需要断点续传。
+     * 状态为 in_progress 时需要续传。
      *
-     * @param staleTimeoutMs 陈旧超时时间（毫秒），超过此时间的进行中同步视为陈旧
-     * @return true 表示可以断点续传
+     * @return true 表示需要断点续传
      */
-    public boolean canResume(long staleTimeoutMs) {
-        if (syncState == SYNC_STATE_INTERRUPTED) {
-            return true;
-        }
-
-        // 进行中的同步如果超过超时时间，视为陈旧可续传
-        if (syncState == SYNC_STATE_IN_PROGRESS && syncStartTime > 0) {
-            long elapsed = System.currentTimeMillis() - syncStartTime;
-            return elapsed > staleTimeoutMs;
-        }
-
-        return false;
+    public boolean needsResume() {
+        return SYNC_STATE_IN_PROGRESS.equals(syncState);
     }
 
     /**
@@ -329,15 +296,6 @@ public class ClientTimestampCache {
      */
     public Set<String> getSyncDimensions() {
         return new HashSet<>(syncDimensions);
-    }
-
-    /**
-     * 获取同步开始时间。
-     *
-     * @return 同步开始时间（毫秒），0表示无进行中同步
-     */
-    public long getSyncStartTime() {
-        return syncStartTime;
     }
 
     /**
@@ -422,6 +380,15 @@ public class ClientTimestampCache {
      */
     public boolean cacheFileExists() {
         return Files.exists(cacheFile);
+    }
+
+    /**
+     * 检查同步状态文件是否存在。
+     *
+     * @return 如果状态文件存在，返回 true；否则返回 false
+     */
+    public boolean syncStateFileExists() {
+        return Files.exists(syncStateFile);
     }
 
     /**
