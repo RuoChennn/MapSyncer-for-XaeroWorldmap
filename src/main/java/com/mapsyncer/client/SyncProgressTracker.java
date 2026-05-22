@@ -100,7 +100,7 @@ public class SyncProgressTracker {
 
     /**
      * 更新同步进度。
-     * 接收服务端发送的进度信息，并在达到特定百分比时显示进度。
+     * 接收服务端发送的进度信息，显示进度更新。
      *
      * @param processed 已处理的区域数
      * @param total 总区域数
@@ -116,12 +116,11 @@ public class SyncProgressTracker {
         SyncProgressTracker.total = total;
         SyncProgressTracker.status = status;
 
+        // 每次进度更新都显示
         if (total > 0) {
             int percent = (processed * 100) / total;
-            if (percent != lastDisplayedPercent && percent % 10 == 0) {
-                lastDisplayedPercent = percent;
-                displayProgress();
-            }
+            lastDisplayedPercent = percent;
+            displayProgress();
         }
     }
 
