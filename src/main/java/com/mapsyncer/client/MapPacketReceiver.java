@@ -946,9 +946,17 @@ public class MapPacketReceiver {
     }
 
     /**
-     * 分批注册视距外区域的 RegionDetection。
+     * 分批注册视距外区域的 RegionDetection 并触发加载（非优先）。
      * 注册当前累积的区域并清空集合，返回注册数量。
      * 可在同步过程中多次调用（分批注册），也可在完成时调用（注册剩余）。
+     *
+     * <p>处理逻辑：</p>
+     * <ul>
+     *   <li>注册 RegionDetection（让 Xaero 知道该区域存在）</li>
+     *   <li>获取或创建 MapRegion</li>
+     *   <li>设置 loadState=4（需要重载）</li>
+     *   <li>调用 requestLoad(false)（非优先加载，排队等待）</li>
+     * </ul>
      *
      * @return 本次注册的区域数量
      */
@@ -973,6 +981,7 @@ public class MapPacketReceiver {
             if (!coord.isSurfaceLayer()) continue;
 
             try {
+                // Step 1: 注册 RegionDetection
                 String regionFileName = coord.x() + "_" + coord.z() + ".zip";
                 java.io.File regionFile = mwDir != null
                     ? mwDir.resolve(regionFileName).toFile()
@@ -986,6 +995,25 @@ public class MapPacketReceiver {
 
                 cachedAddRegionDetection.invoke(cachedSurfaceMapLayer, detection);
                 registeredCount++;
+
+                // Step 2: 获取或创建 MapRegion 并触发加载（非优先）
+                Object mapRegion = cachedGetLeafMapRegion.invoke(cachedMapProcessor,
+                    Integer.MAX_VALUE, coord.x(), coord.z(), true);
+                if (mapRegion == null) {
+                    LOGGER.debug("视距外区域 ({}, {}) 无法创建 MapRegion", coord.x(), coord.z());
+                    continue;
+                }
+
+                // Step 3: 清除 refresh 状态
+                cachedCancelRefresh.invoke(mapRegion, cachedMapProcessor);
+
+                // Step 4: 设置 loadState=4（需要重载）
+                cachedLoadStateField.setByte(mapRegion, (byte) 4);
+
+                // Step 5: 触发加载（非优先，排队等待）
+                cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync outside view", false);
+
+                LOGGER.debug("视距外区域 ({}, {}) 已注册并触发加载（非优先）", coord.x(), coord.z());
 
             } catch (Exception e) {
                 LOGGER.warn("注册 RegionDetection 失败: ({}, {}) - {}", coord.x(), coord.z(), e.getMessage());
