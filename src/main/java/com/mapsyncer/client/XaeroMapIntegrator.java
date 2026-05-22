@@ -198,6 +198,7 @@ public class XaeroMapIntegrator {
     /**
      * 计算视距范围内的区域坐标。
      * 根据玩家的位置和视距设置，计算需要关注的区域集合。
+     * 默认使用地表层 (Integer.MAX_VALUE)。
      *
      * <p>计算逻辑：</p>
      * <ul>
@@ -206,9 +207,27 @@ public class XaeroMapIntegrator {
      *   <li>根据玩家位置计算视距范围可能跨越的 region</li>
      * </ul>
      *
-     * @return 视距范围内的区域坐标集合
+     * @return 视距范围内的区域坐标集合（地表层）
      */
     public static Set<RegionCoord> getViewDistanceRegions() {
+        return getViewDistanceRegions(Integer.MAX_VALUE);
+    }
+
+    /**
+     * 计算视距范围内的区域坐标。
+     * 根据玩家的位置和视距设置，计算需要关注的区域集合。
+     *
+     * <p>计算逻辑：</p>
+     * <ul>
+     *   <li>视距 = 渲染距离（chunks 半径）</li>
+     *   <li>一个 region = 32 chunks</li>
+     *   <li>根据玩家位置计算视距范围可能跨越的 region</li>
+     * </ul>
+     *
+     * @param caveLayer 洞穴层编号，地表层使用 Integer.MAX_VALUE
+     * @return 视距范围内的区域坐标集合
+     */
+    public static Set<RegionCoord> getViewDistanceRegions(int caveLayer) {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
         if (player == null) {
@@ -241,16 +260,16 @@ public class XaeroMapIntegrator {
 
         Set<RegionCoord> viewRegions = new HashSet<>();
 
-        // 添加视距范围内的所有 region
+        // 添加视距范围内的所有 region（使用指定的 caveLayer）
         for (int rx = minRegionX; rx <= maxRegionX; rx++) {
             for (int rz = minRegionZ; rz <= maxRegionZ; rz++) {
-                viewRegions.add(new RegionCoord(rx, rz));
+                viewRegions.add(new RegionCoord(rx, rz, caveLayer));
             }
         }
 
-        LOGGER.debug("View distance regions: viewDistance={}, chunks ({},{}) to ({},{}), regions ({},{}) to ({},{}), total {}",
+        LOGGER.debug("View distance regions: viewDistance={}, chunks ({},{}) to ({},{}), regions ({},{}) to ({},{}), total {} (layer={})",
                 viewDistance, minChunkX, minChunkZ, maxChunkX, maxChunkZ,
-                minRegionX, minRegionZ, maxRegionX, maxRegionZ, viewRegions.size());
+                minRegionX, minRegionZ, maxRegionX, maxRegionZ, viewRegions.size(), caveLayer);
 
         return viewRegions;
     }

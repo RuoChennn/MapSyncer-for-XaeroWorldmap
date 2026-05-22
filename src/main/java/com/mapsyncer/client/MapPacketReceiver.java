@@ -5,6 +5,7 @@ import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -384,8 +385,24 @@ public class MapPacketReceiver {
             // 添加 cancelRefresh 方法，用于清除可能存在的 refresh 状态
             Method cancelRefresh = mapRegionClass.getMethod("cancelRefresh", mapProcessorClass);
 
-            java.util.Set<XaeroMapIntegrator.RegionCoord> viewRegions = XaeroMapIntegrator.getViewDistanceRegions();
-            LOGGER.debug("视距内 region: {} 个", viewRegions.size());
+            // 根据维度类型决定重载哪个层
+            // 地表维度（主世界、末地）：重载地表层 (MAX_VALUE)
+            // 洞穴维度（地狱）：重载玩家当前所在洞穴层
+            boolean isNether = mc.level != null && mc.level.dimension() == Level.NETHER;
+            int targetCaveLayer;
+            if (isNether) {
+                // 地狱：获取玩家当前洞穴层
+                targetCaveLayer = (Integer) mapProcessorClass.getMethod("getCurrentCaveLayer").invoke(mapProcessor);
+                LOGGER.info("地狱维度，重载洞穴层: {}", targetCaveLayer);
+            } else {
+                // 地表维度：重载地表层
+                targetCaveLayer = Integer.MAX_VALUE;
+                LOGGER.info("地表维度，重载地表层");
+            }
+
+            // 使用目标层创建视距范围
+            java.util.Set<XaeroMapIntegrator.RegionCoord> viewRegions = XaeroMapIntegrator.getViewDistanceRegions(targetCaveLayer);
+            LOGGER.debug("视距内 region (layer={}): {} 个", targetCaveLayer, viewRegions.size());
 
             java.util.List<Object> pausedViewRegions = new java.util.ArrayList<>();
             int viewDistanceCount = 0;
@@ -393,11 +410,14 @@ public class MapPacketReceiver {
 
             // Step 1: 处理视距内 region（优先加载 + 写保护）
             for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
-                if (!viewRegions.contains(coord)) continue;
+                // 视距判断：只比较 x/z，所有区域使用同一目标层
+                XaeroMapIntegrator.RegionCoord viewCheckCoord = new XaeroMapIntegrator.RegionCoord(coord.x(), coord.z(), targetCaveLayer);
+                if (!viewRegions.contains(viewCheckCoord)) continue;
 
-                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
+                // 使用目标层，而非 coord 的 caveLayer（根据维度类型统一处理）
+                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, targetCaveLayer, coord.x(), coord.z(), true);
                 if (mapRegion == null) {
-                    LOGGER.warn("视距内 region ({}, {}) 无法创建", coord.x(), coord.z());
+                    LOGGER.warn("视距内 region ({}, {}) layer={} 无法创建", coord.x(), coord.z(), targetCaveLayer);
                     continue;
                 }
 
@@ -428,11 +448,14 @@ public class MapPacketReceiver {
 
             // Step 2: 处理视距外 region（普通加载）
             for (XaeroMapIntegrator.RegionCoord coord : regionsToReload) {
-                if (viewRegions.contains(coord)) continue;
+                // 视距判断：只比较 x/z，所有区域使用同一目标层
+                XaeroMapIntegrator.RegionCoord viewCheckCoord = new XaeroMapIntegrator.RegionCoord(coord.x(), coord.z(), targetCaveLayer);
+                if (viewRegions.contains(viewCheckCoord)) continue;
 
-                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, Integer.MAX_VALUE, coord.x(), coord.z(), true);
+                // 使用目标层，而非 coord 的 caveLayer（根据维度类型统一处理）
+                Object mapRegion = getLeafMapRegion.invoke(mapProcessor, targetCaveLayer, coord.x(), coord.z(), true);
                 if (mapRegion == null) {
-                    LOGGER.warn("视距外 region ({}, {}) 无法创建", coord.x(), coord.z());
+                    LOGGER.warn("视距外 region ({}, {}) layer={} 无法创建", coord.x(), coord.z(), targetCaveLayer);
                     continue;
                 }
 
@@ -452,7 +475,7 @@ public class MapPacketReceiver {
                 outsideViewCount++;
             }
 
-            LOGGER.info("区域处理完成: 视距内 {} 个, 视距外 {} 个", viewDistanceCount, outsideViewCount);
+            LOGGER.info("区域处理完成: 目标层={}, 视距内 {} 个, 视距外 {} 个", targetCaveLayer, viewDistanceCount, outsideViewCount);
 
             XaeroMapIntegrator.clearPreUnloadedRegions();
 
