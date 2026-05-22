@@ -214,7 +214,25 @@ public class ClientTimestampCache {
             }
 
             try (var out = Files.newOutputStream(cacheFile)) {
-                props.store(out, "Sync timestamps cache\nFormat: _state/_dimensions/_command = sync status\nOther keys: dimension/region_x_z = timestamp_seconds:hash");
+                // 先写入状态信息
+                StringBuilder content = new StringBuilder();
+                content.append("# Sync timestamps cache\n");
+                content.append("# ==================== STATE ====================\n");
+                if (syncState != null) {
+                    content.append(KEY_STATE).append("=").append(syncState).append("\n");
+                }
+                content.append(KEY_DIMENSIONS).append("=").append(String.join(",", syncDimensions)).append("\n");
+                content.append(KEY_COMMAND).append("=").append(syncCommand).append("\n");
+                content.append("\n");
+                content.append("# ==================== TIMESTAMP CACHE ====================\n");
+                content.append("# Format: dimension/region_x_z = timestamp_seconds:hash\n");
+
+                // 写入区域缓存
+                for (Map.Entry<String, CacheEntry> entry : cache.entrySet()) {
+                    content.append(entry.getKey()).append("=").append(entry.getValue().format()).append("\n");
+                }
+
+                out.write(content.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
 
             LOGGER.debug("Saved cache: state={}, regions={}", syncState, cache.size());
