@@ -1014,6 +1014,31 @@ public class XaeroMapIntegrator {
     }
 
     /**
+     * 写入单个区块数据并返回 mw 目录路径（边接收边写入优化）。
+     *
+     * @param chunk 区块数据
+     * @param worldId 服务端 worldId
+     * @return mw 目录路径
+     */
+    public static Path writeChunkDataAndGetMwDir(ChunkMapData chunk, int worldId) {
+        Minecraft mc = Minecraft.getInstance();
+        ClientPacketListener connection = mc.getConnection();
+        if (connection == null) {
+            LOGGER.warn("Not connected to server, cannot write chunk data");
+            return null;
+        }
+
+        ServerData serverData = connection.getServerData();
+        Path serverDir = getCurrentServerDirectory();
+        if (serverDir == null) {
+            LOGGER.warn("Cannot determine server directory");
+            return null;
+        }
+
+        return writeChunkDataAndGetDir(chunk, serverDir, worldId);
+    }
+
+    /**
      * 触发地图重新加载。
      * 在游戏线程中执行地图重新加载操作。
      */

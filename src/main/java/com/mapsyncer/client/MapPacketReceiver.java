@@ -70,6 +70,31 @@ public class MapPacketReceiver {
     /** 同步期间更新的区域坐标集合（仅存储坐标，不存储数据，节省内存） */
     private static volatile Set<XaeroMapIntegrator.RegionCoord> updatedRegionCoords = new HashSet<>();
 
+    /** 视距外区域累积集合（等待 isComplete 时批量注册） */
+    private static volatile Set<XaeroMapIntegrator.RegionCoord> pendingOutsideViewRegions = new HashSet<>();
+
+    /** 已加载的视距内区域集合（避免重复加载） */
+    private static volatile Set<XaeroMapIntegrator.RegionCoord> loadedViewRegions = new HashSet<>();
+
+    /** 反射 API 缓存（避免重复反射调用开销） */
+    private static volatile Object cachedMapProcessor = null;
+    private static volatile Object cachedMapSaveLoad = null;
+    private static volatile Object cachedSurfaceMapLayer = null;
+    private static volatile Object cachedSession = null;
+    private static volatile String cachedCurrentWorldId = null;
+    private static volatile String cachedCurrentDimId = null;
+    private static volatile String cachedCurrentMWId = null;
+    private static volatile Integer cachedGlobalVersion = null;
+    private static volatile Method cachedGetLeafMapRegion = null;
+    private static volatile Method cachedRequestLoad = null;
+    private static volatile java.lang.reflect.Field cachedLoadStateField = null;
+    private static volatile Method cachedCancelRefresh = null;
+    private static volatile Method cachedAddRegionDetection = null;
+    private static volatile java.lang.reflect.Constructor<?> cachedRegionDetectionConstructor = null;
+
+    /** 反射 API 是否已初始化 */
+    private static volatile boolean reflectionInitialized = false;
+
     /**
      * 检查当前同步是否陈旧（运行时间过长）。
      * 陈旧的同步可能表示连接中断，需要清除数据。
@@ -195,14 +220,10 @@ public class MapPacketReceiver {
 
     /**
      * 处理服务端返回的同步响应数据包。
-     * 根据服务端状态决定是否暂停区块更新和处理数据。
-     *
-     * <p>状态处理：</p>
+     * 实现边接收边加载优化：
      * <ul>
-     *   <li>"ok" - 有数据同步，暂停区块更新，处理数据</li>
-     *   <li>"uptodate" - 地图已是最新，不暂停区块更新，显示消息</li>
-     *   <li>"no_cache" - 服务端无缓存，不暂停区块更新</li>
-     *   <li>"dim_not_available" - 维度不存在，不暂停区块更新</li>
+     *   <li>视距内区域：写入后立即加载</li>
+     *   <li>视距外区域：写入后累积，等待 isComplete 时批量注册</li>
      * </ul>
      *
      * @param payload 同步响应数据包
@@ -214,7 +235,7 @@ public class MapPacketReceiver {
             List<ChunkMapData> chunks = payload.chunks();
             int serverWorldId = payload.worldId();
 
-            LOGGER.info("Received sync response: status={}, chunks={}, isComplete={}", status, chunks.size(), payload.isComplete());
+            LOGGER.debug("Received sync response: status={}, chunks={}, isComplete={}", status, chunks.size(), payload.isComplete());
 
             // 获取时间戳缓存用于同步状态管理
             Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
@@ -223,9 +244,9 @@ public class MapPacketReceiver {
 
             // 根据状态决定处理方式
             if ("no_cache".equals(status) || "dim_not_available".equals(status)) {
-                // 服务端无缓存或维度不存在，不暂停区块更新，直接返回
                 LOGGER.info("Server returned error status: {}, no sync needed", status);
                 clearSyncData();
+                clearReflectionCache();
                 if (tsCache != null) {
                     tsCache.clearSyncState();
                 }
@@ -233,9 +254,9 @@ public class MapPacketReceiver {
             }
 
             if ("uptodate".equals(status)) {
-                // 地图已是最新，不暂停区块更新
                 LOGGER.info("Map is up-to-date, no sync needed");
                 clearSyncData();
+                clearReflectionCache();
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
                 }
@@ -243,54 +264,94 @@ public class MapPacketReceiver {
             }
 
             // status == "ok"，有数据需要同步
-            // Check for stale sync (running too long) and clear if needed
             if (isSyncStale()) {
                 clearSyncData();
+                clearReflectionCache();
                 LOGGER.warn("Sync was stale, cleared accumulated data");
-                // 不改变同步状态（保持 in_progress），下次可断点续传
                 if (Minecraft.getInstance().player != null) {
                     Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
                 }
                 return;
             }
 
-            // 首次收到数据时才暂停区块更新
+            // 首次收到数据时初始化
             if (!syncInProgress) {
                 syncInProgress = true;
                 XaeroMapIntegrator.disableChunkUpdates();
                 LOGGER.info("Starting sync, chunk updates disabled");
+
+                // 初始化反射 API 缓存（一次性）
+                initializeReflectionCache();
             }
 
-            // 只存储区域坐标，不存储完整数据（节省内存）
+            // 获取当前视距范围
+            Set<XaeroMapIntegrator.RegionCoord> viewRegions = XaeroMapIntegrator.getViewDistanceRegions();
+
+            // 流式处理：写入后立即判断视距并处理
             for (ChunkMapData chunk : chunks) {
-                updatedRegionCoords.add(new XaeroMapIntegrator.RegionCoord(chunk.regionX, chunk.regionZ, chunk.caveLayer));
+                XaeroMapIntegrator.RegionCoord coord = new XaeroMapIntegrator.RegionCoord(
+                    chunk.regionX, chunk.regionZ, chunk.caveLayer);
+                updatedRegionCoords.add(coord);
+
+                // 写入文件
+                Path mwDir = XaeroMapIntegrator.writeChunkDataAndGetMwDir(chunk, serverWorldId);
+                if (mwDir != null) {
+                    lastMwDir = mwDir;
+                }
+
+                // 判断是否在视距内（只处理地表层）
+                boolean isSurfaceLayer = chunk.caveLayer == Integer.MAX_VALUE;
+                boolean inViewDistance = viewRegions.contains(coord);
+
+                if (isSurfaceLayer && inViewDistance && !loadedViewRegions.contains(coord)) {
+                    // 视距内：立即加载
+                    triggerSingleRegionLoad(coord);
+                    loadedViewRegions.add(coord);
+                    LOGGER.debug("视距内区域 ({}, {}) 已立即加载", coord.x(), coord.z());
+                } else if (isSurfaceLayer && !inViewDistance) {
+                    // 视距外：累积待注册
+                    pendingOutsideViewRegions.add(coord);
+                    LOGGER.debug("视距外区域 ({}, {}) 已累积待注册", coord.x(), coord.z());
+                }
+                // 洞穴层暂不处理（累积到 updatedRegionCoords）
+
+                // 更新时间戳缓存
+                if (tsCache != null) {
+                    String relativePath = buildRelativePathForCache(chunk);
+                    String hash = computeHash(chunk.data);
+                    tsCache.update(relativePath, chunk.timestampSeconds, hash);
+                }
             }
 
-            // Log region count warning if accumulating too many
-            int regionCount = updatedRegionCoords.size();
-            if (regionCount > 100) {
-                LOGGER.debug("Received {} regions during sync", regionCount);
+            // 保存时间戳缓存
+            if (tsCache != null && !chunks.isEmpty()) {
+                tsCache.save();
             }
 
-            // Write all map data from server (覆盖客户端数据)
-            if (!chunks.isEmpty()) {
-                lastMwDir = XaeroMapIntegrator.writeMapDataAndReturnDir(chunks, serverWorldId);
-            }
-
+            // 同步完成时处理剩余区域
             if (payload.isComplete()) {
-                // 只有实际收到数据时才记录和显示缓存清除消息
+                int totalReceived = updatedRegionCoords.size();
+                int viewLoaded = loadedViewRegions.size();
+                int outsideRegistered = pendingOutsideViewRegions.size();
+
+                LOGGER.info("同步完成: 总计 {} 个区域, 视距内已加载 {} 个, 视距外待注册 {} 个",
+                    totalReceived, viewLoaded, outsideRegistered);
+
                 if (!updatedRegionCoords.isEmpty()) {
                     XaeroMapIntegrator.recordUpdatedRegionCoords(updatedRegionCoords);
-                    // 使用实际接收的区域数量显示完成消息，而非依赖进度追踪器的 total
-                    int receivedCount = updatedRegionCoords.size();
-                    SyncProgressTracker.completeWithCount(receivedCount);
-                    triggerXaeroReloadAndResume();
-                    // 标记同步完成
+                    SyncProgressTracker.completeWithCount(totalReceived);
+
+                    // 批量注册视距外区域
+                    registerPendingRegionDetections();
+
+                    // 清除缓存文件（视距内已加载，视距外已注册）
+                    clearCacheForRegions(loadedViewRegions);
+
+                    resumeChunkUpdates();
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
                     }
                 } else {
-                    // 未收到数据（维度不存在或已是最新），直接恢复区块更新
                     resumeChunkUpdates();
                     LOGGER.info("Sync complete with no data received");
                     if (tsCache != null) {
@@ -298,9 +359,9 @@ public class MapPacketReceiver {
                     }
                 }
 
-                // Clear accumulated region coords after sync complete
-                updatedRegionCoords.clear();
-                syncStartTime = 0; // Reset start time
+                // 清理状态
+                clearSyncState();
+                clearReflectionCache();
             }
         });
     }
@@ -674,5 +735,272 @@ public class MapPacketReceiver {
                         ChatUtils.desc("mapsyncer.sync.unloading_regions", unloaded), false);
             }
         }
+    }
+
+    // ========== 边接收边加载优化方法 ==========
+
+    /**
+     * 初始化反射 API 缓存（一次性，避免重复反射开销）。
+     * 在首次收到同步数据时调用。
+     */
+    private static void initializeReflectionCache() {
+        if (reflectionInitialized) return;
+
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null) return;
+
+            // 获取 WorldMapSession
+            Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
+            cachedSession = worldMapSessionClass.getMethod("getCurrentSession").invoke(null);
+            if (cachedSession == null) {
+                LOGGER.warn("无法初始化反射缓存: WorldMapSession 为空");
+                return;
+            }
+
+            // 获取 MapProcessor
+            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
+            cachedMapProcessor = worldMapSessionClass.getMethod("getMapProcessor").invoke(cachedSession);
+            if (cachedMapProcessor == null) {
+                LOGGER.warn("无法初始化反射缓存: MapProcessor 为空");
+                return;
+            }
+
+            // 获取 MapSaveLoad
+            Class<?> mapSaveLoadClass = Class.forName("xaero.map.file.MapSaveLoad");
+            cachedMapSaveLoad = mapProcessorClass.getMethod("getMapSaveLoad").invoke(cachedMapProcessor);
+            if (cachedMapSaveLoad == null) {
+                LOGGER.warn("无法初始化反射缓存: MapSaveLoad 为空");
+                return;
+            }
+
+            // 获取 MapWorld 和当前维度
+            Object mapWorld = mapProcessorClass.getMethod("getMapWorld").invoke(cachedMapProcessor);
+            Class<?> mapWorldClass = Class.forName("xaero.map.world.MapWorld");
+            Object mapDimension = mapWorldClass.getMethod("getCurrentDimension").invoke(mapWorld);
+            Class<?> mapDimensionClass = Class.forName("xaero.map.world.MapDimension");
+            Object layeredRegionManager = mapDimensionClass.getMethod("getLayeredMapRegions").invoke(mapDimension);
+            Class<?> layeredRegionManagerClass = Class.forName("xaero.map.region.LayeredRegionManager");
+
+            // 获取当前 worldId, dimId, mwId
+            cachedCurrentWorldId = (String) mapProcessorClass.getMethod("getCurrentWorldId").invoke(cachedMapProcessor);
+            cachedCurrentDimId = (String) mapProcessorClass.getMethod("getCurrentDimId").invoke(cachedMapProcessor);
+            cachedCurrentMWId = (String) mapProcessorClass.getMethod("getCurrentMWId").invoke(cachedMapProcessor);
+
+            // 获取 globalVersion
+            Class<?> worldMapClass = Class.forName("xaero.map.WorldMap");
+            Object configs = worldMapClass.getMethod("getConfigs").invoke(null);
+            Class<?> configsClass = Class.forName("xaero.map.WorldMap$Configs");
+            Object clientConfigManager = configsClass.getMethod("getClientConfigManager").invoke(configs);
+            Class<?> clientConfigManagerClass = Class.forName("xaero.lib.client.config.ClientConfigManager");
+            Object primaryConfigManager = clientConfigManagerClass.getMethod("getPrimaryConfigManager").invoke(clientConfigManager);
+            Class<?> singleConfigManagerClass = Class.forName("xaero.lib.common.config.single.SingleConfigManager");
+
+            Class<?> worldMapPrimaryOptionsClass = Class.forName("xaero.map.config.primary.option.WorldMapPrimaryClientConfigOptions");
+            java.lang.reflect.Field globalVersionField = worldMapPrimaryOptionsClass.getField("GLOBAL_VERSION");
+            Object globalVersionOption = globalVersionField.get(null);
+            Method getEffective = singleConfigManagerClass.getMethod("getEffective", Class.forName("xaero.lib.common.config.option.ConfigOption"));
+            cachedGlobalVersion = (Integer) getEffective.invoke(primaryConfigManager, globalVersionOption);
+
+            // 获取地表层 MapLayer
+            Method getLayer = layeredRegionManagerClass.getMethod("getLayer", int.class);
+            cachedSurfaceMapLayer = getLayer.invoke(layeredRegionManager, Integer.MAX_VALUE);
+
+            // 缓存常用反射方法和字段
+            cachedGetLeafMapRegion = mapProcessorClass.getMethod("getLeafMapRegion", int.class, int.class, int.class, boolean.class);
+            cachedRequestLoad = mapSaveLoadClass.getMethod("requestLoad", Class.forName("xaero.map.region.MapRegion"), String.class, boolean.class);
+
+            Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
+            cachedLoadStateField = mapRegionClass.getDeclaredField("loadState");
+            cachedLoadStateField.setAccessible(true);
+            cachedCancelRefresh = mapRegionClass.getMethod("cancelRefresh", mapProcessorClass);
+
+            Class<?> mapLayerClass = Class.forName("xaero.map.region.MapLayer");
+            cachedAddRegionDetection = mapLayerClass.getMethod("addRegionDetection", Class.forName("xaero.map.file.RegionDetection"));
+
+            // RegionDetection 构造函数
+            Class<?> regionDetectionClass = Class.forName("xaero.map.file.RegionDetection");
+            cachedRegionDetectionConstructor = regionDetectionClass.getConstructor(
+                String.class, String.class, String.class, int.class, int.class,
+                java.io.File.class, int.class, boolean.class
+            );
+
+            reflectionInitialized = true;
+            LOGGER.info("反射 API 缓存已初始化: worldId={}, dimId={}, mwId={}, globalVersion={}",
+                cachedCurrentWorldId, cachedCurrentDimId, cachedCurrentMWId, cachedGlobalVersion);
+
+        } catch (Exception e) {
+            LOGGER.error("初始化反射缓存失败", e);
+        }
+    }
+
+    /**
+     * 立即加载单个区域（视距内区域边接收边加载）。
+     * 使用缓存的反射 API，避免重复查找开销。
+     *
+     * @param coord 区域坐标
+     */
+    private static void triggerSingleRegionLoad(XaeroMapIntegrator.RegionCoord coord) {
+        if (!reflectionInitialized || cachedMapProcessor == null) {
+            LOGGER.warn("反射缓存未初始化，无法加载区域 ({}, {})", coord.x(), coord.z());
+            return;
+        }
+
+        try {
+            // 获取或创建 MapRegion
+            Object mapRegion = cachedGetLeafMapRegion.invoke(cachedMapProcessor,
+                Integer.MAX_VALUE, coord.x(), coord.z(), true);
+            if (mapRegion == null) {
+                LOGGER.warn("无法创建 MapRegion ({}, {})", coord.x(), coord.z());
+                return;
+            }
+
+            // 清除 refresh 状态
+            cachedCancelRefresh.invoke(mapRegion, cachedMapProcessor);
+
+            // 设置 loadState = 4（需要重载）
+            cachedLoadStateField.setByte(mapRegion, (byte) 4);
+
+            // 触发加载（优先）
+            cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync streaming", true);
+
+            LOGGER.debug("区域 ({}, {}) 已立即触发加载", coord.x(), coord.z());
+
+        } catch (Exception e) {
+            LOGGER.warn("立即加载区域 ({}, {}) 失败: {}", coord.x(), coord.z(), e.getMessage());
+        }
+    }
+
+    /**
+     * 批量注册视距外区域的 RegionDetection。
+     * 在同步完成时调用，让这些区域可以被 GuiMap 自动发现。
+     */
+    private static void registerPendingRegionDetections() {
+        if (!reflectionInitialized || cachedSurfaceMapLayer == null) {
+            LOGGER.warn("反射缓存未初始化，无法批量注册 RegionDetection");
+            return;
+        }
+
+        if (pendingOutsideViewRegions.isEmpty()) {
+            LOGGER.info("无需注册视距外区域 RegionDetection");
+            return;
+        }
+
+        Path mwDir = lastMwDir != null ? lastMwDir : XaeroMapIntegrator.getCurrentMapDirectory();
+        int registeredCount = 0;
+
+        for (XaeroMapIntegrator.RegionCoord coord : pendingOutsideViewRegions) {
+            if (!coord.isSurfaceLayer()) continue;
+
+            try {
+                String regionFileName = coord.x() + "_" + coord.z() + ".zip";
+                java.io.File regionFile = mwDir != null
+                    ? mwDir.resolve(regionFileName).toFile()
+                    : new java.io.File(regionFileName);
+
+                Object detection = cachedRegionDetectionConstructor.newInstance(
+                    cachedCurrentWorldId, cachedCurrentDimId, cachedCurrentMWId,
+                    coord.x(), coord.z(),
+                    regionFile, cachedGlobalVersion, true
+                );
+
+                cachedAddRegionDetection.invoke(cachedSurfaceMapLayer, detection);
+                registeredCount++;
+
+            } catch (Exception e) {
+                LOGGER.warn("注册 RegionDetection 失败: ({}, {}) - {}", coord.x(), coord.z(), e.getMessage());
+            }
+        }
+
+        LOGGER.info("批量注册 {} 个视距外区域 RegionDetection 完成", registeredCount);
+    }
+
+    /**
+     * 清除指定区域的缓存文件。
+     *
+     * @param regions 需要清除缓存的区域集合
+     */
+    private static void clearCacheForRegions(Set<XaeroMapIntegrator.RegionCoord> regions) {
+        if (regions.isEmpty() || lastMwDir == null) return;
+
+        List<Path> cacheDirs = findCacheDirectories(lastMwDir);
+        int cleared = 0;
+
+        for (XaeroMapIntegrator.RegionCoord region : regions) {
+            String cacheFileName = region.x() + "_" + region.z() + ".xwmc";
+            for (Path cacheDir : cacheDirs) {
+                Path cacheFile = cacheDir.resolve(cacheFileName);
+                if (cacheFile.toFile().exists()) {
+                    try {
+                        java.nio.file.Files.deleteIfExists(cacheFile);
+                        cleared++;
+                    } catch (Exception e) {
+                        LOGGER.debug("删除缓存失败: {}", cacheFile);
+                    }
+                    break;
+                }
+            }
+        }
+
+        LOGGER.debug("清除 {} 个缓存文件", cleared);
+    }
+
+    /**
+     * 清理同步状态（非反射缓存）。
+     */
+    private static void clearSyncState() {
+        updatedRegionCoords.clear();
+        pendingOutsideViewRegions.clear();
+        loadedViewRegions.clear();
+        lastMwDir = null;
+        syncStartTime = 0;
+    }
+
+    /**
+     * 清理反射 API 缓存。
+     */
+    private static void clearReflectionCache() {
+        reflectionInitialized = false;
+        cachedMapProcessor = null;
+        cachedMapSaveLoad = null;
+        cachedSurfaceMapLayer = null;
+        cachedSession = null;
+        cachedCurrentWorldId = null;
+        cachedCurrentDimId = null;
+        cachedCurrentMWId = null;
+        cachedGlobalVersion = null;
+        cachedGetLeafMapRegion = null;
+        cachedRequestLoad = null;
+        cachedLoadStateField = null;
+        cachedCancelRefresh = null;
+        cachedAddRegionDetection = null;
+        cachedRegionDetectionConstructor = null;
+    }
+
+    /**
+     * 构建时间戳缓存的服务器格式相对路径。
+     *
+     * @param chunk 区块数据
+     * @return 相对路径字符串
+     */
+    private static String buildRelativePathForCache(ChunkMapData chunk) {
+        String xaeroDim = chunk.dimension;
+        if (chunk.caveLayer == Integer.MAX_VALUE) {
+            return xaeroDim + "/" + chunk.regionX + "_" + chunk.regionZ;
+        } else {
+            return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
+        }
+    }
+
+    /**
+     * 计算数据的 CRC32 哈希值。
+     *
+     * @param data 数据字节数组
+     * @return CRC32 哈希值（8位十六进制字符串）
+     */
+    private static String computeHash(byte[] data) {
+        java.util.zip.CRC32 crc32 = new java.util.zip.CRC32();
+        crc32.update(data);
+        return String.format("%08x", crc32.getValue());
     }
 }
