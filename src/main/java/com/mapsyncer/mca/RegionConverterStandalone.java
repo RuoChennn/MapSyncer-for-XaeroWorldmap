@@ -360,6 +360,12 @@ public class RegionConverterStandalone {
                 List<OverlayData> overlayList = new ArrayList<>();
                 byte surfaceLight = 0;
 
+                // 洞穴模式状态追踪（参考 Xaero WorldDataReader.java:346-351, 571-596）
+                // underair: 是否已进入洞穴内部的空气区域
+                // 全洞穴模式（caveStart == Integer.MIN_VALUE）初始化为 true，表示从底部开始扫描
+                // 普通洞穴模式初始化为 false，需要等待进入空气区域后才开始记录方块
+                boolean underair = isCaveMode && caveStart == Integer.MIN_VALUE;
+
                 // 从最高 section 向下扫描
                 // 参考 Xaero WorldDataReader: 按 sectionY 从高到低排序
                 int sectionIndex = 0;  // 用于追踪当前 section 位置
@@ -404,7 +410,19 @@ public class RegionConverterStandalone {
                     // 单方块 palette section - 需要逐层扫描确定实际高度
                     if (section.blockPalette().size() == 1 && section.blockData() == null) {
                         ChunkSectionParser.BlockState singleState = section.blockPalette().get(0);
-                        if (singleState.isAir()) continue;
+
+                        // 洞穴模式：整个 section 都是空气时，标记已进入洞穴内部
+                        if (singleState.isAir()) {
+                            if (isCaveMode) {
+                                underair = true;
+                            }
+                            continue;
+                        }
+
+                        // 洞穴模式：还没进入洞穴内部，跳过此 section
+                        if (isCaveMode && !underair) {
+                            continue;
+                        }
 
                         // 从该 section 的最高层向下扫描
                         int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
@@ -486,7 +504,19 @@ public class RegionConverterStandalone {
                         if (worldY < chunkBottomY) break;
 
                         ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
-                        if (state.isAir()) continue;
+
+                        // 洞穴模式核心逻辑：必须先进入空气才能记录方块（参考 Xaero WorldDataReader.java:571-596）
+                        if (state.isAir()) {
+                            if (isCaveMode) {
+                                underair = true;  // 进入洞穴内部空气区域
+                            }
+                            continue;
+                        }
+
+                        // 洞穴模式：还没进入洞穴内部空气区域，跳过此方块
+                        if (isCaveMode && !underair) {
+                            continue;
+                        }
 
                         // Step 1: 检查含水方块（方块本身作为表面 + 同层水overlay）
                         // 含水方块需要添加水 overlay 来表示水覆盖效果
