@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * 服务端同步处理器 - 处理客户端请求的地图数据同步
@@ -329,6 +330,7 @@ public class ServerSyncHandler {
             });
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
+            syncThreads.remove(playerId);
             return;
         }
 
@@ -343,7 +345,7 @@ public class ServerSyncHandler {
         // Determine which dimensions the client is requesting (based on their metadata keys)
         Set<String> requestedDimensions = new java.util.HashSet<>();
         for (String key : clientMeta.keySet()) {
-            LOGGER.info("Client meta key: {}", key);
+            LOGGER.debug("Client meta key: {}", key);
             String[] parts = key.split("[/\\\\]");
             if (parts.length > 1) {
                 String dim = parts[0];
@@ -401,9 +403,8 @@ public class ServerSyncHandler {
         // 流式处理：只收集路径信息，不读取数据
         List<RegionSyncInfo> regionsToSync = new ArrayList<>();
 
-        try {
-            Files.walk(cacheDir)
-                    .filter(p -> p.toString().endsWith(".zip"))
+        try (Stream<Path> stream = Files.walk(cacheDir)) {
+            stream.filter(p -> p.toString().endsWith(".zip"))
                     .forEach(zipPath -> {
                         String relativePath = cacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
@@ -660,6 +661,7 @@ public class ServerSyncHandler {
     public static void cleanup() {
         syncingPlayers.clear();
         playerSyncDimensions.clear();
+        syncThreads.clear();
         LOGGER.info("ServerSyncHandler tracking data cleared");
     }
 
