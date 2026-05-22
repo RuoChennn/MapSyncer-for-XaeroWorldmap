@@ -130,15 +130,25 @@ public class SyncProgressTracker {
      * 显示完成消息，包含总区域数和耗时。
      */
     public static void complete() {
+        completeWithCount(total);
+    }
+
+    /**
+     * 标记同步完成，使用指定的区域数量。
+     * 用于在收到最终响应时显示实际接收的区域数量。
+     *
+     * @param count 实际接收的区域数量
+     */
+    public static void completeWithCount(int count) {
         tracking = false;
-        status = Component.translatable("mapsyncer.sync.completed", total, getElapsedSeconds()).getString();
+        status = Component.translatable("mapsyncer.sync.completed", count, getElapsedSeconds()).getString();
         stopTimeoutChecker();
 
         long elapsed = getElapsedSeconds();
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
-            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.completed", total, elapsed), false);
+            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed), false);
         }
     }
 

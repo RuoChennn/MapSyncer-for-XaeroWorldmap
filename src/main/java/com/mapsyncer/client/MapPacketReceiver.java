@@ -274,7 +274,9 @@ public class MapPacketReceiver {
                 // 只有实际收到数据时才记录和显示缓存清除消息
                 if (!updatedRegionCoords.isEmpty()) {
                     XaeroMapIntegrator.recordUpdatedRegionCoords(updatedRegionCoords);
-                    SyncProgressTracker.complete();
+                    // 使用实际接收的区域数量显示完成消息，而非依赖进度追踪器的 total
+                    int receivedCount = updatedRegionCoords.size();
+                    SyncProgressTracker.completeWithCount(receivedCount);
                     triggerXaeroReloadAndResume();
                     // 标记同步完成
                     if (tsCache != null) {
