@@ -95,6 +95,12 @@ public class MapPacketReceiver {
     /** 反射 API 是否已初始化 */
     private static volatile boolean reflectionInitialized = false;
 
+    /** 视距外区域分批注册阈值（每累积 N 个区域触发一次注册） */
+    private static final int OUTSIDE_VIEW_BATCH_THRESHOLD = 10;
+
+    /** 已注册的视距外区域计数器（用于分批注册） */
+    private static volatile int outsideViewRegisteredCount = 0;
+
     /**
      * 检查当前同步是否陈旧（运行时间过长）。
      * 陈旧的同步可能表示连接中断，需要清除数据。
@@ -309,9 +315,16 @@ public class MapPacketReceiver {
                     loadedViewRegions.add(coord);
                     LOGGER.debug("视距内区域 ({}, {}) 已立即加载", coord.x(), coord.z());
                 } else if (isSurfaceLayer && !inViewDistance) {
-                    // 视距外：累积待注册
+                    // 视距外：累积待注册，达到阈值时触发分批注册
                     pendingOutsideViewRegions.add(coord);
-                    LOGGER.debug("视距外区域 ({}, {}) 已累积待注册", coord.x(), coord.z());
+
+                    // 分批注册：每累积 N 个区域触发一次
+                    if (pendingOutsideViewRegions.size() >= OUTSIDE_VIEW_BATCH_THRESHOLD) {
+                        int registered = registerBatchRegionDetections();
+                        outsideViewRegisteredCount += registered;
+                        LOGGER.debug("视距外区域分批注册: 本批 {} 个, 累计已注册 {} 个",
+                            registered, outsideViewRegisteredCount);
+                    }
                 }
                 // 洞穴层暂不处理（累积到 updatedRegionCoords）
 
@@ -332,19 +345,24 @@ public class MapPacketReceiver {
             if (payload.isComplete()) {
                 int totalReceived = updatedRegionCoords.size();
                 int viewLoaded = loadedViewRegions.size();
-                int outsideRegistered = pendingOutsideViewRegions.size();
+                int remainingOutside = pendingOutsideViewRegions.size();
 
-                LOGGER.info("同步完成: 总计 {} 个区域, 视距内已加载 {} 个, 视距外待注册 {} 个",
-                    totalReceived, viewLoaded, outsideRegistered);
+                LOGGER.info("同步完成: 总计 {} 个区域, 视距内已加载 {} 个, 视距外已注册 {} 个/剩余 {} 个",
+                    totalReceived, viewLoaded, outsideViewRegisteredCount, remainingOutside);
 
                 if (!updatedRegionCoords.isEmpty()) {
                     XaeroMapIntegrator.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.completeWithCount(totalReceived);
 
-                    // 批量注册视距外区域
-                    registerPendingRegionDetections();
+                    // 注册剩余的视距外区域
+                    if (!pendingOutsideViewRegions.isEmpty()) {
+                        int finalRegistered = registerBatchRegionDetections();
+                        outsideViewRegisteredCount += finalRegistered;
+                        LOGGER.info("最终注册 {} 个视距外区域, 总计 {} 个",
+                            finalRegistered, outsideViewRegisteredCount);
+                    }
 
-                    // 清除缓存文件（视距内已加载，视距外已注册）
+                    // 清除缓存文件（视距内已加载）
                     clearCacheForRegions(loadedViewRegions);
 
                     resumeChunkUpdates();
@@ -872,24 +890,30 @@ public class MapPacketReceiver {
     }
 
     /**
-     * 批量注册视距外区域的 RegionDetection。
-     * 在同步完成时调用，让这些区域可以被 GuiMap 自动发现。
+     * 分批注册视距外区域的 RegionDetection。
+     * 注册当前累积的区域并清空集合，返回注册数量。
+     * 可在同步过程中多次调用（分批注册），也可在完成时调用（注册剩余）。
+     *
+     * @return 本次注册的区域数量
      */
-    private static void registerPendingRegionDetections() {
+    private static int registerBatchRegionDetections() {
         if (!reflectionInitialized || cachedSurfaceMapLayer == null) {
-            LOGGER.warn("反射缓存未初始化，无法批量注册 RegionDetection");
-            return;
+            LOGGER.warn("反射缓存未初始化，无法注册 RegionDetection");
+            return 0;
         }
 
         if (pendingOutsideViewRegions.isEmpty()) {
-            LOGGER.info("无需注册视距外区域 RegionDetection");
-            return;
+            return 0;
         }
 
         Path mwDir = lastMwDir != null ? lastMwDir : XaeroMapIntegrator.getCurrentMapDirectory();
         int registeredCount = 0;
 
-        for (XaeroMapIntegrator.RegionCoord coord : pendingOutsideViewRegions) {
+        // 复制当前集合，避免在遍历过程中被修改
+        Set<XaeroMapIntegrator.RegionCoord> toRegister = new HashSet<>(pendingOutsideViewRegions);
+        pendingOutsideViewRegions.clear();
+
+        for (XaeroMapIntegrator.RegionCoord coord : toRegister) {
             if (!coord.isSurfaceLayer()) continue;
 
             try {
@@ -912,7 +936,7 @@ public class MapPacketReceiver {
             }
         }
 
-        LOGGER.info("批量注册 {} 个视距外区域 RegionDetection 完成", registeredCount);
+        return registeredCount;
     }
 
     /**
@@ -952,6 +976,7 @@ public class MapPacketReceiver {
         updatedRegionCoords.clear();
         pendingOutsideViewRegions.clear();
         loadedViewRegions.clear();
+        outsideViewRegisteredCount = 0;
         lastMwDir = null;
         syncStartTime = 0;
     }
