@@ -55,6 +55,16 @@ public class ClientTimestampCache {
     /** 上次使用的服务器目录 */
     private static volatile Path lastBaseDir = null;
 
+    /**
+     * 获取上次使用的服务器目录。
+     * 用于断开连接时标记同步中断，不依赖实时获取 connection。
+     *
+     * @return 上次使用的服务器目录，如果不存在返回 null
+     */
+    public static Path getLastBaseDir() {
+        return lastBaseDir;
+    }
+
     /** 缓存文件路径 */
     private final Path cacheFile;
 

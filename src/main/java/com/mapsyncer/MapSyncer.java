@@ -108,7 +108,9 @@ public class MapSyncer {
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
             // 如果同步正在进行，标记为中断（断点续传可用）
             if (MapPacketReceiver.isSyncInProgress()) {
-                Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+                // 使用 ClientTimestampCache.lastBaseDir，不依赖 getCurrentServerDirectory()
+                // 因为 LoggingOut 事件触发时 connection 可能已断开
+                Path serverDir = ClientTimestampCache.getLastBaseDir();
                 if (serverDir != null && serverDir.toFile().exists()) {
                     ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
                     if (tsCache != null) {
