@@ -133,7 +133,7 @@ public class ClientJoinHandler {
         Component ignoreButton = Component.literal("[忽略]")
                 .withStyle(Style.EMPTY
                         .withColor(0xFFAA00) // 橙色
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/mapsyncer sync clearstate"))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/mapsyncer clearstate"))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("清除同步状态标记"))));
 

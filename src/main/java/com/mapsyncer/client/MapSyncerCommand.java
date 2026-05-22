@@ -77,11 +77,13 @@ public class MapSyncerCommand {
                                 .executes(MapSyncerCommand::executeSyncCurrentDim)
                                 .then(net.minecraft.commands.Commands.literal("all")
                                         .executes(MapSyncerCommand::executeSyncAll))
-                                .then(net.minecraft.commands.Commands.literal("clearstate")
-                                        .executes(MapSyncerCommand::clearSyncState))
                                 .then(net.minecraft.commands.Commands.argument("dimension", StringArgumentType.greedyString())
                                         .suggests(MapSyncerCommand::suggestDimensions)
                                         .executes(MapSyncerCommand::executeSyncDimension)))
+                        // clearstate 作为顶层命令，不显示在命令建议中
+                        .then(net.minecraft.commands.Commands.literal("clearstate")
+                                .requires(source -> false) // 隐藏命令，不显示在联想中
+                                .executes(MapSyncerCommand::clearSyncState))
         );
     }
 
