@@ -43,6 +43,15 @@ public class MapPacketReceiver {
     /** 同步是否正在进行中，用于协调区块更新的禁用 */
     private static volatile boolean syncInProgress = false;
 
+    /**
+     * 检查同步是否正在进行中。
+     *
+     * @return true 表示同步正在进行
+     */
+    public static boolean isSyncInProgress() {
+        return syncInProgress;
+    }
+
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
     private static volatile boolean serverInstalled = false;
 

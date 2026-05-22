@@ -1,6 +1,8 @@
 package com.mapsyncer;
 
+import com.mapsyncer.client.ClientTimestampCache;
 import com.mapsyncer.client.MapPacketReceiver;
+import com.mapsyncer.client.XaeroMapIntegrator;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
 import com.mapsyncer.network.PacketHandler;
@@ -24,6 +26,8 @@ import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.file.Path;
 
 /**
  * MapSyncer模组的主类。
@@ -102,6 +106,17 @@ public class MapSyncer {
          */
         @SubscribeEvent
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
+            // 如果同步正在进行，标记为中断（断点续传可用）
+            if (MapPacketReceiver.isSyncInProgress()) {
+                Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+                if (serverDir != null && serverDir.toFile().exists()) {
+                    ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+                    if (tsCache != null) {
+                        tsCache.markSyncInterrupted();
+                        LOGGER.info("Sync was in progress, marked as interrupted for resume");
+                    }
+                }
+            }
             MapPacketReceiver.resetServerStatus();
             MapPacketReceiver.clearSyncData();
             LOGGER.info("Client disconnected from server, reset server status");
