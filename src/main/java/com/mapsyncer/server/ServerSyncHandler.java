@@ -80,6 +80,9 @@ public class ServerSyncHandler {
     /** 玩家同步开始时的维度（用于维度切换时中断同步） */
     private static final Map<UUID, ResourceKey<Level>> playerSyncDimensions = new ConcurrentHashMap<>();
 
+    /** 玩家同步线程引用（用于断线时立即中断线程） */
+    private static final Map<UUID, Thread> syncThreads = new ConcurrentHashMap<>();
+
     /**
      * 轻量级的 region 同步信息。
      * 只存储路径和元数据，不包含实际数据，节省内存。
@@ -145,7 +148,13 @@ public class ServerSyncHandler {
     public static void onPlayerDisconnect(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
-        LOGGER.info("Player {} disconnected, sync interrupted. Resume via hash comparison on reconnect.", playerId);
+
+        // 立即中断同步线程
+        Thread syncThread = syncThreads.remove(playerId);
+        if (syncThread != null && syncThread.isAlive()) {
+            syncThread.interrupt();
+            LOGGER.info("Player {} disconnected, sync thread interrupted", playerId);
+        }
     }
 
     /**
@@ -283,6 +292,7 @@ public class ServerSyncHandler {
         Thread syncThread = new Thread(() -> processSyncAsync(serverPlayer, playerId, clientMeta, startDimension),
                 "mapsyncer-sync-" + playerId);
         syncThread.setDaemon(true);
+        syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
         syncThread.start();
         LOGGER.info("Started async sync thread for player {}", serverPlayer.getName().getString());
     }
@@ -383,6 +393,7 @@ public class ServerSyncHandler {
             });
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
+            syncThreads.remove(playerId);
             return;
         }
 
@@ -483,6 +494,7 @@ public class ServerSyncHandler {
             });
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
+            syncThreads.remove(playerId);
             return;
         }
 
@@ -498,6 +510,7 @@ public class ServerSyncHandler {
         for (RegionSyncInfo info : regionsToSync) {
             if (!isPlayerStillValid(serverPlayer)) {
                 LOGGER.info("Player {} disconnected during sync", playerId);
+                syncThreads.remove(playerId);
                 return;
             }
 
@@ -515,6 +528,7 @@ public class ServerSyncHandler {
                 // Apply speed limit with interruptible check
                 if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
                     LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
+                    syncThreads.remove(playerId);
                     return;
                 }
 
@@ -543,6 +557,7 @@ public class ServerSyncHandler {
 
         if (!isPlayerStillValid(serverPlayer)) {
             LOGGER.info("Player {} disconnected before final batch", playerId);
+            syncThreads.remove(playerId);
             return;
         }
 
@@ -551,6 +566,7 @@ public class ServerSyncHandler {
             // Apply speed limit with interruptible check
             if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
                 LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
+                syncThreads.remove(playerId);
                 return;
             }
 
@@ -578,6 +594,7 @@ public class ServerSyncHandler {
 
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
+        syncThreads.remove(playerId);
     }
 
     /**
