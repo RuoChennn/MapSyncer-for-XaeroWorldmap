@@ -844,7 +844,12 @@ public class MapPacketReceiver {
             );
 
             reflectionInitialized = true;
-            LOGGER.info("反射 API 缓存已初始化: worldId={}, dimId={}, mwId={}, globalVersion={}",
+
+            // 关键：设置 regionDetectionComplete = true，否则 getLeafMapRegion 会返回 null
+            Method setRegionDetectionComplete = mapSaveLoadClass.getMethod("setRegionDetectionComplete", boolean.class);
+            setRegionDetectionComplete.invoke(cachedMapSaveLoad, true);
+
+            LOGGER.info("反射 API 缓存已初始化: worldId={}, dimId={}, mwId={}, globalVersion={}, regionDetectionComplete=true",
                 cachedCurrentWorldId, cachedCurrentDimId, cachedCurrentMWId, cachedGlobalVersion);
 
         } catch (Exception e) {
