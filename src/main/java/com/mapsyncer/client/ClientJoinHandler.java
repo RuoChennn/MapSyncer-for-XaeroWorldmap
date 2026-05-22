@@ -114,12 +114,6 @@ public class ClientJoinHandler {
     private static void showResumePrompt(Minecraft mc, String command) {
         if (mc.player == null) return;
 
-        // 创建提示信息
-        Component header = ChatUtils.prefix().append(
-                ChatUtils.header("mapsyncer.sync.resume_header"));
-
-        Component message = ChatUtils.message("mapsyncer.sync.resume_prompt", "上次同步未完成");
-
         // 创建可点击的指令按钮
         Component clickButton = Component.literal("[点击继续同步]")
                 .withStyle(Style.EMPTY
@@ -137,13 +131,14 @@ public class ClientJoinHandler {
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("清除同步状态标记"))));
 
-        // 发送消息
-        mc.player.displayClientMessage(header, false);
-        mc.player.displayClientMessage(message, false);
-        mc.player.displayClientMessage(Component.literal("  ")
+        // 一行显示：上次同步未完成,[点击继续同步]或[忽略]
+        Component message = ChatUtils.prefix()
+                .append(Component.literal("上次同步未完成,"))
                 .append(clickButton)
-                .append(Component.literal("  "))
-                .append(ignoreButton), false);
+                .append(Component.literal("或"))
+                .append(ignoreButton);
+
+        mc.player.displayClientMessage(message, false);
     }
 
     /**
