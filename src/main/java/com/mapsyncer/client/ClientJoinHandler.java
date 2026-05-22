@@ -64,6 +64,8 @@ public class ClientJoinHandler {
             return;
         }
 
+        // 重置实例以重新加载缓存文件
+        ClientTimestampCache.resetInstance();
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
         if (tsCache == null) return;
 
