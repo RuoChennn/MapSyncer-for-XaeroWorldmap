@@ -26,7 +26,7 @@ import java.util.stream.Stream;
  * <ul>
  *   <li>扫描客户端地图目录，计算所有区域文件的CRC32哈希</li>
  *   <li>使用缓存的时间戳避免文件修改时间变化导致的误同步</li>
- *   <li>使用并行处理提高大量区域文件的哈希计算效率</li>
+ *   <li>使用共享 ForkJoinPool 提高大量区域文件的哈希计算效率</li>
  * </ul>
  *
  * <p>同步逻辑：</p>
@@ -38,6 +38,9 @@ import java.util.stream.Stream;
 public class ClientHashManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientHashManager.class);
+
+    /** 共享的 ForkJoinPool，限制 2 个线程避免阻塞游戏 */
+    private static final ForkJoinPool SHARED_POOL = new ForkJoinPool(2);
 
     /**
      * 客户端元数据记录：时间戳(秒) + CRC32哈希。
@@ -99,10 +102,9 @@ public class ClientHashManager {
 
         LOGGER.info("Computing hashes for {} region files in {} (parallel=2)", zipFiles.size(), mapDir);
 
-        // Process with limited parallelism (2 threads) to avoid blocking game
-        ForkJoinPool limitedPool = new ForkJoinPool(2);
+        // 使用共享的 ForkJoinPool（限制2个线程）避免阻塞游戏和重复创建开销
         try {
-            limitedPool.submit(() ->
+            SHARED_POOL.submit(() ->
                     zipFiles.parallelStream()
                             .forEach(zipPath -> {
                                 try {
@@ -142,8 +144,6 @@ public class ClientHashManager {
             ).get();  // Wait for completion
         } catch (Exception e) {
             LOGGER.error("Failed to compute hashes in parallel", e);
-        } finally {
-            limitedPool.shutdown();
         }
 
         LOGGER.info("Found {} regions with metadata", metaMap.size());
@@ -364,5 +364,16 @@ public class ClientHashManager {
         // 无法转换，返回原始值（可能导致同步问题，但会记录日志）
         LOGGER.warn("Could not convert dirName '{}' to correct Xaero format, sync may fail", dirName);
         return dirName;
+    }
+
+    /**
+     * 关闭共享的 ForkJoinPool。
+     * 在客户端离开服务器或停止时调用，释放资源。
+     */
+    public static void shutdown() {
+        if (!SHARED_POOL.isShutdown()) {
+            SHARED_POOL.shutdown();
+            LOGGER.debug("ClientHashManager shared ForkJoinPool shutdown");
+        }
     }
 }

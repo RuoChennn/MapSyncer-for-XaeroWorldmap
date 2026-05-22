@@ -1,0 +1,153 @@
+package com.mapsyncer.client;
+
+import com.mapsyncer.util.ChatUtils;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.nio.file.Path;
+
+import java.nio.file.Path;
+
+/**
+ * 客户端玩家加入事件处理器 - 检测中断的同步并提示断点续传
+ *
+ * 功能：
+ * - 玩家加入服务器时检测上次同步是否中断
+ * - 显示可点击的提示信息，让玩家可以继续上次同步
+ */
+@EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+public class ClientJoinHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClientJoinHandler.class);
+
+    /** 陈旧同步超时时间（5分钟） */
+    private static final long STALE_SYNC_TIMEOUT_MS = 5 * 60 * 1000;
+
+    /**
+     * 玩家登录事件处理
+     *
+     * 检测上次同步是否中断，如果可以断点续传则显示提示。
+     *
+     * @param event 玩家登录事件
+     */
+    @SubscribeEvent
+    public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+
+        // 延迟检测，等待服务器目录初始化
+        mc.execute(() -> {
+            try {
+                Thread.sleep(1000); // 等待1秒让 Xaero 目录初始化
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            checkInterruptedSync(mc);
+        });
+    }
+
+    /**
+     * 检测上次同步是否中断
+     *
+     * @param mc Minecraft 客户端实例
+     */
+    private static void checkInterruptedSync(Minecraft mc) {
+        Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+        if (serverDir == null || !serverDir.toFile().exists()) {
+            LOGGER.debug("Server directory not found, skip sync state check");
+            return;
+        }
+
+        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+        if (tsCache == null) return;
+
+        String syncState = tsCache.getSyncState();
+        String syncCommand = tsCache.getSyncCommand();
+
+        // 检查是否可以断点续传
+        if (tsCache.canResume(STALE_SYNC_TIMEOUT_MS)) {
+            LOGGER.info("Found interrupted sync: state={}, command={}", syncState, syncCommand);
+
+            if (mc.player != null && !syncCommand.isEmpty()) {
+                // 显示可点击的提示信息
+                showResumePrompt(mc, syncCommand, syncState);
+            }
+        }
+    }
+
+    /**
+     * 显示断点续传提示
+     *
+     * 使用可点击文本让玩家可以一键继续同步。
+     *
+     * @param mc Minecraft 客户端实例
+     * @param command 同步指令
+     * @param state 同步状态
+     */
+    private static void showResumePrompt(Minecraft mc, String command, String state) {
+        if (mc.player == null) return;
+
+        // 创建提示信息
+        Component header = ChatUtils.prefix().append(
+                ChatUtils.header("mapsyncer.sync.resume_header"));
+
+        // 状态描述
+        String stateDesc = ClientTimestampCache.SYNC_STATE_INTERRUPTED.equals(state)
+                ? "上次同步中断"
+                : "上次同步未完成";
+
+        Component message = ChatUtils.message("mapsyncer.sync.resume_prompt", stateDesc);
+
+        // 创建可点击的指令按钮
+        Component clickButton = Component.literal("[点击继续同步]")
+                .withStyle(Style.EMPTY
+                        .withColor(0x55FF55) // 绿色
+                        .withBold(true)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal("点击执行: " + command))));
+
+        // 创建忽略按钮
+        Component ignoreButton = Component.literal("[忽略]")
+                .withStyle(Style.EMPTY
+                        .withColor(0xFFAA00) // 橙色
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/mapsyncer sync clearstate"))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal("清除同步状态标记"))));
+
+        // 发送消息
+        mc.player.displayClientMessage(header, false);
+        mc.player.displayClientMessage(message, false);
+        mc.player.displayClientMessage(Component.literal("  ")
+                .append(clickButton)
+                .append(Component.literal("  "))
+                .append(ignoreButton), false);
+    }
+
+    /**
+     * 清除同步状态（通过命令调用）
+     */
+    public static void clearSyncState() {
+        Minecraft mc = Minecraft.getInstance();
+        Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+        if (serverDir == null || !serverDir.toFile().exists()) return;
+
+        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+        if (tsCache != null) {
+            tsCache.clearSyncState();
+            if (mc.player != null) {
+                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.state_cleared"), false);
+            }
+        }
+    }
+}

@@ -55,6 +55,9 @@ import java.util.concurrent.ConcurrentHashMap;
     /** 有问题的方块集合（MapColor 抛出异常） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();
 
+    /** 缓存最大条目数（防止无界增长） */
+    private static final int MAX_CACHE_SIZE = 5000;
+
     /** 缓存是否需要清除的标志 */
     private static volatile boolean clearCachedColors = false;
 
@@ -224,7 +227,21 @@ import java.util.concurrent.ConcurrentHashMap;
      */
     public static int getBlockColor(BlockState state) {
         String blockName = getKey(state);
+        checkCacheSize();
         return blockColorCache.computeIfAbsent(blockName, name -> computeColor(state, name));
+    }
+
+    /**
+     * 检查缓存大小，超过限制时清理。
+     * 防止服务端长期运行导致无界缓存增长。
+     */
+    private static void checkCacheSize() {
+        if (blockColorCache.size() > MAX_CACHE_SIZE || textureColorCache.size() > MAX_CACHE_SIZE) {
+            LOGGER.debug("Cache size limit reached (block={}, texture={}), clearing caches",
+                    blockColorCache.size(), textureColorCache.size());
+            blockColorCache.clear();
+            textureColorCache.clear();
+        }
     }
 
     /**

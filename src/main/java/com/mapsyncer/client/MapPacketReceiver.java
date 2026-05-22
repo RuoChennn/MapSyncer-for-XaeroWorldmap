@@ -14,7 +14,9 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 地图数据包接收器。
@@ -56,11 +58,8 @@ public class MapPacketReceiver {
     /** 陈旧同步超时时间（10分钟） */
     private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
 
-    /** 同步期间接收的所有区块数据，用于选择性重置。
-     * 重要：在同步开始、完成和陈旧检测时清空，防止内存泄漏。
-     * 每个区块约 10-50KB，必须确保清理。
-     */
-    private static volatile List<ChunkMapData> allReceivedChunks = new ArrayList<>();
+    /** 同步期间更新的区域坐标集合（仅存储坐标，不存储数据，节省内存） */
+    private static volatile Set<XaeroMapIntegrator.RegionCoord> updatedRegionCoords = new HashSet<>();
 
     /**
      * 检查当前同步是否陈旧（运行时间过长）。
@@ -83,29 +82,28 @@ public class MapPacketReceiver {
         syncInProgress = false;
         lastMwDir = null;
         syncStartTime = 0;
-        if (allReceivedChunks != null) {
-            allReceivedChunks.clear();
-        }
+        clearReceivedChunks();
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
     /**
-     * 获取累积区块的估计内存使用量。
-     * 用于监控潜在的内存问题。
-     *
-     * @return 估计的内存使用量（字节）
+     * 清除累积的区域坐标集合，释放内存。
+     * 在同步完成、中断或服务器停止时调用。
      */
-    public static long getEstimatedMemoryUsage() {
-        if (allReceivedChunks == null || allReceivedChunks.isEmpty()) {
-            return 0;
+    public static void clearReceivedChunks() {
+        if (updatedRegionCoords != null) {
+            updatedRegionCoords.clear();
         }
-        long total = 0;
-        for (ChunkMapData chunk : allReceivedChunks) {
-            if (chunk.data != null) {
-                total += chunk.data.length;
-            }
-        }
-        return total;
+    }
+
+    /**
+     * 获取已接收区域数量。
+     * 用于监控同步进度。
+     *
+     * @return 已接收的区域数量
+     */
+    public static int getReceivedRegionCount() {
+        return updatedRegionCoords != null ? updatedRegionCoords.size() : 0;
     }
 
     /**
@@ -129,8 +127,8 @@ public class MapPacketReceiver {
                     }
                     // 发送请求时暂不暂停区块更新，等收到服务端确认有数据后再暂停
                     syncStartTime = System.currentTimeMillis(); // Track start time
-                    // Clear accumulated chunks for new sync session
-                    allReceivedChunks.clear();
+                    // Clear accumulated region coords for new sync session
+                    updatedRegionCoords.clear();
                 }
         );
 
@@ -209,11 +207,19 @@ public class MapPacketReceiver {
 
             LOGGER.info("Received sync response: status={}, chunks={}, isComplete={}", status, chunks.size(), payload.isComplete());
 
+            // 获取时间戳缓存用于同步状态管理
+            Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+            ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
+                    ? ClientTimestampCache.getInstance(serverDir) : null;
+
             // 根据状态决定处理方式
             if ("no_cache".equals(status) || "dim_not_available".equals(status)) {
                 // 服务端无缓存或维度不存在，不暂停区块更新，直接返回
                 LOGGER.info("Server returned error status: {}, no sync needed", status);
                 clearSyncData();
+                if (tsCache != null) {
+                    tsCache.clearSyncState();
+                }
                 return;
             }
 
@@ -221,6 +227,9 @@ public class MapPacketReceiver {
                 // 地图已是最新，不暂停区块更新
                 LOGGER.info("Map is up-to-date, no sync needed");
                 clearSyncData();
+                if (tsCache != null) {
+                    tsCache.markSyncComplete();
+                }
                 return;
             }
 
@@ -229,6 +238,9 @@ public class MapPacketReceiver {
             if (isSyncStale()) {
                 clearSyncData();
                 LOGGER.warn("Sync was stale, cleared accumulated data");
+                if (tsCache != null) {
+                    tsCache.markSyncInterrupted();
+                }
                 if (Minecraft.getInstance().player != null) {
                     Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
                 }
@@ -242,13 +254,15 @@ public class MapPacketReceiver {
                 LOGGER.info("Starting sync, chunk updates disabled");
             }
 
-            // Accumulate all chunks for tracking (no filtering - write all server data)
-            allReceivedChunks.addAll(chunks);
+            // 只存储区域坐标，不存储完整数据（节省内存）
+            for (ChunkMapData chunk : chunks) {
+                updatedRegionCoords.add(new XaeroMapIntegrator.RegionCoord(chunk.regionX, chunk.regionZ, chunk.caveLayer));
+            }
 
-            // Log memory usage warning if accumulating too much data
-            long memoryUsage = getEstimatedMemoryUsage();
-            if (memoryUsage > 50_000_000) { // 50MB threshold
-                LOGGER.warn("High memory usage during sync: {}MB accumulated", memoryUsage / 1_000_000);
+            // Log region count warning if accumulating too many
+            int regionCount = updatedRegionCoords.size();
+            if (regionCount > 100) {
+                LOGGER.debug("Received {} regions during sync", regionCount);
             }
 
             // Write all map data from server (覆盖客户端数据)
@@ -258,18 +272,25 @@ public class MapPacketReceiver {
 
             if (payload.isComplete()) {
                 // 只有实际收到数据时才记录和显示缓存清除消息
-                if (!allReceivedChunks.isEmpty()) {
-                    XaeroMapIntegrator.recordUpdatedRegions(allReceivedChunks);
+                if (!updatedRegionCoords.isEmpty()) {
+                    XaeroMapIntegrator.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.complete();
                     triggerXaeroReloadAndResume();
+                    // 标记同步完成
+                    if (tsCache != null) {
+                        tsCache.markSyncComplete();
+                    }
                 } else {
                     // 未收到数据（维度不存在或已是最新），直接恢复区块更新
                     resumeChunkUpdates();
                     LOGGER.info("Sync complete with no data received");
+                    if (tsCache != null) {
+                        tsCache.markSyncComplete();
+                    }
                 }
 
-                // Clear accumulated chunks after sync complete
-                allReceivedChunks.clear();
+                // Clear accumulated region coords after sync complete
+                updatedRegionCoords.clear();
                 syncStartTime = 0; // Reset start time
             }
         });

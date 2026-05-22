@@ -8,7 +8,9 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 缓存服务端同步过来的 region 时间戳。
@@ -32,6 +34,21 @@ public class ClientTimestampCache {
     /** 缓存文件名称 */
     private static final String CACHE_FILE_NAME = "sync_timestamps.cache";
 
+    /** 同步状态文件名称 */
+    private static final String SYNC_STATE_FILE_NAME = "sync_state.cache";
+
+    /** 同步状态：无同步进行 */
+    public static final String SYNC_STATE_IDLE = "idle";
+
+    /** 同步状态：同步进行中 */
+    public static final String SYNC_STATE_IN_PROGRESS = "in_progress";
+
+    /** 同步状态：同步完成 */
+    public static final String SYNC_STATE_COMPLETED = "completed";
+
+    /** 同步状态：同步中断（断点续传可用） */
+    public static final String SYNC_STATE_INTERRUPTED = "interrupted";
+
     /** 单例实例 */
     private static volatile ClientTimestampCache instance;
 
@@ -41,8 +58,23 @@ public class ClientTimestampCache {
     /** 缓存文件路径 */
     private final Path cacheFile;
 
+    /** 同步状态文件路径 */
+    private final Path syncStateFile;
+
     /** 缓存数据，键为相对路径（如 "null/0_0"），值为缓存条目 */
     private final Map<String, CacheEntry> cache = new HashMap<>();
+
+    /** 当前同步状态 */
+    private volatile String syncState = SYNC_STATE_IDLE;
+
+    /** 同步开始时间（毫秒） */
+    private volatile long syncStartTime = 0;
+
+    /** 同步涉及的维度列表 */
+    private volatile Set<String> syncDimensions = new HashSet<>();
+
+    /** 同步指令（用于断点续传提示） */
+    private volatile String syncCommand = "";
 
     /**
      * 缓存条目：时间戳(秒) + CRC32哈希。
@@ -80,7 +112,9 @@ public class ClientTimestampCache {
      */
     private ClientTimestampCache(Path baseDir) {
         this.cacheFile = baseDir.resolve(CACHE_FILE_NAME);
+        this.syncStateFile = baseDir.resolve(SYNC_STATE_FILE_NAME);
         load();
+        loadSyncState();
     }
 
     /**
@@ -129,6 +163,171 @@ public class ClientTimestampCache {
         for (Map.Entry<String, TimestampHashEntry> entry : loaded.entrySet()) {
             cache.put(entry.getKey(), new CacheEntry(entry.getValue().timestampSeconds(), entry.getValue().hash()));
         }
+    }
+
+    /**
+     * 从文件加载同步状态。
+     * 用于断点续传检测。
+     */
+    private void loadSyncState() {
+        if (!Files.exists(syncStateFile)) {
+            syncState = SYNC_STATE_IDLE;
+            return;
+        }
+
+        try {
+            java.util.Properties props = new java.util.Properties();
+            try (java.io.InputStream in = Files.newInputStream(syncStateFile)) {
+                props.load(in);
+            }
+
+            syncState = props.getProperty("state", SYNC_STATE_IDLE);
+            syncStartTime = Long.parseLong(props.getProperty("startTime", "0"));
+
+            String dimsStr = props.getProperty("dimensions", "");
+            syncDimensions = new HashSet<>();
+            if (!dimsStr.isEmpty()) {
+                for (String dim : dimsStr.split(",")) {
+                    syncDimensions.add(dim.trim());
+                }
+            }
+
+            syncCommand = props.getProperty("command", "");
+
+            LOGGER.info("Loaded sync state: {}, startTime={}, dimensions={}, command={}", syncState, syncStartTime, syncDimensions, syncCommand);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to load sync state file: {}", e.getMessage());
+            syncState = SYNC_STATE_IDLE;
+        }
+    }
+
+    /**
+     * 保存同步状态到文件。
+     */
+    public void saveSyncState() {
+        try {
+            java.util.Properties props = new java.util.Properties();
+            props.setProperty("state", syncState);
+            props.setProperty("startTime", String.valueOf(syncStartTime));
+            props.setProperty("dimensions", String.join(",", syncDimensions));
+            props.setProperty("command", syncCommand);
+
+            Files.createDirectories(syncStateFile.getParent());
+            try (java.io.OutputStream out = Files.newOutputStream(syncStateFile)) {
+                props.store(out, "Sync state for resume detection\nstate: idle/in_progress/completed/interrupted");
+            }
+
+            LOGGER.debug("Saved sync state: {}", syncState);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to save sync state file: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 标记同步开始。
+     *
+     * @param dimensions 同步涉及的维度集合
+     * @param command 同步指令（用于断点续传提示）
+     */
+    public void markSyncStart(Set<String> dimensions, String command) {
+        syncState = SYNC_STATE_IN_PROGRESS;
+        syncStartTime = System.currentTimeMillis();
+        syncDimensions = new HashSet<>(dimensions);
+        syncCommand = command;
+        saveSyncState();
+        LOGGER.info("Marked sync start for dimensions: {}, command: {}", dimensions, command);
+    }
+
+    /**
+     * 标记同步完成。
+     */
+    public void markSyncComplete() {
+        syncState = SYNC_STATE_COMPLETED;
+        saveSyncState();
+        LOGGER.info("Marked sync complete");
+    }
+
+    /**
+     * 标记同步中断（断点续传可用）。
+     */
+    public void markSyncInterrupted() {
+        syncState = SYNC_STATE_INTERRUPTED;
+        saveSyncState();
+        LOGGER.info("Marked sync interrupted - resume available");
+    }
+
+    /**
+     * 清除同步状态（重置为空闲）。
+     */
+    public void clearSyncState() {
+        syncState = SYNC_STATE_IDLE;
+        syncStartTime = 0;
+        syncDimensions.clear();
+        syncCommand = "";
+        saveSyncState();
+        try {
+            Files.deleteIfExists(syncStateFile);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to delete sync state file: {}", e.getMessage());
+        }
+        LOGGER.info("Cleared sync state");
+    }
+
+    /**
+     * 获取当前同步状态。
+     *
+     * @return 同步状态字符串
+     */
+    public String getSyncState() {
+        return syncState;
+    }
+
+    /**
+     * 获取同步指令。
+     *
+     * @return 同步指令字符串，空字符串表示无指令
+     */
+    public String getSyncCommand() {
+        return syncCommand;
+    }
+
+    /**
+     * 检查是否可以断点续传。
+     * 状态为 INTERRUPTED 或 IN_PROGRESS（陈旧）时可以续传。
+     *
+     * @param staleTimeoutMs 陈旧超时时间（毫秒），超过此时间的进行中同步视为陈旧
+     * @return true 表示可以断点续传
+     */
+    public boolean canResume(long staleTimeoutMs) {
+        if (syncState == SYNC_STATE_INTERRUPTED) {
+            return true;
+        }
+
+        // 进行中的同步如果超过超时时间，视为陈旧可续传
+        if (syncState == SYNC_STATE_IN_PROGRESS && syncStartTime > 0) {
+            long elapsed = System.currentTimeMillis() - syncStartTime;
+            return elapsed > staleTimeoutMs;
+        }
+
+        return false;
+    }
+
+    /**
+     * 获取同步涉及的维度集合。
+     *
+     * @return 维度集合副本
+     */
+    public Set<String> getSyncDimensions() {
+        return new HashSet<>(syncDimensions);
+    }
+
+    /**
+     * 获取同步开始时间。
+     *
+     * @return 同步开始时间（毫秒），0表示无进行中同步
+     */
+    public long getSyncStartTime() {
+        return syncStartTime;
     }
 
     /**

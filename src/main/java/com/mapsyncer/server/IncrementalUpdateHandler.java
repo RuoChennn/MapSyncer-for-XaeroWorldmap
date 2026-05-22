@@ -193,6 +193,12 @@ public class IncrementalUpdateHandler {
         } catch (Exception e) {
             LOGGER.error("Error during scheduled incremental update", e);
         }
+
+        // 检查是否有玩家在线，无人则停止处理器节省资源
+        if (server.getPlayerList().getPlayerCount() == 0) {
+            LOGGER.info("No players online after incremental update, stopping handler to save resources");
+            stop();
+        }
     }
 
     /**

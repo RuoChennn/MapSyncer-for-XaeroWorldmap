@@ -20,10 +20,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * 转换协调器 - 协调区域转换流水线：扫描 → 转换 → 写入
@@ -862,4 +864,76 @@ public class ConversionOrchestrator {
      * @return 已完成维度的友好名称列表
      */
     public static List<String> getCompletedDimensions() { return completedDimensions; }
+
+    /**
+     * 维度缓存统计信息
+     *
+     * @param dimension 维度名称（友好格式）
+     * @param regionCount 区域数量
+     * @param sizeBytes 占用空间（字节）
+     */
+    public record DimensionCacheStats(String dimension, int regionCount, long sizeBytes) {
+        /**
+         * 获取占用空间（MB）
+         *
+         * @return 占用空间（MB）
+         */
+        public double sizeMB() {
+            return sizeBytes / (1024.0 * 1024.0);
+        }
+    }
+
+    /**
+     * 获取缓存统计信息
+     *
+     * 遍历缓存目录，统计各维度的区域数量和文件大小。
+     *
+     * @return 维度缓存统计信息列表
+     */
+    public static List<DimensionCacheStats> getCacheStats() {
+        List<DimensionCacheStats> stats = new ArrayList<>();
+        DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+
+        if (!Files.exists(CACHE_DIR)) {
+            return stats;
+        }
+
+        try (DirectoryStream<Path> dimDirs = Files.newDirectoryStream(CACHE_DIR)) {
+            for (Path dimDir : dimDirs) {
+                if (!dimDir.toFile().isDirectory()) continue;
+
+                String dimName = dimDir.getFileName().toString();
+                String friendlyName = dimMapping.getFriendlyName(dimName);
+
+                int regionCount = 0;
+                long totalSize = 0;
+
+                // 遍历维度目录下的所有 zip 文件（包括 caves 子目录）
+                try (Stream<Path> files = Files.walk(dimDir)) {
+                    regionCount = (int) files
+                            .filter(p -> p.toString().endsWith(".zip"))
+                            .count();
+
+                    totalSize = files
+                            .filter(p -> p.toString().endsWith(".zip"))
+                            .mapToLong(p -> {
+                                try {
+                                    return Files.size(p);
+                                } catch (IOException e) {
+                                    return 0;
+                                }
+                            })
+                            .sum();
+                }
+
+                if (regionCount > 0) {
+                    stats.add(new DimensionCacheStats(friendlyName, regionCount, totalSize));
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to get cache stats", e);
+        }
+
+        return stats;
+    }
 }

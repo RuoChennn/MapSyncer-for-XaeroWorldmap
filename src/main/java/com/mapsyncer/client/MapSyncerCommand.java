@@ -77,6 +77,8 @@ public class MapSyncerCommand {
                                 .executes(MapSyncerCommand::executeSyncCurrentDim)
                                 .then(net.minecraft.commands.Commands.literal("all")
                                         .executes(MapSyncerCommand::executeSyncAll))
+                                .then(net.minecraft.commands.Commands.literal("clearstate")
+                                        .executes(MapSyncerCommand::clearSyncState))
                                 .then(net.minecraft.commands.Commands.argument("dimension", StringArgumentType.greedyString())
                                         .suggests(MapSyncerCommand::suggestDimensions)
                                         .executes(MapSyncerCommand::executeSyncDimension)))
@@ -270,6 +272,18 @@ public class MapSyncerCommand {
     }
 
     /**
+     * 清除同步状态标记。
+     * 用于忽略上次中断的同步提示。
+     *
+     * @param context 命令上下文
+     * @return 命令执行结果
+     */
+    private static int clearSyncState(CommandContext<CommandSourceStack> context) {
+        ClientJoinHandler.clearSyncState();
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /**
      * 解析用户输入的维度名称为完整维度 ID。
      * 支持简写（如 overworld）和完整 ID（如 minecraft:overworld）。
      *
@@ -354,6 +368,18 @@ public class MapSyncerCommand {
         }
 
         LOGGER.info("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
+
+        // 标记同步开始（用于断点续传检测）
+        if (tsCache != null) {
+            Set<String> dimensions = new HashSet<>();
+            if (syncAll) {
+                dimensions.add("all");
+            } else {
+                dimensions.add(xaeroDim);
+            }
+            String command = syncAll ? "/mapsyncer sync all" : "/mapsyncer sync " + dimensionId;
+            tsCache.markSyncStart(dimensions, command);
+        }
 
         PacketDistributor.sendToServer(new PacketHandler.SyncRequestPayload(metaMap));
         SyncProgressTracker.startTracking();

@@ -105,6 +105,13 @@ public class ServerSyncHandler {
                 PacketHandler.SyncProgressPayload.STREAM_CODEC,
                 (payload, ctx) -> {}
         );
+
+        // Server sends ServerInstalledPayload to client on player join
+        registrar.playToClient(
+                PacketHandler.ServerInstalledPayload.TYPE,
+                PacketHandler.ServerInstalledPayload.STREAM_CODEC,
+                (payload, ctx) -> {}
+        );
     }
 
     /**
@@ -188,22 +195,44 @@ public class ServerSyncHandler {
 
     /**
      * 根据发送的数据量计算休眠时间，强制执行速度限制
+     * 使用可中断的循环等待，玩家掉线时可立即退出
      *
      * @param bytesSent 本次发送的字节数
+     * @param player 玩家实例（用于中断检查）
+     * @param playerId 玩家UUID（用于中断检查）
+     * @return true 表示速度限制完成，false 表示玩家已掉线应中断同步
      */
-    private static void applySpeedLimit(int bytesSent) {
+    private static boolean applySpeedLimit(int bytesSent, ServerPlayer player, UUID playerId) {
         int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
-        if (limitKBps <= 0) return; // No limit
+        if (limitKBps <= 0) return true; // No limit
 
         // Calculate how long this batch should take at the limit speed
         long expectedTimeMs = (bytesSent * 1000L) / (limitKBps * 1024);
-        if (expectedTimeMs <= 0) return;
+        if (expectedTimeMs <= 0) return true;
 
-        try {
-            Thread.sleep(expectedTimeMs);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // Use interruptible wait with periodic player status check
+        long startTime = System.currentTimeMillis();
+        long checkIntervalMs = 100; // Check every 100ms
+
+        while (System.currentTimeMillis() - startTime < expectedTimeMs) {
+            // Check if player disconnected during speed limit wait
+            if (!isPlayerStillValid(player)) {
+                LOGGER.info("Player {} disconnected during speed limit wait, aborting sync", playerId);
+                return false;
+            }
+
+            long remainingMs = expectedTimeMs - (System.currentTimeMillis() - startTime);
+            long sleepMs = Math.min(checkIntervalMs, remainingMs);
+
+            try {
+                Thread.sleep(sleepMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
+
+        return true;
     }
 
     /**
@@ -409,7 +438,11 @@ public class ServerSyncHandler {
             }
 
             if (batchSize + chunk.data.length > getMaxPacketSize() && !batch.isEmpty()) {
-                applySpeedLimit(batchBytes);
+                // Apply speed limit with interruptible check
+                if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                    LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
+                    return;
+                }
 
                 PacketDistributor.sendToPlayer(serverPlayer,
                         new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), false, worldId, "ok"));
@@ -436,7 +469,11 @@ public class ServerSyncHandler {
 
         // Send final batch
         if (!batch.isEmpty()) {
-            applySpeedLimit(batchBytes);
+            // Apply speed limit with interruptible check
+            if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
+                return;
+            }
 
             PacketDistributor.sendToPlayer(serverPlayer,
                     new PacketHandler.SyncResponsePayload(new ArrayList<>(batch), true, worldId, "ok"));

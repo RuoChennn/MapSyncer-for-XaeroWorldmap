@@ -7,6 +7,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
+import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -17,6 +18,8 @@ import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+
+import java.util.List;
 
 /**
  * 缓存生成命令 - 注册和处理/mapsyncer命令
@@ -201,7 +204,7 @@ public class CacheGenerateCommand {
     }
 
     /**
-     * 显示当前生成状态和增量更新状态（合并为一行）
+     * 显示当前生成状态、增量更新状态和缓存统计（合并为一行）
      *
      * @param ctx 命令上下文
      * @return 命令执行结果
@@ -242,6 +245,25 @@ public class CacheGenerateCommand {
 
         // 合并为一行显示
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.combined", genStatus, incStatus), false);
+
+        // 显示缓存统计（总计一行，每个维度单独一行）
+        List<DimensionCacheStats> cacheStats = ConversionOrchestrator.getCacheStats();
+        if (!cacheStats.isEmpty()) {
+            int totalDims = cacheStats.size();
+            int totalRegions = cacheStats.stream().mapToInt(DimensionCacheStats::regionCount).sum();
+            long totalSize = cacheStats.stream().mapToLong(DimensionCacheStats::sizeBytes).sum();
+            double totalSizeMB = totalSize / (1024.0 * 1024.0);
+
+            // 总计一行
+            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_total",
+                    totalDims, totalRegions, totalSizeMB), false);
+
+            // 每个维度单独一行
+            for (DimensionCacheStats stat : cacheStats) {
+                ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_dim",
+                        stat.dimension(), stat.regionCount(), stat.sizeMB()), false);
+            }
+        }
 
         return Command.SINGLE_SUCCESS;
     }

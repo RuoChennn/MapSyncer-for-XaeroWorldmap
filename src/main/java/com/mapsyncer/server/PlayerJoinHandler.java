@@ -4,6 +4,10 @@ import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.UpdateMode;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.MapSyncer;
+import com.mapsyncer.client.MapPacketReceiver;
+import com.mapsyncer.client.XaeroMapIntegrator;
+import com.mapsyncer.client.ClientHashManager;
+import com.mapsyncer.util.BlockColorMapper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -82,6 +86,14 @@ public class PlayerJoinHandler {
         GenerationCache.resetInstance();
         McaTimestampCache.resetInstance();
         IncrementalUpdateHandler.resetInstance();
+
+        // Clear client-side static caches (for dedicated server restart scenario)
+        MapPacketReceiver.clearReceivedChunks();
+        MapPacketReceiver.resetServerStatus();
+        XaeroMapIntegrator.clearRegionTracking();
+        BlockColorMapper.clearCache();
+        BlockPropertyResolver.clearCache();
+        ClientHashManager.shutdown();
 
         // Clear sync tracking data
         ServerSyncHandler.cleanup();

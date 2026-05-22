@@ -79,6 +79,16 @@ public class XaeroMapIntegrator {
     }
 
     /**
+     * 清除所有区域追踪集合，释放内存。
+     * 在同步完成或离开服务器时调用。
+     */
+    public static void clearRegionTracking() {
+        updatedRegions.clear();
+        preUnloadedRegions.clear();
+        LOGGER.debug("Cleared region tracking sets");
+    }
+
+    /**
      * 区域坐标记录，用于追踪更新的区域。
      * 包含 caveLayer 信息，用于区分地表层和洞穴层。
      *
@@ -170,6 +180,19 @@ public class XaeroMapIntegrator {
             updatedRegions.add(new RegionCoord(chunk.regionX, chunk.regionZ, chunk.caveLayer));
         }
         LOGGER.debug("Recorded {} updated regions for selective reset", updatedRegions.size());
+    }
+
+    /**
+     * 记录同步期间更新的区域（使用预计算的坐标集合）。
+     * 此方法更节省内存，直接接收坐标集合而非完整数据。
+     *
+     * @param coords 区域坐标集合
+     */
+    public static void recordUpdatedRegionCoords(Set<RegionCoord> coords) {
+        // Clear existing set first to prevent memory leak
+        updatedRegions.clear();
+        updatedRegions.addAll(coords);
+        LOGGER.debug("Recorded {} updated region coords for selective reset", updatedRegions.size());
     }
 
     /**
