@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,16 +28,21 @@ public class ClientJoinHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientJoinHandler.class);
 
     /**
-     * 玩家登录事件处理
+     * 玩家登录服务器事件处理（客户端）
      *
      * 检测上次同步是否未完成，如果需要断点续传则显示提示。
      *
-     * @param event 玩家登录事件
+     * @param event 玩家登录服务器事件
      */
     @SubscribeEvent
-    public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+    public static void onPlayerLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        LOGGER.info("Player logging in to server, checking sync state...");
+
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
+        if (mc.player == null) {
+            LOGGER.warn("Player is null during LoggingIn event");
+            return;
+        }
 
         // 使用异步线程延迟检测，避免阻塞主线程
         new Thread(() -> {
