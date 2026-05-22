@@ -131,10 +131,10 @@ public class ClientJoinHandler {
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("清除同步状态标记"))));
 
-        // 一行显示：上次同步未完成（绿色表示可用）,[点击继续同步]或[忽略]
+        // 一行显示：上次同步未完成（黄色警告）,[点击继续同步]或[忽略]
         Component message = ChatUtils.prefix()
                 .append(Component.literal("上次同步未完成")
-                        .withStyle(Style.EMPTY.withColor(0x55FF55))) // 绿色表示可用
+                        .withStyle(Style.EMPTY.withColor(0xFFAA00))) // 黄色警告
                 .append(Component.literal(","))
                 .append(clickButton)
                 .append(Component.literal("或"))
