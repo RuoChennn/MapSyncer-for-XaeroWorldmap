@@ -278,8 +278,10 @@ public class MapPacketReceiver {
             // 首次收到数据时初始化
             if (!syncInProgress) {
                 syncInProgress = true;
-                XaeroMapIntegrator.disableChunkUpdates();
-                LOGGER.info("Starting sync, chunk updates disabled");
+                // 不使用全局暂停（MapProcessor.pushWriterPause），否则会阻止所有 region 的缓冲区更新
+                // 视距内 region 使用 region 级别的 pushWriterPause 保护
+                // 视距外 region 无保护，加载完成后可立即显示
+                LOGGER.info("Starting sync");
 
                 // 初始化反射 API 缓存（一次性）
                 initializeReflectionCache();
@@ -388,13 +390,14 @@ public class MapPacketReceiver {
     }
 
     /**
-     * 同步完成后恢复区块更新。
-     * 重新启用 Xaero 的区块处理，允许地图继续更新。
+     * 同步完成后恢复区块更新状态。
+     * 不再调用全局恢复，因为我们不再使用全局暂停。
+     * 视距内 region 的写保护由 RegionLoadListener 解除。
      */
     private static void resumeChunkUpdates() {
         syncInProgress = false;
-        XaeroMapIntegrator.enableChunkUpdates();
-        LOGGER.info("Sync complete, chunk updates resumed");
+        // 不调用 XaeroMapIntegrator.enableChunkUpdates()，因为不再使用全局暂停
+        LOGGER.info("Sync complete");
     }
 
     /**
