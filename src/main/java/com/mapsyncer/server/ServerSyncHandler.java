@@ -502,11 +502,20 @@ public class ServerSyncHandler {
         // 按视距优先排序：视距内region最先发送，让玩家更快看到周围地图
         sortByViewDistancePriority(regionsToSync, serverPlayer);
 
+        // 立即发送初始进度通知，避免客户端超时
+        final int initialTotal = total;
+        serverPlayer.serverLevel().getServer().execute(() -> {
+            PacketDistributor.sendToPlayer(serverPlayer,
+                    new PacketHandler.SyncProgressPayload(0, initialTotal,
+                            String.format("Preparing to sync %d regions", initialTotal)));
+        });
+
         // 流式处理：逐个读取数据并发送，避免一次性加载所有数据到内存
         List<ChunkMapData> batch = new ArrayList<>();
         int batchSize = 0;
         int batchBytes = 0;
         int processed = 0;
+        boolean isFirstBatch = true;
 
         for (RegionSyncInfo info : regionsToSync) {
             if (!isPlayerStillValid(serverPlayer)) {
@@ -526,11 +535,14 @@ public class ServerSyncHandler {
             // 但需要在发送前复制数据，因为异步发送需要数据存活
 
             if (batchSize + chunk.data.length > getMaxPacketSize() && !batch.isEmpty()) {
-                // Apply speed limit with interruptible check
-                if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
-                    LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
-                    syncThreads.remove(playerId);
-                    return;
+                // 第一批数据立即发送，避免客户端超时；后续批次执行速度限制
+                if (!isFirstBatch) {
+                    // Apply speed limit with interruptible check
+                    if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                        LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
+                        syncThreads.remove(playerId);
+                        return;
+                    }
                 }
 
                 // 在主线程发送数据包
@@ -545,6 +557,7 @@ public class ServerSyncHandler {
                                     String.format("Sending regions %d/%d", processedCount, totalCount)));
                 });
                 processed += batch.size();
+                isFirstBatch = false;
 
                 batch.clear();
                 batchSize = 0;
@@ -564,11 +577,13 @@ public class ServerSyncHandler {
 
         // Send final batch
         if (!batch.isEmpty()) {
-            // Apply speed limit with interruptible check
-            if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
-                LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
-                syncThreads.remove(playerId);
-                return;
+            // 如果之前已发送过数据（不是第一批），则执行速度限制
+            if (!isFirstBatch) {
+                if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                    LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
+                    syncThreads.remove(playerId);
+                    return;
+                }
             }
 
             // 在主线程发送数据包
