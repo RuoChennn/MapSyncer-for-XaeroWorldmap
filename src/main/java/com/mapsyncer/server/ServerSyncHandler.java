@@ -905,15 +905,9 @@ public class ServerSyncHandler {
     }
 
     /**
-     * 按视距优先排序同步列表。
-     * 视距内的region排在最前面，让玩家最先收到周围的地图数据。
-     *
-     * <p>排序逻辑：</p>
-     * <ul>
-     *   <li>计算玩家当前位置对应的region坐标</li>
-     *   <li>视距内的region（与玩家region距离≤视距region数）排在最前</li>
-     *   <li>视距外的region按与玩家的距离排序（近者优先）</li>
-     * </ul>
+     * 按距离排序同步列表（一圈一圈往外发送）。
+     * 所有 region 统一按到玩家的距离排序，不区分视距内外，
+     * 实现视觉上从玩家位置一圈一圈往外加载的效果。
      *
      * @param regions 待同步的region信息列表
      * @param player 服务端玩家实例
@@ -925,37 +919,15 @@ public class ServerSyncHandler {
         int playerRegionX = playerChunkX >> 5;
         int playerRegionZ = playerChunkZ >> 5;
 
-        // 获取视距（渲染距离），加2 chunks作为移动偏移容差
-        int viewDistanceChunks = player.serverLevel().getServer().getPlayerList().getViewDistance() + 2;
-        int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;  // 向上取整
+        LOGGER.debug("Player region: ({}, {})", playerRegionX, playerRegionZ);
 
-        LOGGER.debug("Player region: ({}, {}), view distance: {} chunks = ~{} regions",
-                playerRegionX, playerRegionZ, viewDistanceChunks, viewDistanceRegions);
-
-        // 计算每个region到玩家的距离，并排序
+        // 统一按距离排序（不区分视距内外）
         regions.sort((a, b) -> {
             int distA = Math.max(Math.abs(a.regionX() - playerRegionX), Math.abs(a.regionZ() - playerRegionZ));
             int distB = Math.max(Math.abs(b.regionX() - playerRegionX), Math.abs(b.regionZ() - playerRegionZ));
-
-            // 视距内的region（距离≤视距）排在最前，视距外按距离排序
-            boolean aInView = distA <= viewDistanceRegions;
-            boolean bInView = distB <= viewDistanceRegions;
-
-            if (aInView && !bInView) return -1;  // a在视距内，排前面
-            if (!aInView && bInView) return 1;   // b在视距内，排前面
-            return Integer.compare(distA, distB); // 都在视距内或都在视距外，按距离排序
+            return Integer.compare(distA, distB);
         });
 
-        // 统计视距内region数量
-        int viewRegionCount = 0;
-        for (RegionSyncInfo info : regions) {
-            int dist = Math.max(Math.abs(info.regionX() - playerRegionX), Math.abs(info.regionZ() - playerRegionZ));
-            if (dist <= viewDistanceRegions) {
-                viewRegionCount++;
-            }
-        }
-
-        LOGGER.info("Sorted {} regions: {} in view distance ({} region radius), rest by distance",
-                regions.size(), viewRegionCount, viewDistanceRegions);
+        LOGGER.info("Sorted {} regions by distance (circle-by-circle)", regions.size());
     }
 }
