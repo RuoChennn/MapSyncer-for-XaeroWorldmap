@@ -982,6 +982,27 @@ public class XaeroMapIntegrator {
      * </ul>
      *
      * @param chunk 区块数据
+     * @param worldId worldId
+     * @return mw 目录路径
+     */
+    public static Path writeChunkDataAndGetMwDir(ChunkMapData chunk, int worldId) {
+        Path serverDir = getCurrentServerDirectory();
+        if (serverDir == null) {
+            LOGGER.warn("无法获取服务器目录");
+            return null;
+        }
+        return writeChunkDataAndGetDir(chunk, serverDir, worldId);
+    }
+
+    /**
+     * 写入区块数据并返回 mw 目录路径。
+     * 支持 caves/<layer> 目录结构：
+     * <ul>
+     *   <li>地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip</li>
+     *   <li>洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip</li>
+     * </ul>
+     *
+     * @param chunk 区块数据
      * @param serverDir 服务器目录
      * @param worldId worldId
      * @return mw 目录路径
