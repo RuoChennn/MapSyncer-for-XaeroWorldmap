@@ -2,15 +2,22 @@
 
 一个完全由AI编写的 Minecraft NeoForge 1.21.X 模组，用于将服务端已探索的区域地图数据同步到客户端的 Xaero's World Map。
 
-> **适用场景**：玩家初次进入已开放很久的服务器，或服务器已使用 Chunky 预生成地图，需要将地图同步给玩家，减少重复跑图的时间成本，对老玩家则是支持地图的增量更新，持续获取最新的服务器地图。
+> **适用场景**：玩家首次进入已开放很久的服务器，或服务器已使用 Chunky 预生成地图，需要将地图同步给玩家，减少重复跑图的时间成本。支持增量更新，持续获取最新的服务器地图。
 
-## 用前提示
-这是一个完全由AI构建的项目，很多东西只能人工测试，甚至中间还藏着一些俺寻思之力，遇到什么问题都是正常的，出现问题请提issue。
+## 功能特性
+
+| 特性 | 说明 |
+|------|------|
+| **流式加载** | 边接收边加载，无需等待全部数据传输完成 |
+| **带宽感知限速** | 动态调整发送速率，避免阻塞游戏网络 |
+| **断点续传** | 同步中断后自动恢复，无需重新开始 |
+| **增量更新** | 仅同步有变化的区域，节省带宽和时间 |
+| **维度支持** | 主世界、地狱、末地及 Mod 维度 |
 
 ## 环境要求
 
 | 环境 | 要求 |
-|-----|-----|
+|------|------|
 | Minecraft | 1.21.X (1.21, 1.21.1) |
 | NeoForge | 21.0+ |
 | Java | 21 |
@@ -36,10 +43,14 @@
 
 ## 配置
 
-`config/mapsyncer-common.json`：
-- `syncSpeedLimitKBps` - 同步限速（0=不限）
-- `enableResumeSync` - 断点续传
-- `maxSyncPacketSize` - 最大包大小（默认1MB）
+`config/mapsyncer-server.toml`：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `maxSyncPacketSize` | 256KB | 单包最大大小（64KB-1MB） |
+| `syncSpeedLimitKBps` | 1024 KB/s (1MiB/s) | 同步速度限制（0=不限） |
+| `maxConcurrentRegions` | 4 | 并发转换区域数 |
+| `incrementalUpdateMode` | DISABLED | 增量更新模式 |
 
 ## 已知问题
 
@@ -50,9 +61,9 @@
 ## 文档导航
 
 | 文档 | 内容 |
-|-----|-----|
+|------|------|
 | [implemented-features.md](implemented-features.md) | **完整功能特性列表** |
-| [项目结构](src/main/java/com/mapsyncer/) | 源代码目录 |
+| [src/main/java/com/mapsyncer/](src/main/java/com/mapsyncer/) | 源代码目录 |
 
 ---
 
