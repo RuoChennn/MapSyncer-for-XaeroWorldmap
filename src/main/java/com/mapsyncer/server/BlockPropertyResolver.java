@@ -81,8 +81,11 @@ public class BlockPropertyResolver {
     private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = new PlaceholderBlockGetter();
     private static final BlockPos PLACEHOLDER_BLOCKPOS = BlockPos.ZERO;
 
-    /** 缓存方块属性查询结果 */
+    /** 缓存方块属性查询结果（带LRU清理） */
     private static final ConcurrentHashMap<String, BlockProperties> propertiesCache = new ConcurrentHashMap<>();
+
+    /** 缓存最大容量（超过时清理旧条目） */
+    private static final int MAX_CACHE_SIZE = 10000;
 
     /** 有问题的方块集合（MapColor抛出异常的方块） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();
@@ -147,12 +150,40 @@ public class BlockPropertyResolver {
      * 获取方块属性（通过方块名称）
      *
      * 使用缓存提高效率，相同方块名称只解析一次。
+     * 当缓存超过上限时，清理部分旧条目（LRU策略）。
      *
      * @param blockName 方块名称，如"minecraft:stone"或"modid:custom_block"
      * @return 方块属性集合
      */
     public static BlockProperties getProperties(String blockName) {
+        // 检查缓存大小，超过上限时清理部分条目
+        if (propertiesCache.size() > MAX_CACHE_SIZE) {
+            trimCache();
+        }
         return propertiesCache.computeIfAbsent(blockName, BlockPropertyResolver::resolveProperties);
+    }
+
+    /**
+     * 清理缓存（LRU策略）
+     *
+     * 当缓存超过上限时，清理一半的旧条目。
+     * 使用简单策略：随机清理一部分条目，避免遍历所有条目排序。
+     */
+    private static void trimCache() {
+        int currentSize = propertiesCache.size();
+        int toRemove = currentSize / 2;
+
+        LOGGER.debug("Trimming properties cache: size={}, removing {} entries", currentSize, toRemove);
+
+        // 清理一半条目（简单策略，不精确LRU）
+        int removed = 0;
+        for (String key : propertiesCache.keySet()) {
+            if (removed >= toRemove) break;
+            propertiesCache.remove(key);
+            removed++;
+        }
+
+        LOGGER.debug("Cache trimmed: removed {} entries, new size={}", removed, propertiesCache.size());
     }
 
     /**

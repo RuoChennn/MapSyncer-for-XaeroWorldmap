@@ -19,8 +19,18 @@ import java.util.Map;
  *   <li>提供基本的方块属性判断方法</li>
  * </ul>
  *
+ * @deprecated 此类为备用功能，暂未使用。
+ *             当前转换流程通过 ChunkSectionParser.BlockState record 直接处理方块状态，
+ *             模组方块通过名称字符串匹配判断属性。
+ *             UnknownBlockStateWrapper 保留用于以下潜在场景：
+ *             1. 需要完整保留方块 NBT 数据进行序列化的场景
+ *             2. BlockClassifier 字符串匹配不足以判断方块属性时
+ *             3. 需要与 Xaero UnknownBlockState 实现保持兼容的场景
+ *
+ * @see com.mapsyncer.mca.ChunkSectionParser.BlockState 当前使用的方块状态表示
  * @see com.mapsyncer.nbt.Tag.Compound NBT复合标签
  */
+@Deprecated(since = "2026-05-24", forRemoval = false)
 public class UnknownBlockStateWrapper {
 
     /**

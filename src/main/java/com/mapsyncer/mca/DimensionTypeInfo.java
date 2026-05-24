@@ -48,15 +48,6 @@ public record DimensionTypeInfo(
     }
 
     /**
-     * 获取世界高度范围（height）
-     *
-     * @return 维度的总高度范围（maxY - minY）
-     */
-    public int worldHeightRange() {
-        return height;
-    }
-
-    /**
      * 创建默认的主世界维度类型信息
      *
      * <p>主世界特性：有天空光照、无顶棚、高度范围 -64 到 320</p>
@@ -159,21 +150,6 @@ public record DimensionTypeInfo(
      */
     public boolean isCaveDimension() {
         return hasCeiling;
-    }
-
-    /**
-     * 判断是否需要使用 SkyLight 数据进行光照计算
-     *
-     * <p>参考 Xaero WorldDataReader:557-559 行:</p>
-     * <ul>
-     *   <li>只有在有天空光照的维度才考虑 SkyLight</li>
-     *   <li>末地维度 hasSkylight = false，不使用 SkyLight = 15 作为默认值</li>
-     * </ul>
-     *
-     * @return 如果维度有天空光照则返回true
-     */
-    public boolean needsSkyLightForLighting() {
-        return hasSkylight;
     }
 
     /**

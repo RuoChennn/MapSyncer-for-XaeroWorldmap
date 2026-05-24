@@ -1,7 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.network.ChunkMapData;
-import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.HashUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
@@ -21,15 +21,14 @@ import java.util.Set;
 
 /**
  * Xaero 地图集成器。
- * 提供与 Xaero's World Map 模组的交互功能，包括地图数据写入、缓存管理和地图重新加载。
+ * 提供与 Xaero's World Map 模组的交互功能，包括地图数据写入和目录路径管理。
  *
  * <p>主要功能：</p>
  * <ul>
  *   <li>获取当前服务器和地图目录路径</li>
  *   <li>写入服务端同步的地图数据到 Xaero 目录</li>
- *   <li>管理区块更新的暂停和恢复</li>
- *   <li>选择性重置区域加载状态，触发地图重新加载</li>
- *   <li>使用反射操作 Xaero 内部类</li>
+ *   <li>管理同步期间的区域追踪</li>
+ *   <li>重置区域加载状态，触发地图重新加载</li>
  * </ul>
  *
  * <p>目录结构：</p>
@@ -42,9 +41,6 @@ import java.util.Set;
 public class XaeroMapIntegrator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(XaeroMapIntegrator.class);
-
-    /** 是否禁用区块更新（同步期间） */
-    private static volatile boolean chunkUpdatesDisabled = false;
 
     /** 同步期间更新的区域集合，用于选择性重置 */
     private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
@@ -115,53 +111,6 @@ public class XaeroMapIntegrator {
         public boolean isSurfaceLayer() {
             return caveLayer == Integer.MAX_VALUE;
         }
-    }
-
-    /**
-     * 暂停 Xaero 的区块更新处理（同步期间）。
-     * 防止 Xaero 在我们替换文件时写入新的区块数据。
-     * 使用 MapProcessor.pushWriterPause() 来正确暂停写入。
-     */
-    public static void disableChunkUpdates() {
-        // Skip if already disabled (avoid duplicate messages)
-        if (chunkUpdatesDisabled) {
-            return;
-        }
-
-        chunkUpdatesDisabled = true;
-        LOGGER.info("Chunk updates disabled for sync");
-
-        try {
-            // Use MapProcessor.pushWriterPause() to properly pause writing
-            pauseMapWriter();
-        } catch (Exception e) {
-            LOGGER.warn("Could not pause Xaero chunk processing: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 同步完成后启用 Xaero 的区块更新处理。
-     * 重新启用区块处理，允许地图继续更新。
-     */
-    public static void enableChunkUpdates() {
-        chunkUpdatesDisabled = false;
-        LOGGER.info("Chunk updates re-enabled");
-
-        try {
-            // Use MapProcessor.popWriterPause() to resume writing
-            resumeMapWriter();
-        } catch (Exception e) {
-            LOGGER.warn("Could not resume Xaero chunk processing: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 检查区块更新是否被禁用。
-     *
-     * @return 如果区块更新被禁用返回 true；否则返回 false
-     */
-    public static boolean isChunkUpdatesDisabled() {
-        return chunkUpdatesDisabled;
     }
 
     /**
@@ -275,66 +224,6 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 选择性重置区域加载状态，仅针对需要重置的区域：
-     * <ul>
-     *   <li>同步期间更新的区域</li>
-     *   <li>玩家视距范围内的区域</li>
-     *   <li>玩家当前所在的区域</li>
-     * </ul>
-     *
-     * @return 重置的区域数量
-     */
-    public static int selectiveResetRegionLoadStates() {
-        Minecraft mc = Minecraft.getInstance();
-        Player player = mc.player;
-        if (player == null) {
-            LOGGER.warn("No player for selective reset");
-            return 0;
-        }
-
-        // Calculate player's current region
-        int playerChunkX = player.getBlockX() >> 4;
-        int playerChunkZ = player.getBlockZ() >> 4;
-        int playerRegionX = playerChunkX >> 5;
-        int playerRegionZ = playerChunkZ >> 5;
-        RegionCoord playerRegion = new RegionCoord(playerRegionX, playerRegionZ);
-
-        // Get regions within view distance
-        Set<RegionCoord> viewRegions = getViewDistanceRegions();
-
-        // Combine: regions that need reset = updated regions AND view regions
-        Set<RegionCoord> regionsToReset = new HashSet<>();
-
-        // Always add player's current region
-        regionsToReset.add(playerRegion);
-
-        // Add updated regions that are in view distance
-        for (RegionCoord updated : updatedRegions) {
-            if (viewRegions.contains(updated)) {
-                regionsToReset.add(updated);
-            }
-        }
-
-        // Also add nearby regions in view distance for smoother reload
-        // (even if not updated, they may need refresh for continuity)
-        int nearbyLimit = 10;  // Limit to avoid too many resets
-        for (RegionCoord viewRegion : viewRegions) {
-            if (regionsToReset.size() >= nearbyLimit) break;
-
-            // Add regions close to player position
-            if (Math.abs(viewRegion.x() - playerRegionX) <= 1 &&
-                Math.abs(viewRegion.z() - playerRegionZ) <= 1) {
-                regionsToReset.add(viewRegion);
-            }
-        }
-
-        LOGGER.info("Selective reset: {} updated regions, {} view regions, {} to reset",
-                updatedRegions.size(), viewRegions.size(), regionsToReset.size());
-
-        return resetSpecificRegionLoadStates(regionsToReset);
-    }
-
-    /**
      * 卸载玩家视野范围内的所有region。
      * 在同步当前维度时调用，让视野范围内的region可以重新加载服务端数据。
      *
@@ -349,40 +238,6 @@ public class XaeroMapIntegrator {
 
         LOGGER.info("Unloading {} view distance regions before sync", viewRegions.size());
         return resetSpecificRegionLoadStates(viewRegions);
-    }
-
-    /**
-     * 检查chunk是否在玩家当前维度的视野范围内。
-     * 用于过滤同步数据，跳过视野范围内的region以保留本地实时更新。
-     *
-     * <p>注意：只过滤地表层（caveLayer == Integer.MAX_VALUE），
-     * 洞穴层不进行过滤，因为洞穴不是玩家实时探索的区域。</p>
-     *
-     * @param chunk 要检查的区块数据
-     * @return 如果在视野范围内返回true，否则返回false
-     */
-    public static boolean isInViewDistance(ChunkMapData chunk) {
-        Minecraft mc = Minecraft.getInstance();
-        Player player = mc.player;
-        if (player == null || mc.level == null) {
-            return false;
-        }
-
-        // 只过滤地表层，洞穴层不进行过滤
-        if (!chunk.isSurfaceLayer()) {
-            return false;
-        }
-
-        // 检查维度是否匹配
-        String currentXaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(
-                mc.level.dimension().location().toString());
-        if (!chunk.dimension.equals(currentXaeroDim)) {
-            return false; // 不同维度，不在视野范围内
-        }
-
-        // 获取视野范围内的region（地表层）
-        Set<RegionCoord> viewRegions = getViewDistanceRegions();
-        return viewRegions.contains(new RegionCoord(chunk.regionX, chunk.regionZ));
     }
 
     /**
@@ -563,133 +418,6 @@ public class XaeroMapIntegrator {
             LOGGER.debug("Error in selective reset: {}", e.getMessage());
         }
         return count;
-    }
-
-    /**
-     * 暂停 Xaero 的 MapWriter 写入操作。
-     * 使用 MapProcessor.pushWriterPause() 来正确暂停实时生成。
-     */
-    private static void pauseMapWriter() {
-        try {
-            Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
-            Method getCurrentSession = worldMapSessionClass.getMethod("getCurrentSession");
-            Object session = getCurrentSession.invoke(null);
-
-            if (session == null) {
-                LOGGER.warn("Could not get WorldMapSession for pause");
-                return;
-            }
-
-            Method getMapProcessor = worldMapSessionClass.getMethod("getMapProcessor");
-            Object mapProcessor = getMapProcessor.invoke(session);
-
-            if (mapProcessor == null) {
-                LOGGER.warn("Could not get MapProcessor for pause");
-                return;
-            }
-
-            // Use pushWriterPause() to increment pauseWriting counter
-            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
-            Method pushWriterPause = mapProcessorClass.getMethod("pushWriterPause");
-            pushWriterPause.invoke(mapProcessor);
-            LOGGER.info("Paused Xaero MapWriter via pushWriterPause()");
-
-        } catch (Exception e) {
-            LOGGER.warn("Failed to pause MapWriter: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 恢复 Xaero 的 MapWriter 写入操作。
-     * 使用 MapProcessor.popWriterPause() 来恢复实时生成。
-     */
-    private static void resumeMapWriter() {
-        try {
-            Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
-            Method getCurrentSession = worldMapSessionClass.getMethod("getCurrentSession");
-            Object session = getCurrentSession.invoke(null);
-
-            if (session == null) {
-                LOGGER.warn("Could not get WorldMapSession for resume");
-                return;
-            }
-
-            Method getMapProcessor = worldMapSessionClass.getMethod("getMapProcessor");
-            Object mapProcessor = getMapProcessor.invoke(session);
-
-            if (mapProcessor == null) {
-                LOGGER.warn("Could not get MapProcessor for resume");
-                return;
-            }
-
-            // Use popWriterPause() to decrement pauseWriting counter
-            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
-            Method popWriterPause = mapProcessorClass.getMethod("popWriterPause");
-            popWriterPause.invoke(mapProcessor);
-            LOGGER.info("Resumed Xaero MapWriter via popWriterPause()");
-
-        } catch (Exception e) {
-            LOGGER.warn("Failed to resume MapWriter: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 获取当前连接服务器的 Xaero WorldMap 目录。
-     * 路径结构：xaero/world-map/Multiplayer_<server>/null/mw$<worldId>/
-     *
-     * @return 当前地图目录路径，如果未连接服务器返回 null
-     */
-    public static Path getCurrentMapDirectory() {
-        Minecraft mc = Minecraft.getInstance();
-        ClientPacketListener connection = mc.getConnection();
-        if (connection == null) {
-            return null;
-        }
-
-        ServerData serverData = connection.getServerData();
-        if (serverData == null) {
-            return null;
-        }
-
-        // Get server address
-        String serverIP = serverData.ip;
-        if (serverIP == null || serverIP.isEmpty()) {
-            serverIP = "Unknown";
-        }
-
-        // Clean up server IP (remove port, brackets, etc.)
-        int portDivider = serverIP.lastIndexOf(":");
-        if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
-            // IPv6 address with port
-            portDivider = serverIP.lastIndexOf("]:") + 1;
-        }
-        if (portDivider > 0) {
-            serverIP = serverIP.substring(0, portDivider);
-        }
-        serverIP = serverIP.replace("[", "").replace("]", "");
-        serverIP = serverIP.replaceAll(":", ".");
-        while (serverIP.endsWith(".")) {
-            serverIP = serverIP.substring(0, serverIP.length() - 1);
-        }
-        if (serverIP.isEmpty()) {
-            serverIP = "Empty Address";
-        }
-
-        // Get world ID from the level
-        int worldId = 0;
-        if (mc.level != null) {
-            worldId = mc.level.getLevelData().hashCode();
-        }
-
-        // Build path: xaero/world-map/Multiplayer_<server>/null/mw$<worldId>
-        Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
-        Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
-        Path dimDir = serverDir.resolve("null");
-        Path mwDir = dimDir.resolve("mw$" + worldId);
-
-        LOGGER.debug("Map directory: {}", mwDir);
-        return mwDir;
     }
 
     /**
@@ -909,7 +637,7 @@ public class XaeroMapIntegrator {
 
             // Update timestamp cache with server's timestamp and computed hash
             String relativePath = buildRelativePathForCache(chunk);
-            String hash = computeHash(chunk.data);
+            String hash = HashUtils.computeHash(chunk.data);
             tsCache.update(relativePath, chunk.timestampSeconds, hash);
             LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
                     relativePath, chunk.timestampSeconds, hash);
@@ -951,30 +679,7 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 计算数据的 CRC32 哈希值。
-     *
-     * @param data 数据字节数组
-     * @return CRC32 哈希值（8位十六进制字符串）
-     */
-    private static String computeHash(byte[] data) {
-        java.util.zip.CRC32 crc32 = new java.util.zip.CRC32();
-        crc32.update(data);
-        return String.format("%08x", crc32.getValue());
-    }
-
-    /**
-     * 写入服务端接收的地图数据到正确位置。
-     * 使用服务端提供的 worldId 确保目录路径正确。
-     *
-     * @param chunks 接收的区块数据列表
-     * @param serverWorldId 服务端的 worldId
-     */
-    public static void writeMapData(List<ChunkMapData> chunks, int serverWorldId) {
-        writeMapDataAndReturnDir(chunks, serverWorldId);
-    }
-
-    /**
-     * 写入区块数据并返回 mw 目录路径。
+     * 构建时间戳缓存的服务器格式相对路径。
      * 支持 caves/<layer> 目录结构：
      * <ul>
      *   <li>地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip</li>
@@ -1040,29 +745,5 @@ public class XaeroMapIntegrator {
         }
 
         return mwDir;
-    }
-
-    /**
-     * 写入区块数据到指定位置。
-     *
-     * @param chunk 区块数据
-     * @param serverDir 服务器目录
-     * @param worldId worldId
-     */
-    private static void writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
-        writeChunkDataAndGetDir(chunk, serverDir, worldId);
-    }
-
-    /**
-     * 触发地图重新加载。
-     * 在游戏线程中执行地图重新加载操作。
-     */
-    public static void reloadMap() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level != null) {
-            mc.execute(() -> {
-                LOGGER.info("Map reload triggered");
-            });
-        }
     }
 }

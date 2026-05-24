@@ -30,6 +30,9 @@ public class McaTimestampCache {
     /** 维度 -> 区域坐标 -> 最后修改时间 (毫秒) */
     private final Map<String, Map<String, Long>> timestampCache = new ConcurrentHashMap<>();
 
+    /** 缓存最大区域数（超过时清理不存在文件的时间戳） */
+    private static final int MAX_CACHE_REGIONS = 50000;
+
     /** 缓存文件路径 */
     private final Path cacheFilePath;
 
@@ -218,7 +221,64 @@ public class McaTimestampCache {
         timestampCache.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>())
                       .put(regionKey, timestamp);
 
+        // 检查缓存大小，超过上限时记录警告
+        int totalRegions = getTotalCachedRegions();
+        if (totalRegions > MAX_CACHE_REGIONS) {
+            LOGGER.warn("Timestamp cache size {} exceeds limit {}, consider calling trimStaleEntries()",
+                totalRegions, MAX_CACHE_REGIONS);
+        }
+
         LOGGER.debug("Updated timestamp cache for {} / {}: {}", dimension, regionKey, timestamp);
+    }
+
+    /**
+     * 获取缓存的总区域数
+     */
+    private int getTotalCachedRegions() {
+        return timestampCache.values().stream().mapToInt(Map::size).sum();
+    }
+
+    /**
+     * 清理不存在文件的时间戳条目
+     *
+     * 当缓存超过上限时，可以调用此方法清理那些对应MCA文件已删除的时间戳。
+     * 注意：此方法需要传入region目录路径才能验证文件是否存在。
+     *
+     * @param dimension 维度名称
+     * @param regionDir 区域目录路径
+     */
+    public void trimStaleEntries(String dimension, Path regionDir) {
+        Map<String, Long> dimCache = timestampCache.get(dimension);
+        if (dimCache == null || dimCache.isEmpty()) return;
+
+        int before = dimCache.size();
+        java.util.List<String> toRemove = new java.util.ArrayList<>();
+
+        for (String regionKey : dimCache.keySet()) {
+            String[] parts = regionKey.split("_");
+            if (parts.length == 2) {
+                try {
+                    int regionX = Integer.parseInt(parts[0]);
+                    int regionZ = Integer.parseInt(parts[1]);
+                    Path mcaPath = regionDir.resolve("r." + regionX + "." + regionZ + ".mca");
+                    if (!Files.exists(mcaPath)) {
+                        toRemove.add(regionKey);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // 无效的key，也移除
+                    toRemove.add(regionKey);
+                }
+            }
+        }
+
+        for (String key : toRemove) {
+            dimCache.remove(key);
+        }
+
+        if (!toRemove.isEmpty()) {
+            LOGGER.info("Trimmed {} stale timestamp entries for dimension {} (before: {}, after: {})",
+                toRemove.size(), dimension, before, dimCache.size());
+        }
     }
 
     /**

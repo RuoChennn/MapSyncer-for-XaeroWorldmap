@@ -180,29 +180,6 @@ public class ChunkSectionParser {
         }
 
         /**
-         * 判断是否可以含水（方块类型支持 waterlogged 属性）
-         *
-         * <p>包括栅栏门、楼梯、台阶、墙、门、陷阱门、灯笼等</p>
-         *
-         * @return 如果方块类型支持含水属性则返回true
-         */
-        public boolean canBeWaterlogged() {
-            // 栅栏门、楼梯、台阶、墙、门、陷阱门、灯笼、海泡菜、海带等
-            return name.contains("fence_gate") || name.contains("stairs") ||
-                   name.contains("slab") || name.contains("wall") ||
-                   name.contains("door") && !name.contains("iron_door") ||
-                   name.contains("trapdoor") || name.contains("lantern") ||
-                   name.contains("soul_lantern") || name.contains("chain") ||
-                   name.equals("minecraft:sea_pickle") || name.equals("minecraft:kelp") ||
-                   name.equals("minecraft:kelp_plant") || name.contains("coral") ||
-                   name.contains("coral_block") || name.contains("coral_fan") ||
-                   name.equals("minecraft:copper_grate") || name.contains("grate") ||
-                   name.contains("conduit") || name.equals("minecraft:scaffolding") ||
-                   name.equals("minecraft:light") || name.contains("sign") ||
-                   name.contains("banner") || name.contains("bed");
-        }
-
-        /**
          * 判断方块是否为表面方块且上方有水（含水方块）
          *
          * <p>含水方块：方块本身有颜色，但上方应该渲染水 overlay</p>
@@ -242,17 +219,7 @@ public class ChunkSectionParser {
         byte[] blockLight,                  // 方块光照数组 (2048字节)
         byte[] skyLight                     // 天空光照数组 (2048字节)
     ) {
-
-        /**
-         * 获取方块名称列表（仅名称）
-         *
-         * <p>用于快速查询，不包含方块属性</p>
-         *
-         * @return 方块名称列表
-         */
-        public List<String> getBlockNames() {
-            return blockNames;
-        }
+        // record 自动提供 blockNames() 访问方法，无需额外定义
     }
 
     /**

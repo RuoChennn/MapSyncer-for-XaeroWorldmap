@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -48,7 +49,7 @@ public class GenerationCache {
          * @return 解析后的RegionMeta，解析失败返回null
          */
         public static RegionMeta parse(String value) {
-            TimestampHashEntry entry = PropertiesCacheIO.parseEntry(value);
+            TimestampHashEntry entry = PropertiesCacheIO.parseTimestampHash(value);
             return entry != null ? new RegionMeta(entry.timestampSeconds(), entry.hash()) : null;
         }
 
@@ -95,7 +96,7 @@ public class GenerationCache {
      * 使用PropertiesCacheIO加载缓存数据。
      */
     private void load() {
-        Map<String, TimestampHashEntry> loaded = PropertiesCacheIO.load(cacheFile, PropertiesCacheIO::parseEntry);
+        Map<String, TimestampHashEntry> loaded = PropertiesCacheIO.load(cacheFile, PropertiesCacheIO::parseTimestampHash);
         for (Map.Entry<String, TimestampHashEntry> entry : loaded.entrySet()) {
             cache.put(entry.getKey(), new RegionMeta(entry.getValue().timestampSeconds(), entry.getValue().hash()));
         }
@@ -154,10 +155,13 @@ public class GenerationCache {
     /**
      * 获取所有缓存数据
      *
-     * @return 缓存数据的副本
+     * <p>返回不可修改视图，避免创建完整副本浪费内存。</p>
+     * <p>如果需要修改数据，请使用 update() 方法。</p>
+     *
+     * @return 缓存数据的不可修改视图
      */
     public Map<String, RegionMeta> getAll() {
-        return new HashMap<>(cache);
+        return Collections.unmodifiableMap(cache);
     }
 
     /**

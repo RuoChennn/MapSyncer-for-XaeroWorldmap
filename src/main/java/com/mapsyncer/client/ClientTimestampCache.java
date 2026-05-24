@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -96,7 +97,7 @@ public class ClientTimestampCache {
          * 从字符串解析缓存条目。
          */
         public static CacheEntry parse(String value) {
-            TimestampHashEntry entry = PropertiesCacheIO.parseEntry(value);
+            TimestampHashEntry entry = PropertiesCacheIO.parseTimestampHash(value);
             return entry != null ? new CacheEntry(entry.timestampSeconds(), entry.hash()) : null;
         }
 
@@ -316,9 +317,12 @@ public class ClientTimestampCache {
 
     /**
      * 获取所有缓存数据。
+     *
+     * <p>返回不可修改视图，避免创建完整副本浪费内存。</p>
+     * <p>如果需要修改数据，请使用 update() 方法。</p>
      */
     public Map<String, CacheEntry> getAll() {
-        return new HashMap<>(cache);
+        return Collections.unmodifiableMap(cache);
     }
 
     /**

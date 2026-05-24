@@ -264,20 +264,6 @@ public class DimensionRegistry {
     }
 
     /**
-     * 获取所有已配置维度的列表（用于命令建议）
-     *
-     * @return 维度友好名称列表
-     */
-    public static List<String> getConfiguredDimensionNames() {
-        List<String> names = new ArrayList<>();
-        for (DimensionScanConfig config : ModConfig.SERVER.parseDimensionConfigs()) {
-            String friendlyName = toFriendlyName(config.dimension());
-            names.add(friendlyName);
-        }
-        return names;
-    }
-
-    /**
      * 将维度ID转换为用户友好名称（使用标准名称）
      *
      * @param dimId 维度ID

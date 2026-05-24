@@ -4,6 +4,7 @@ import com.mapsyncer.network.ChunkMapData;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.HashUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -25,8 +26,8 @@ import java.util.Set;
  * <p>主要功能：</p>
  * <ul>
  *   <li>注册数据包处理器，处理同步请求、响应和进度更新</li>
- *   <li>管理同步过程中的区块更新暂停和恢复</li>
- *   <li>清除 Xaero 缓存文件并触发地图重新加载</li>
+ *   <li>写入同步数据到 Xaero 目录，边接收边加载</li>
+ *   <li>重置区域加载状态，触发地图重新加载</li>
  *   <li>检测超时和陈旧的同步请求，防止内存泄漏</li>
  *   <li>同步当前维度时，预先卸载视野范围内的region以便重新加载服务端数据</li>
  * </ul>
@@ -120,16 +121,6 @@ public class MapPacketReceiver {
     }
 
     /**
-     * 获取已接收区域数量。
-     * 用于监控同步进度。
-     *
-     * @return 已接收的区域数量
-     */
-    public static int getReceivedRegionCount() {
-        return updatedRegionCoords != null ? updatedRegionCoords.size() : 0;
-    }
-
-    /**
      * 注册数据包处理器。
      * 处理同步请求（客户端发送）、同步响应（服务端返回）和进度更新。
      *
@@ -188,15 +179,6 @@ public class MapPacketReceiver {
      */
     public static boolean isServerInstalled() {
         return serverInstalled;
-    }
-
-    /**
-     * 获取服务端版本号
-     *
-     * @return 服务端版本号字符串
-     */
-    public static String getServerVersion() {
-        return serverVersion;
     }
 
     /**
@@ -313,7 +295,7 @@ public class MapPacketReceiver {
                 // 更新时间戳缓存
                 if (tsCache != null) {
                     String relativePath = buildRelativePathForCache(chunk);
-                    String hash = computeHash(chunk.data);
+                    String hash = HashUtils.computeHash(chunk.data);
                     tsCache.update(relativePath, chunk.timestampSeconds, hash);
                 }
             }
@@ -572,18 +554,6 @@ public class MapPacketReceiver {
         } else {
             return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
         }
-    }
-
-    /**
-     * 计算数据的 CRC32 哈希值。
-     *
-     * @param data 数据字节数组
-     * @return CRC32 哈希值（8位十六进制字符串）
-     */
-    private static String computeHash(byte[] data) {
-        java.util.zip.CRC32 crc32 = new java.util.zip.CRC32();
-        crc32.update(data);
-        return String.format("%08x", crc32.getValue());
     }
 
     /**

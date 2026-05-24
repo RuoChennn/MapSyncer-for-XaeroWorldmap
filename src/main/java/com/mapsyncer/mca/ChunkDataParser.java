@@ -3,7 +3,6 @@ package com.mapsyncer.mca;
 import com.mapsyncer.nbt.Tag;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -166,20 +165,7 @@ public class ChunkDataParser {
         return new ChunkInfo(localX, localZ, yPos, chunkBottomY, status, heightmap, sections);
     }
 
-    /**
-     * 解析chunk NBT数据（默认维度高度范围384）
-     *
-     * <p>适用于主世界（高度范围 -64 到 320）</p>
-     *
-     * @param localX chunk本地X坐标 (0-31)
-     * @param localZ chunk本地Z坐标 (0-31)
-     * @param chunkNbt chunk NBT数据
-     * @return ChunkInfo对象
-     */
-    public static ChunkInfo parseChunk(int localX, int localZ, Tag.Compound chunkNbt) {
-        return parseChunk(localX, localZ, chunkNbt, 384); // 默认主世界高度范围（-64到320）
-    }
-
+    
     /**
      * 解析高度图数据
      *
@@ -342,19 +328,6 @@ public class ChunkDataParser {
     }
 
     /**
-     * 从chunk sections中获取指定位置的方块名称
-     *
-     * @param chunk Chunk数据
-     * @param x 局部X坐标 (0-15)
-     * @param worldY 世界Y坐标
-     * @param z 局部Z坐标 (0-15)
-     * @return 方块名称字符串
-     */
-    public static String getBlockAt(ChunkInfo chunk, int x, int worldY, int z) {
-        return getBlockStateAt(chunk, x, worldY, z).name();
-    }
-
-    /**
      * 从chunk sections中获取指定位置的生物群系（默认启用边界平滑）
      *
      * @param chunk Chunk数据
@@ -451,26 +424,6 @@ public class ChunkDataParser {
     }
 
     /**
-     * 获取有效光照值（简单版本）
-     *
-     * <p>有天空访问时使用天空光照（默认15），否则使用方块光照</p>
-     *
-     * @param chunk Chunk数据
-     * @param x 局部X坐标 (0-15)
-     * @param worldY 世界Y坐标
-     * @param z 局部Z坐标 (0-15)
-     * @return 有效光照值 (0-15)
-     */
-    public static byte getEffectiveLight(ChunkInfo chunk, int x, int worldY, int z) {
-        if (hasSkyAccess(chunk, x, worldY, z)) {
-            byte skyLight = getSkyLightAt(chunk, x, worldY, z);
-            return skyLight > 0 ? skyLight : 15;  // 有天空访问时默认日光15
-        } else {
-            return getBlockLightAt(chunk, x, worldY, z);
-        }
-    }
-
-    /**
      * 获取有效光照值（支持光照模式）
      *
      * <p>根据光照模式和维度属性计算最终的有效光照</p>
@@ -492,21 +445,6 @@ public class ChunkDataParser {
         boolean hasSkyAccess = hasSkyAccess(chunk, x, worldY, z);
 
         return lightMode.calculateEffectiveLight(blockLight, skyLight, hasSkyAccess, hasOverlay, false, worldHasSkylight);
-    }
-
-    /**
-     * 获取地表模式有效光照
-     *
-     * <p>只使用 BlockLight，忽略 SkyLight</p>
-     *
-     * @param chunk Chunk数据
-     * @param x 局部X坐标 (0-15)
-     * @param worldY 世界Y坐标
-     * @param z 局部Z坐标 (0-15)
-     * @return 方块光照值
-     */
-    public static byte getEffectiveLightSurface(ChunkInfo chunk, int x, int worldY, int z) {
-        return getBlockLightAt(chunk, x, worldY, z);
     }
 
     /**
@@ -551,88 +489,6 @@ public class ChunkDataParser {
 
         // 有 overlay 时使用 BlockLight
         return blockLight;
-    }
-
-    /**
-     * 解析chunk中所有section的光照数据
-     *
-     * <p>返回按sectionY排序的光照数据列表</p>
-     *
-     * @param chunk Chunk数据
-     * @return 光照数据列表
-     */
-    public static List<ChunkSectionParser.LightData> parseAllLightData(ChunkInfo chunk) {
-        List<ChunkSectionParser.LightData> lightDataList = new ArrayList<>();
-
-        for (ChunkSectionParser.SectionData section : chunk.sections()) {
-            ChunkSectionParser.LightData lightData = ChunkSectionParser.parseLightData(section);
-            if (lightData.hasLightData()) {
-                lightDataList.add(lightData);
-            }
-        }
-
-        return lightDataList;
-    }
-
-    /**
-     * Chunk光照统计信息记录
-     *
-     * <p>存储chunk的整体光照统计数据</p>
-     *
-     * @param sectionsWithLight 有光照数据的section数量
-     * @param totalBlockLightSum 方块光照总和
-     * @param totalSkyLightSum 天空光照总和
-     * @param avgBlockLight 平均方块光照
-     * @param avgSkyLight 平均天空光照
-     */
-    public record LightStats(
-        int sectionsWithLight,      // 有光照数据的section数量
-        int totalBlockLightSum,     // 方块光照总和
-        int totalSkyLightSum,       // 天空光照总和
-        float avgBlockLight,        // 平均方块光照
-        float avgSkyLight           // 平均天空光照
-    ) {}
-
-    /**
-     * 计算chunk的光照统计信息
-     *
-     * <p>遍历所有section，统计光照数据的平均值</p>
-     *
-     * @param chunk Chunk数据
-     * @return LightStats对象，包含光照统计数据
-     */
-    public static LightStats calculateLightStats(ChunkInfo chunk) {
-        int sectionsWithLight = 0;
-        int blockLightSum = 0;
-        int skyLightSum = 0;
-        int blockLightCount = 0;
-        int skyLightCount = 0;
-
-        for (ChunkSectionParser.SectionData section : chunk.sections()) {
-            if (section.blockLight() != null && section.blockLight().length == 2048) {
-                sectionsWithLight++;
-                // 解析所有光照值
-                ChunkSectionParser.LightData lightData = ChunkSectionParser.parseLightData(section);
-                for (byte b : lightData.blockLight()) {
-                    blockLightSum += b;
-                    blockLightCount++;
-                }
-                if (section.skyLight() != null && section.skyLight().length == 2048) {
-                    for (byte b : lightData.skyLight()) {
-                        skyLightSum += b;
-                        skyLightCount++;
-                    }
-                }
-            }
-        }
-
-        return new LightStats(
-            sectionsWithLight,
-            blockLightSum,
-            skyLightSum,
-            blockLightCount > 0 ? (float) blockLightSum / blockLightCount : 0,
-            skyLightCount > 0 ? (float) skyLightSum / skyLightCount : 0
-        );
     }
 
     /**

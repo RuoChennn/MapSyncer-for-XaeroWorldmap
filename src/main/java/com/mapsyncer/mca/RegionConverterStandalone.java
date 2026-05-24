@@ -593,7 +593,7 @@ public class RegionConverterStandalone {
                     data.biomeNames[relX][relZ] = biomeName != null ? biomeName : DEFAULT_BIOME;
                     data.lightMap[relX][relZ] = surfaceLight;
                     if (!overlayList.isEmpty()) {
-                        data.overlays[relX][relZ] = overlayList;
+                        data.overlays.put(relX * REGION_SIZE_BLOCKS + relZ, overlayList);
                     }
                 }
             }
@@ -743,7 +743,7 @@ public class RegionConverterStandalone {
                                     String biomeName = data.biomeNames[rx][rz];
                                     if (biomeName == null) biomeName = DEFAULT_BIOME;
                                     int light = data.lightMap[rx][rz];
-                                    List<OverlayData> overlays = data.overlays[rx][rz];
+                                    List<OverlayData> overlays = data.overlays.get(rx * REGION_SIZE_BLOCKS + rz);
                                     boolean hasOverlays = overlays != null && !overlays.isEmpty();
                                     boolean isGrass = BlockPropertyResolver.isGrassBlock(blockName);
                                     boolean topHeightDifferent = (height != topHeight);
@@ -1007,9 +1007,14 @@ public class RegionConverterStandalone {
         final boolean[][] chunkExists;
 
         /**
-         * Overlay 数据数组 (512x512)
+         * Overlay 数据稀疏存储（Map替代二维数组，节省内存）
+         *
+         * <p>key: pixelIndex = x * REGION_SIZE_BLOCKS + z</p>
+         * <p>value: 该像素的overlay列表</p>
+         *
+         * <p>大部分像素没有overlay，使用HashMap可节省约5.5MB/区域的内存开销</p>
          */
-        final List<OverlayData>[][] overlays;
+        final Map<Integer, List<OverlayData>> overlays;
 
         /**
          * 世界最低建筑高度
@@ -1027,7 +1032,6 @@ public class RegionConverterStandalone {
          * @param minBuildHeight 世界最低建筑高度
          * @param lightMode 光照模式
          */
-        @SuppressWarnings("unchecked")
         MapRegionData(int minBuildHeight, LightMode lightMode) {
             this.minBuildHeight = minBuildHeight;
             this.lightMode = lightMode;
@@ -1044,7 +1048,7 @@ public class RegionConverterStandalone {
             lightMap = new byte[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
             hasData = new boolean[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
             chunkExists = new boolean[CHUNKS_PER_REGION][CHUNKS_PER_REGION];  // 32x32 区块存在性追踪
-            overlays = new ArrayList[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+            overlays = new HashMap<>();  // 稀疏存储，预设初始容量减少扩容开销
         }
     }
 }

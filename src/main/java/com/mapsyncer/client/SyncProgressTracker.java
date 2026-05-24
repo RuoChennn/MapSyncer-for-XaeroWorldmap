@@ -52,8 +52,11 @@ public class SyncProgressTracker {
     /** 服务端响应超时时间（5秒） */
     private static final long SERVER_RESPONSE_TIMEOUT_MS = 5000;
 
-    /** 超时检查器 */
-    private static ScheduledExecutorService timeoutChecker = null;
+    /** 超时检查器（静态单例，避免重复创建线程池） */
+    private static volatile ScheduledExecutorService timeoutChecker = null;
+
+    /** 当前超时检查任务的Future（用于取消） */
+    private static volatile java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
 
     /**
      * 开始追踪同步进度。
@@ -74,13 +77,24 @@ public class SyncProgressTracker {
     /**
      * 启动超时检查器。
      * 如果在5秒内未收到服务端响应，根据服务端安装状态显示不同提示。
+     * 使用静态单例线程池，避免重复创建线程池浪费资源。
      */
     private static void startTimeoutChecker() {
-        if (timeoutChecker != null) {
-            timeoutChecker.shutdownNow();
+        // 取消之前的超时任务（如果存在）
+        if (timeoutFuture != null && !timeoutFuture.isDone()) {
+            timeoutFuture.cancel(false);
         }
-        timeoutChecker = Executors.newSingleThreadScheduledExecutor();
-        timeoutChecker.schedule(() -> {
+
+        // 使用静态单例线程池（首次创建后重用）
+        if (timeoutChecker == null || timeoutChecker.isShutdown()) {
+            timeoutChecker = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "mapsyncer-sync-progress-timer");
+                t.setDaemon(true);
+                return t;
+            });
+        }
+
+        timeoutFuture = timeoutChecker.schedule(() -> {
             if (tracking && !receivedFirstResponse) {
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
@@ -163,11 +177,23 @@ public class SyncProgressTracker {
 
     /**
      * 停止超时检查器。
-     * 在收到第一次响应或同步完成时调用。
+     * 取消当前超时任务，但保留线程池供下次使用。
      */
     private static void stopTimeoutChecker() {
-        if (timeoutChecker != null) {
-            timeoutChecker.shutdownNow();
+        if (timeoutFuture != null && !timeoutFuture.isDone()) {
+            timeoutFuture.cancel(false);
+            timeoutFuture = null;
+        }
+    }
+
+    /**
+     * 关闭线程池（服务器停止时调用）。
+     * 用于完全释放资源。
+     */
+    public static void shutdown() {
+        stopTimeoutChecker();
+        if (timeoutChecker != null && !timeoutChecker.isShutdown()) {
+            timeoutChecker.shutdown();
             timeoutChecker = null;
         }
     }

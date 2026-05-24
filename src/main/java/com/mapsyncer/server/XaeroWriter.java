@@ -55,21 +55,4 @@ public class XaeroWriter {
         Path zipFile = outputDir.resolve(regionX + "_" + regionZ + ".zip");
         return Files.exists(zipFile);
     }
-
-    /**
-     * 读取区域zip文件内容
-     *
-     * @param outputDir 输出目录路径
-     * @param regionX 区域X坐标
-     * @param regionZ 区域Z坐标
-     * @return zip文件的完整字节内容，如果文件不存在则返回null
-     * @throws IOException 如果读取过程中发生IO错误
-     */
-    public static byte[] readRegionFile(Path outputDir, int regionX, int regionZ) throws IOException {
-        Path zipFile = outputDir.resolve(regionX + "_" + regionZ + ".zip");
-        if (!Files.exists(zipFile)) {
-            return null;
-        }
-        return Files.readAllBytes(zipFile);
-    }
 }

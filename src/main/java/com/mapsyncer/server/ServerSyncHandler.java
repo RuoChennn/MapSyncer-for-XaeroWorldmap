@@ -905,6 +905,43 @@ public class ServerSyncHandler {
     }
 
     /**
+     * 清理离线玩家的残留状态
+     *
+     * <p>玩家异常断线时，onPlayerDisconnect可能未被调用，导致状态残留。
+     * 此方法定期检查并清理不在在线列表中的玩家状态。</p>
+     *
+     * @param onlinePlayerIds 当前在线玩家的UUID集合
+     */
+    public static void cleanupOfflinePlayers(Set<UUID> onlinePlayerIds) {
+        // 检查syncingPlayers中的玩家是否仍然在线
+        Set<UUID> toRemove = new HashSet<>();
+        for (UUID playerId : syncingPlayers) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+
+        // 清理离线玩家的状态
+        for (UUID playerId : toRemove) {
+            LOGGER.info("Cleaning up stale state for offline player {}", playerId);
+            syncingPlayers.remove(playerId);
+            playerSyncDimensions.remove(playerId);
+
+            // 中断同步线程（如果仍在运行）
+            Thread syncThread = syncThreads.remove(playerId);
+            if (syncThread != null && syncThread.isAlive()) {
+                syncThread.interrupt();
+            }
+
+            clearSpeedLimitState(playerId);
+        }
+
+        if (!toRemove.isEmpty()) {
+            LOGGER.debug("Cleaned up {} stale player states", toRemove.size());
+        }
+    }
+
+    /**
      * 按视距优先排序同步列表。
      * 视距内的region排在最前面，让玩家最先收到周围的地图数据。
      *

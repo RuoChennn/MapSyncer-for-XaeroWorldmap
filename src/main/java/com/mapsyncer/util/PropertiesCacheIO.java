@@ -99,35 +99,12 @@ public final class PropertiesCacheIO {
     }
 
     /**
-     * 解析 "timestamp:hash" 格式的缓存值
+     * 解析 "timestamp_seconds:hash" 格式的缓存值
      *
-     * @param value 缓存值字符串
-     * @return 包含 timestampSeconds 和 hash 的数组，解析失败返回 null
-     */
-    public static long[] parseTimestampHash(String value) {
-        if (value == null || value.isEmpty()) {
-            return null;
-        }
-
-        String[] parts = value.split(":");
-        if (parts.length == 2) {
-            try {
-                long ts = Long.parseLong(parts[0]);
-                return new long[]{ts, -1}; // hash 作为字符串，需要单独处理
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 解析 "timestamp_seconds:hash" 格式的缓存值，返回 TimestampHashEntry
-     *
-     * @param value 缓存值字符串
+     * @param value 缓存值字符串（如 "1234567890:abc12345"）
      * @return TimestampHashEntry 对象，解析失败返回 null
      */
-    public static TimestampHashEntry parseEntry(String value) {
+    public static TimestampHashEntry parseTimestampHash(String value) {
         if (value == null || value.isEmpty()) {
             return null;
         }

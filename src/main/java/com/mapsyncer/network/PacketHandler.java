@@ -43,14 +43,6 @@ public class PacketHandler {
             MapSyncer.MOD_ID, "server_installed");
 
     /**
-     * 初始化网络包处理器
-     *
-     * <p>预留的初始化方法，用于注册网络包处理器。</p>
-     */
-    public static void init() {
-    }
-
-    /**
      * 同步请求包 - 客户端发送各region的元数据（时间戳+哈希）
      *
      * <p>客户端通过此包向服务端报告本地已有的地图数据状态，

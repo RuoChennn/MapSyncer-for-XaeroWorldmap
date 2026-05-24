@@ -112,18 +112,12 @@ public class McaReader implements AutoCloseable {
     private final RandomAccessFile raf;
 
     /**
-     * MCA文件的完整路径
-     */
-    private final String filePath;
-
-    /**
      * 打开MCA文件并初始化读取器
      *
      * @param path MCA文件的完整路径
      * @throws IOException 如果文件不存在、文件太小或无法读取
      */
     public McaReader(String path) throws IOException {
-        this.filePath = path;
         this.raf = new RandomAccessFile(path, "r");
         if (raf.length() < SECTOR_SIZE * 2) {
             throw new IOException("MCA文件太小: " + raf.length() + " bytes");
@@ -312,14 +306,5 @@ public class McaReader implements AutoCloseable {
     @Override
     public void close() throws IOException {
         raf.close();
-    }
-
-    /**
-     * 获取MCA文件的完整路径
-     *
-     * @return 文件的绝对路径字符串
-     */
-    public String getFilePath() {
-        return filePath;
     }
 }

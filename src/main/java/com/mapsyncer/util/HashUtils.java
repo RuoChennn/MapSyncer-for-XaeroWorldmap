@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.CRC32;
@@ -25,7 +26,9 @@ public final class HashUtils {
     }
 
     /**
-     * 计算文件的CRC32哈希值
+     * 计算文件的CRC32哈希值（流式读取，避免内存峰值）
+     *
+     * <p>使用8KB固定缓冲区逐块读取文件，避免Files.readAllBytes导致的内存峰值。</p>
      *
      * @param filePath 文件路径
      * @return CRC32哈希值（8位十六进制字符串），文件不存在或读取失败返回 "00000000"
@@ -35,10 +38,14 @@ public final class HashUtils {
             return DEFAULT_HASH;
         }
 
-        try {
-            CRC32 crc32 = new CRC32();
-            byte[] data = Files.readAllBytes(filePath);
-            crc32.update(data);
+        CRC32 crc32 = new CRC32();
+        byte[] buffer = new byte[8192];  // 8KB 固定缓冲区
+
+        try (InputStream is = Files.newInputStream(filePath)) {
+            int len;
+            while ((len = is.read(buffer)) != -1) {
+                crc32.update(buffer, 0, len);
+            }
             return String.format("%08x", crc32.getValue());
         } catch (IOException e) {
             LOGGER.warn("Failed to compute hash for {}", filePath, e);

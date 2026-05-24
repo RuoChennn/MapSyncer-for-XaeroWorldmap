@@ -15,7 +15,6 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.config.ModConfig.Type;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -71,7 +70,6 @@ public class MapSyncer {
      */
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
-        modBus.addListener(this::commonSetup);
 
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
 
@@ -107,18 +105,6 @@ public class MapSyncer {
             MapPacketReceiver.clearSyncData();
             LOGGER.info("Client disconnected from server, reset server status");
         }
-    }
-
-    /**
-     * 公共初始化事件处理。
-     *
-     * 在模组加载的公共设置阶段初始化网络包处理器。
-     * 该方法在主线程上异步执行，确保网络注册的正确顺序。
-     *
-     * @param event 公共设置事件
-     */
-    private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(PacketHandler::init);
     }
 
     /**

@@ -1,7 +1,5 @@
 package com.mapsyncer.mca;
 
-import com.mapsyncer.nbt.Tag;
-
 import java.util.*;
 
 /**
@@ -255,25 +253,13 @@ public class BlockClassifier {
     }
 
     /**
-     * 获取方块的 overlay 不透明度（使用 lightBlock 值）
-     *
-     * <p>参考 Xaero MapWriter: overlayBuilder.build(state, state.getLightBlock(...), ...)</p>
-     *
-     * <p>典型值:</p>
-     * <ul>
-     *   <li>水: 2 (水的 lightBlock)</li>
-     *   <li>熔岩: 15 (熔岩的 lightBlock)</li>
-     *   <li>冰: 2 (冰的 lightBlock)</li>
-     *   <li>玻璃: 0 (玻璃的 lightBlock)</li>
-     *   <li>树叶: 1 (树叶的 lightBlock)</li>
-     * </ul>
+     * 判断方块是否应该作为 overlay 处理
      *
      * @param blockName 方块名称字符串
-     * @return overlay不透明度值
+     * @return 如果应该作为overlay则返回true
      */
-    public static int getOverlayOpacity(String blockName) {
-        // 使用 lightBlock 值作为 opacity
-        return getLightBlock(blockName);
+    public static boolean shouldOverlay(String blockName) {
+        return isTranslucentFluid(blockName) || isTransparent(blockName);
     }
 
     /**
@@ -314,155 +300,5 @@ public class BlockClassifier {
         // 大多数含水方块遮光值为 0（如栅栏门、楼梯等）
         // 默认值：大多数实体方块遮挡全部光照
         return 15;
-    }
-
-    /**
-     * 判断方块是否应该作为 overlay 处理
-     *
-     * @param blockName 方块名称字符串
-     * @return 如果应该作为overlay则返回true
-     */
-    public static boolean shouldOverlay(String blockName) {
-        return isTranslucentFluid(blockName) || isTransparent(blockName);
-    }
-
-    /**
-     * 判断是否为含水方块（waterlogged=true）
-     *
-     * @param state 方块状态对象
-     * @return 如果是含水方块则返回true
-     */
-    public static boolean isWaterlogged(ChunkSectionParser.BlockState state) {
-        return state.isWaterlogged();
-    }
-
-    /**
-     * 判断方块是否为表面方块且上方有水（含水方块）
-     *
-     * @param state 方块状态对象
-     * @return 如果是含水表面方块则返回true
-     */
-    public static boolean isWaterloggedSurface(ChunkSectionParser.BlockState state) {
-        return state.isWaterloggedSurface();
-    }
-
-    /**
-     * 使用 BlockState 判断是否为空气
-     *
-     * @param state 方块状态对象
-     * @return 如果是空气方块则返回true
-     */
-    public static boolean isAir(ChunkSectionParser.BlockState state) {
-        return isAir(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为水
-     *
-     * @param state 方块状态对象
-     * @return 如果是水方块则返回true
-     */
-    public static boolean isWater(ChunkSectionParser.BlockState state) {
-        return isWater(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为流体
-     *
-     * @param state 方块状态对象
-     * @return 如果是流体方块则返回true
-     */
-    public static boolean isFluid(ChunkSectionParser.BlockState state) {
-        return isFluid(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为透明流体
-     *
-     * @param state 方块状态对象
-     * @return 如果是透明流体（水）则返回true
-     */
-    public static boolean isTranslucentFluid(ChunkSectionParser.BlockState state) {
-        return isTranslucentFluid(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为透明方块
-     *
-     * @param state 方块状态对象
-     * @return 如果是透明方块则返回true
-     */
-    public static boolean isTransparent(ChunkSectionParser.BlockState state) {
-        return isTransparent(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为隐形方块
-     *
-     * @param state 方块状态对象
-     * @return 如果是隐形方块则返回true
-     */
-    public static boolean isInvisible(ChunkSectionParser.BlockState state) {
-        return isInvisible(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为花
-     *
-     * @param state 方块状态对象
-     * @return 如果是花方块则返回true
-     */
-    public static boolean isFlower(ChunkSectionParser.BlockState state) {
-        return isFlower(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否有地图颜色
-     *
-     * @param state 方块状态对象
-     * @return 如果有地图颜色则返回true
-     */
-    public static boolean hasVanillaColor(ChunkSectionParser.BlockState state) {
-        return hasVanillaColor(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否为草方块
-     *
-     * @param state 方块状态对象
-     * @return 如果是草方块则返回true
-     */
-    public static boolean isGrassBlock(ChunkSectionParser.BlockState state) {
-        return isGrassBlock(state.name());
-    }
-
-    /**
-     * 使用 BlockState 获取 overlay 不透明度
-     *
-     * @param state 方块状态对象
-     * @return overlay不透明度值
-     */
-    public static int getOverlayOpacity(ChunkSectionParser.BlockState state) {
-        return getOverlayOpacity(state.name());
-    }
-
-    /**
-     * 使用 BlockState 获取光照遮挡值
-     *
-     * @param state 方块状态对象
-     * @return 光照遮挡值
-     */
-    public static int getLightBlock(ChunkSectionParser.BlockState state) {
-        return getLightBlock(state.name());
-    }
-
-    /**
-     * 使用 BlockState 判断是否应该作为 overlay
-     *
-     * @param state 方块状态对象
-     * @return 如果应该作为overlay则返回true
-     */
-    public static boolean shouldOverlay(ChunkSectionParser.BlockState state) {
-        return shouldOverlay(state.name());
     }
 }

@@ -201,21 +201,6 @@ public class ClientHashManager {
     }
 
     /**
-     * 获取区域缺失区块的详细信息。
-     *
-     * @param regionFile 区域 zip 文件路径
-     * @return 缺失区块坐标集合（0-63）
-     */
-    public static Set<Integer> getMissingChunksInfo(Path regionFile) {
-        try {
-            return RegionMerger.findMissingChunks(regionFile);
-        } catch (IOException e) {
-            LOGGER.error("Failed to get missing chunks info for {}", regionFile, e);
-            return new HashSet<>();
-        }
-    }
-
-    /**
      * 构建服务器格式的相对路径。
      * 将 Xaero 的维度名称转换为 Minecraft 维度名称。
      * 移除 mw$worldId 目录层级。

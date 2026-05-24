@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * 维度路径映射管理器
@@ -613,6 +614,8 @@ public class DimensionPathMapping {
     /**
      * 扫描世界目录并自动注册所有发现的维度映射
      *
+     * <p>使用try-with-resources确保Files.list返回的Stream被正确关闭。</p>
+     *
      * @param worldRoot 世界根目录路径
      * @return 已注册的维度映射数量
      */
@@ -625,52 +628,53 @@ public class DimensionPathMapping {
             // 1. 扫描 dimensions/ 目录（Mod 维度新格式）
             Path dimensionsDir = worldRoot.resolve("dimensions");
             if (Files.exists(dimensionsDir)) {
-                Files.list(dimensionsDir)
-                    .filter(Files::isDirectory)
-                    .forEach(namespaceDir -> {
-                        String namespace = namespaceDir.getFileName().toString();
-                        // 跳过 minecraft（原版维度不使用此格式）
-                        if ("minecraft".equals(namespace)) {
-                            LOGGER.debug("Skipping minecraft namespace in dimensions/ (vanilla dims use traditional format)");
-                            return;
-                        }
-                        try {
-                            Files.list(namespaceDir)
-                                .filter(Files::isDirectory)
-                                .forEach(dimDir -> {
-                                    String dimName = dimDir.getFileName().toString();
-                                    Path regionDir = dimDir.resolve("region");
-                                    if (Files.exists(regionDir)) {
-                                        String dimPath = namespace + ":" + dimName;
-                                        if (!pathToFolder.containsKey(dimPath)) {
-                                            registerMapping(dimPath, "dimensions/" + namespace + "/" + dimName);
-                                            LOGGER.info("Auto-registered Mod dimension: {} -> dimensions/{}/{}", dimPath, namespace, dimName);
+                try (Stream<Path> namespaceStream = Files.list(dimensionsDir)) {
+                    namespaceStream.filter(Files::isDirectory)
+                        .forEach(namespaceDir -> {
+                            String namespace = namespaceDir.getFileName().toString();
+                            // 跳过 minecraft（原版维度不使用此格式）
+                            if ("minecraft".equals(namespace)) {
+                                LOGGER.debug("Skipping minecraft namespace in dimensions/ (vanilla dims use traditional format)");
+                                return;
+                            }
+                            try (Stream<Path> dimStream = Files.list(namespaceDir)) {
+                                dimStream.filter(Files::isDirectory)
+                                    .forEach(dimDir -> {
+                                        String dimName = dimDir.getFileName().toString();
+                                        Path regionDir = dimDir.resolve("region");
+                                        if (Files.exists(regionDir)) {
+                                            String dimPath = namespace + ":" + dimName;
+                                            if (!pathToFolder.containsKey(dimPath)) {
+                                                registerMapping(dimPath, "dimensions/" + namespace + "/" + dimName);
+                                                LOGGER.info("Auto-registered Mod dimension: {} -> dimensions/{}/{}", dimPath, namespace, dimName);
+                                            }
                                         }
-                                    }
-                                });
-                        } catch (Exception e) {
-                            LOGGER.warn("Error scanning namespace directory: {}", namespace, e);
-                        }
-                    });
+                                    });
+                            } catch (Exception e) {
+                                LOGGER.warn("Error scanning namespace directory: {}", namespace, e);
+                            }
+                        });
+                }
             }
 
             // 2. 扫描 DIM{id} 格式目录（传统格式 - 可能是部分旧 Mod）
-            Files.list(worldRoot)
-                .filter(Files::isDirectory)
-                .forEach(dir -> {
-                    String dirName = dir.getFileName().toString();
-                    if (dirName.startsWith("DIM") || dirName.startsWith("DIM-")) {
-                        // 跳过原版维度（已在预设映射中）
-                        if ("DIM-1".equals(dirName) || "DIM1".equals(dirName)) {
-                            return;
+            try (Stream<Path> rootStream = Files.list(worldRoot)) {
+                rootStream.filter(Files::isDirectory)
+                    .forEach(dir -> {
+                        String dirName = dir.getFileName().toString();
+                        if (dirName.startsWith("DIM") || dirName.startsWith("DIM-")) {
+                            // 跳过原版维度（已在预设映射中）
+                            if ("DIM-1".equals(dirName) || "DIM1".equals(dirName)) {
+                                return;
+                            }
+                            Path regionDir = dir.resolve("region");
+                            if (Files.exists(regionDir)) {
+                                // 未知 DIM{id} 格式，记录但不注册（无法确定维度 ID）
+                                LOGGER.info("Found unknown DIM directory: {} (cannot determine dimension ID)", dirName);
+                            }
                         }
-                        Path regionDir = dir.resolve("region");
-                        if (Files.exists(regionDir)) {
-                            // 未知 DIM{id} 格式，记录但不注册（无法确定维度 ID）
-                            LOGGER.info("Found unknown DIM directory: {} (cannot determine dimension ID)", dirName);
-                        }
-                    }
-                });
+                    });
+            }
 
             // 3. 检查主世界（region/ 目录）
             Path overworldRegion = worldRoot.resolve("region");
