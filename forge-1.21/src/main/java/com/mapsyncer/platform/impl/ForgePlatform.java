@@ -23,39 +23,39 @@ import java.util.Set;
 import java.util.HashSet;
 
 /**
- * Forge 1.20.1 平台实现
+ * Forge 1.21 平台实现
  *
- * 实现 Platform 接口，适配 Forge 1.20.1 的 API。
+ * 实现 Platform 接口，适配 Forge 1.21.x 的 API。
  * 主要差异点：
- * - ForgeRegistries 代替 BuiltInRegistries（部分）
- * - SimpleNetworkWrapper 代替 StreamCodec 网络
- * - ForgeConfigSpec 代替 NeoForge 配置
+ * - Forge 1.21 使用 Java 21
+ * - SimpleNetworkWrapper 网络（非 StreamCodec）
+ * - ForgeRegistries + BuiltInRegistries 双重注册表
  */
-public class ForgeLegacyPlatform implements Platform {
+public class ForgePlatform implements Platform {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ForgeLegacyPlatform.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ForgePlatform.class);
 
     // 缓存方块属性查询结果
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     @Override
     public PlatformType getType() {
-        return PlatformType.FORGE_LEGACY;
+        return PlatformType.FORGE;
     }
 
     @Override
     public String getMinecraftVersion() {
-        return "1.20.1";
+        return "1.21.x";
     }
 
     @Override
     public int getMajorVersion() {
-        return 20;
+        return 21;
     }
 
     @Override
     public String getPlatformName() {
-        return "Forge 1.20.1";
+        return "Forge 1.21";
     }
 
     // ===== 方块属性 =====
@@ -70,7 +70,7 @@ public class ForgeLegacyPlatform implements Platform {
 
         try {
             ResourceLocation loc = ResourceLocation.parse(blockName);
-            // Forge 1.20: 使用 ForgeRegistries 或 BuiltInRegistries
+            // Forge 1.21: BuiltInRegistries 可用
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {
@@ -144,11 +144,10 @@ public class ForgeLegacyPlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 配置系统（Forge 使用 ForgeConfigSpec）=====
+    // ===== 配置系统 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
-        // TODO: 从 ForgeConfigSpec 读取
         return ModConfig.SERVER.syncSpeedLimitKBps.get();
     }
 
