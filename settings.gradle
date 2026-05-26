@@ -21,8 +21,7 @@ include 'core'              // 纯 Java 核心（MCA/NBT/工具类）- 100% 复�
 include 'platform-api'      // 平台抽象接口 - 100% 复用
 include 'neoforge-1.21'     // NeoForge 1.21 实现（当前主项目）
 
-// Forge 子项目（需要重写网络层代码）
-// 网络系统差异：NeoForge 使用 StreamCodec，Forge 使用 SimpleNetworkWrapper
+// Forge 子项目（需要进一步调整 API，Forge 1.20 网络层与 NeoForge 有差异）
 // include 'forge-1.20'        // Forge 1.20.1 实现
 // include 'forge-1.21'        // Forge 1.21 实现
 
