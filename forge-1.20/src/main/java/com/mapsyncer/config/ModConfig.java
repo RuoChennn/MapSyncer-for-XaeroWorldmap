@@ -2,11 +2,11 @@ package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.UpdateMode;
-import net.minecraftforge.neoforge.common.ModConfigSpec;
-import net.minecraftforge.neoforge.common.ModConfigSpec.BooleanValue;
-import net.minecraftforge.neoforge.common.ModConfigSpec.IntValue;
-import net.minecraftforge.neoforge.common.ModConfigSpec.EnumValue;
-import net.minecraftforge.neoforge.common.ModConfigSpec.ConfigValue;
+import net.minecraftforge.common.ModConfigSpec;
+import net.minecraftforge.common.ModConfigSpec.BooleanValue;
+import net.minecraftforge.common.ModConfigSpec.IntValue;
+import net.minecraftforge.common.ModConfigSpec.EnumValue;
+import net.minecraftforge.common.ModConfigSpec.ConfigValue;
 
 import java.util.ArrayList;
 import java.util.List;

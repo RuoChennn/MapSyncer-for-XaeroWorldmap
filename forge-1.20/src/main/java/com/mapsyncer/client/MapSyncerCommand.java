@@ -20,7 +20,7 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.EventBusSubscriber;
-import net.minecraftforge.neoforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

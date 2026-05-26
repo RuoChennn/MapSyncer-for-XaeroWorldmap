@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.EventBusSubscriber;
-import net.minecraftforge.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
