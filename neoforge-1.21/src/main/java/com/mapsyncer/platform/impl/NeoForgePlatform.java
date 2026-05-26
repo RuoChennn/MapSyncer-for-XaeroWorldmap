@@ -10,12 +10,9 @@ import com.mapsyncer.server.BlockPropertyResolver;
 import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,15 +22,20 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.HashSet;
 
 /**
  * NeoForge 1.21 平台实现
  *
  * 实现 Platform 接口，适配 NeoForge 1.21.x 的 API。
+ * 整合现有服务端/客户端代码，提供统一的平台抽象。
  */
 public class NeoForgePlatform implements Platform {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NeoForgePlatform.class);
+
+    // 缓存方块属性查询结果
+    private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     @Override
     public PlatformType getType() {
@@ -59,25 +61,33 @@ public class NeoForgePlatform implements Platform {
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
+        // 检查缓存
+        BlockProperties cached = blockPropertiesCache.get(blockName);
+        if (cached != null) {
+            return cached;
+        }
+
         try {
             ResourceLocation loc = ResourceLocation.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {
                 LOGGER.debug("Block not found: {}, using pattern color", blockName);
-                return new BlockProperties(
+                BlockProperties fallback = new BlockProperties(
                     false, false, false, false, false, false, false, false,
                     false, false, 15, 0, false, getPatternColor(blockName)
                 );
+                blockPropertiesCache.put(blockName, fallback);
+                return fallback;
             }
 
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 使用 BlockPropertyResolver 获取属性
+            // 使用 BlockPropertyResolver 获取属性（服务端可用）
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
-            return new BlockProperties(
+            BlockProperties result = new BlockProperties(
                 props.isAir(),
                 props.isWater(),
                 props.isLava(),
@@ -93,6 +103,9 @@ public class NeoForgePlatform implements Platform {
                 props.canBeWaterlogged(),
                 BlockColorMapper.getBlockColor(state)
             );
+
+            blockPropertiesCache.put(blockName, result);
+            return result;
 
         } catch (Exception e) {
             LOGGER.warn("Failed to get block properties for {}: {}", blockName, e.getMessage());
@@ -175,22 +188,40 @@ public class NeoForgePlatform implements Platform {
 
     @Override
     public Path getServerMapCacheDir() {
-        // 服务端缓存目录由 ConversionOrchestrator 管理
+        // 服务端缓存目录
         return Path.of("server_map_cache");
     }
 
     @Override
     public Path getClientXaeroWorldMapDir() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.gameDirectory == null) {
-            return null;
+        try {
+            // 使用 XaeroMapIntegrator 获取当前服务器目录
+            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+            if (serverDir != null) {
+                return serverDir;
+            }
+
+            // 回退：返回默认 Xaero 目录
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.gameDirectory != null) {
+                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
         }
-        return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
+        return null;
     }
 
     @Override
     public String getCurrentServerDirectoryName() {
-        // 由 XaeroMapIntegrator 处理
+        try {
+            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+            if (serverDir != null) {
+                return serverDir.getFileName().toString();
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Failed to get server directory name: {}", e.getMessage());
+        }
         return "Multiplayer_Server";
     }
 
@@ -233,7 +264,32 @@ public class NeoForgePlatform implements Platform {
 
     @Override
     public void recordUpdatedRegions(Set<RegionCoord> regions) {
-        // 由 XaeroMapIntegrator 处理
-        LOGGER.debug("Recording {} updated regions", regions.size());
+        try {
+            // 转换 Platform.RegionCoord 到 XaeroMapIntegrator.RegionCoord
+            Set<com.mapsyncer.client.XaeroMapIntegrator.RegionCoord> xaeroRegions = new HashSet<>();
+            for (RegionCoord coord : regions) {
+                xaeroRegions.add(new com.mapsyncer.client.XaeroMapIntegrator.RegionCoord(
+                    coord.x(), coord.z(), coord.caveLayer()
+                ));
+            }
+            com.mapsyncer.client.XaeroMapIntegrator.recordUpdatedRegionCoords(xaeroRegions);
+            LOGGER.debug("Recorded {} updated regions via XaeroMapIntegrator", regions.size());
+        } catch (Exception e) {
+            LOGGER.warn("Failed to record updated regions: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 清除方块属性缓存
+     */
+    public static void clearBlockPropertiesCache() {
+        blockPropertiesCache.clear();
+    }
+
+    /**
+     * 获取缓存大小
+     */
+    public static int getCacheSize() {
+        return blockPropertiesCache.size();
     }
 }
