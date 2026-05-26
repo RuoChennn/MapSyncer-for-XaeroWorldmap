@@ -1,0 +1,561 @@
+package com.mapsyncer.config;
+
+import com.mapsyncer.mca.DimensionTypeInfo;
+import com.mapsyncer.platform.UpdateMode;
+import me.shedaniel.clothconfig2.api.ConfigBuilder;
+import me.shedaniel.clothconfig2.api.ConfigCategory;
+import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.Properties;
+
+/**
+ * Mod 配置类 - Fabric 1.20.1 版本
+ *
+ * 使用 Cloth Config API 进行配置管理，配置文件使用 Properties 格式存储。
+ */
+public class ModConfig {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModConfig.class);
+
+    /** 配置文件名 */
+    private static final String CONFIG_FILE_NAME = "mapsyncer-server.properties";
+
+    /** 单例实例 */
+    private static volatile ServerConfig instance;
+
+    /** 配置文件路径 */
+    private static volatile Path configPath;
+
+    /**
+     * 获取服务端配置实例
+     *
+     * @param configDir 配置目录路径（通常是世界目录下的 serverconfig 目录）
+     * @return 服务端配置实例
+     */
+    public static ServerConfig getServerConfig(Path configDir) {
+        if (instance == null) {
+            synchronized (ServerConfig.class) {
+                if (instance == null) {
+                    configPath = configDir.resolve(CONFIG_FILE_NAME);
+                    instance = new ServerConfig(configPath);
+                    LOGGER.info("ModConfig initialized with path: {}", configPath);
+                }
+            }
+        }
+        return instance;
+    }
+
+    /**
+     * 重置配置实例（用于测试或服务器重启）
+     */
+    public static void resetInstance() {
+        if (instance != null) {
+            instance = null;
+            configPath = null;
+            LOGGER.info("ModConfig instance reset");
+        }
+    }
+
+    /**
+     * 获取当前配置实例
+     */
+    public static ServerConfig SERVER() {
+        if (instance == null) {
+            throw new IllegalStateException("ServerConfig not initialized. Call getServerConfig() first.");
+        }
+        return instance;
+    }
+
+    /**
+     * 扫描模式枚举
+     *
+     * <p>定义维度地图的扫描方式</p>
+     */
+    public enum ScanMode {
+        /**
+         * 地表模式：从高度图向下扫描
+         */
+        SURFACE,
+
+        /**
+         * 洞穴模式：从固定高度向下扫描
+         */
+        CAVE
+    }
+
+    /**
+     * 维度扫描配置记录
+     *
+     * @param dimension 维度 ID
+     * @param scanMode 扫描模式
+     * @param caveStart 洞穴起始高度
+     * @param dimTypeInfo 维度类型信息
+     */
+    public record DimensionScanConfig(
+        String dimension,
+        ScanMode scanMode,
+        int caveStart,
+        DimensionTypeInfo dimTypeInfo
+    ) {
+        public DimensionScanConfig(String dimension, ScanMode scanMode, int caveStart) {
+            this(dimension, scanMode, caveStart, null);
+        }
+
+        public int getCaveLayer() {
+            if (scanMode == ScanMode.SURFACE) {
+                return Integer.MAX_VALUE;
+            }
+            if (caveStart == Integer.MAX_VALUE || caveStart == Integer.MIN_VALUE) {
+                return caveStart;
+            }
+            return caveStart >> 4;
+        }
+
+        public int getCaveDepth(int minBuildHeight) {
+            if (scanMode == ScanMode.SURFACE) {
+                return 0;
+            }
+            return Math.max(30, caveStart - minBuildHeight);
+        }
+
+        public DimensionTypeInfo getDimensionTypeInfo() {
+            if (dimTypeInfo != null) {
+                return dimTypeInfo;
+            }
+            return DimensionTypeInfo.fromDimensionId(dimension);
+        }
+    }
+
+    /**
+     * 服务端配置类
+     *
+     * 使用 Properties 格式存储配置，支持 Cloth Config GUI。
+     */
+    public static class ServerConfig {
+
+        // ========== 通用设置 ==========
+        private volatile boolean enableDebugLogging = false;
+        private volatile int maxConcurrentRegions = 4;
+        private volatile int maxSyncPacketSize = 262144;
+        private volatile int syncSpeedLimitKBps = 1024;
+
+        // ========== 增量更新设置 ==========
+        private volatile UpdateMode incrementalUpdateMode = UpdateMode.DISABLED;
+        private volatile int incrementalUpdateIntervalTicks = 200;
+        private volatile int scheduledUpdateHour = 4;
+        private volatile int scheduledUpdateMinute = 0;
+
+        // ========== 维度扫描配置 ==========
+        private volatile ScanMode defaultScanMode = ScanMode.SURFACE;
+        private volatile int defaultCaveStart = 63;
+        private volatile List<String> dimensionConfigs = new ArrayList<>();
+
+        /** 配置文件路径 */
+        private final Path configFile;
+
+        /**
+         * 构造服务端配置
+         *
+         * @param configFile 配置文件路径
+         */
+        public ServerConfig(Path configFile) {
+            this.configFile = configFile;
+            load();
+            // 初始化默认维度配置
+            if (dimensionConfigs.isEmpty()) {
+                dimensionConfigs = getDefaultDimensionConfigStrings();
+            }
+        }
+
+        /**
+         * 获取原版维度的默认配置
+         */
+        private List<String> getDefaultDimensionConfigStrings() {
+            List<String> defaults = new ArrayList<>();
+            defaults.add("minecraft:overworld|SURFACE|63|true|false|-64|384|384");
+            defaults.add("minecraft:the_nether|CAVE|63|false|true|0|256|256");
+            defaults.add("minecraft:the_end|SURFACE|63|false|false|0|256|256");
+            return defaults;
+        }
+
+        /**
+         * 从文件加载配置
+         */
+        private void load() {
+            if (!Files.exists(configFile)) {
+                LOGGER.info("Config file not found, using defaults");
+                return;
+            }
+
+            try (InputStream is = Files.newInputStream(configFile)) {
+                Properties props = new Properties();
+                props.load(is);
+
+                // 通用设置
+                enableDebugLogging = Boolean.parseBoolean(props.getProperty("enableDebugLogging", "false"));
+                maxConcurrentRegions = Integer.parseInt(props.getProperty("maxConcurrentRegions", "4"));
+                maxSyncPacketSize = Integer.parseInt(props.getProperty("maxSyncPacketSize", "262144"));
+                syncSpeedLimitKBps = Integer.parseInt(props.getProperty("syncSpeedLimitKBps", "1024"));
+
+                // 增量更新设置
+                incrementalUpdateMode = UpdateMode.valueOf(props.getProperty("incrementalUpdateMode", "DISABLED"));
+                incrementalUpdateIntervalTicks = Integer.parseInt(props.getProperty("incrementalUpdateIntervalTicks", "200"));
+                scheduledUpdateHour = Integer.parseInt(props.getProperty("scheduledUpdateHour", "4"));
+                scheduledUpdateMinute = Integer.parseInt(props.getProperty("scheduledUpdateMinute", "0"));
+
+                // 维度扫描配置
+                defaultScanMode = ScanMode.valueOf(props.getProperty("defaultScanMode", "SURFACE"));
+                defaultCaveStart = Integer.parseInt(props.getProperty("defaultCaveStart", "63"));
+
+                String dimsStr = props.getProperty("dimensionConfigs", "");
+                dimensionConfigs.clear();
+                if (!dimsStr.isEmpty()) {
+                    for (String dim : dimsStr.split(";")) {
+                        if (!dim.trim().isEmpty()) {
+                            dimensionConfigs.add(dim.trim());
+                        }
+                    }
+                }
+
+                LOGGER.info("Loaded config from: {}", configFile);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to load config, using defaults: {}", e.getMessage());
+            }
+        }
+
+        /**
+         * 保存配置到文件
+         */
+        public void save() {
+            try {
+                Files.createDirectories(configFile.getParent());
+
+                Properties props = new Properties();
+
+                // 通用设置
+                props.setProperty("enableDebugLogging", String.valueOf(enableDebugLogging));
+                props.setProperty("maxConcurrentRegions", String.valueOf(maxConcurrentRegions));
+                props.setProperty("maxSyncPacketSize", String.valueOf(maxSyncPacketSize));
+                props.setProperty("syncSpeedLimitKBps", String.valueOf(syncSpeedLimitKBps));
+
+                // 增量更新设置
+                props.setProperty("incrementalUpdateMode", incrementalUpdateMode.name());
+                props.setProperty("incrementalUpdateIntervalTicks", String.valueOf(incrementalUpdateIntervalTicks));
+                props.setProperty("scheduledUpdateHour", String.valueOf(scheduledUpdateHour));
+                props.setProperty("scheduledUpdateMinute", String.valueOf(scheduledUpdateMinute));
+
+                // 维度扫描配置
+                props.setProperty("defaultScanMode", defaultScanMode.name());
+                props.setProperty("defaultCaveStart", String.valueOf(defaultCaveStart));
+                props.setProperty("dimensionConfigs", String.join(";", dimensionConfigs));
+
+                try (OutputStream os = Files.newOutputStream(configFile)) {
+                    props.store(os, "MapSyncer Server Configuration");
+                }
+
+                LOGGER.info("Saved config to: {}", configFile);
+            } catch (Exception e) {
+                LOGGER.error("Failed to save config: {}", e.getMessage());
+            }
+        }
+
+        // ========== Getter 方法 ==========
+
+        public boolean getEnableDebugLogging() {
+            return enableDebugLogging;
+        }
+
+        public int getMaxConcurrentRegions() {
+            return maxConcurrentRegions;
+        }
+
+        public int getMaxSyncPacketSize() {
+            return maxSyncPacketSize;
+        }
+
+        public int getSyncSpeedLimitKBps() {
+            return syncSpeedLimitKBps;
+        }
+
+        public UpdateMode getIncrementalUpdateMode() {
+            return incrementalUpdateMode;
+        }
+
+        public int getIncrementalUpdateIntervalTicks() {
+            return incrementalUpdateIntervalTicks;
+        }
+
+        public int getScheduledUpdateHour() {
+            return scheduledUpdateHour;
+        }
+
+        public int getScheduledUpdateMinute() {
+            return scheduledUpdateMinute;
+        }
+
+        public ScanMode getDefaultScanMode() {
+            return defaultScanMode;
+        }
+
+        public int getDefaultCaveStart() {
+            return defaultCaveStart;
+        }
+
+        public List<String> getDimensionConfigs() {
+            return new ArrayList<>(dimensionConfigs);
+        }
+
+        // ========== Setter 方法 ==========
+
+        public void setEnableDebugLogging(boolean value) {
+            enableDebugLogging = value;
+        }
+
+        public void setMaxConcurrentRegions(int value) {
+            maxConcurrentRegions = Math.max(1, Math.min(16, value));
+        }
+
+        public void setMaxSyncPacketSize(int value) {
+            maxSyncPacketSize = Math.max(65536, Math.min(1048576, value));
+        }
+
+        public void setSyncSpeedLimitKBps(int value) {
+            syncSpeedLimitKBps = Math.max(0, Math.min(10240, value));
+        }
+
+        public void setIncrementalUpdateMode(UpdateMode value) {
+            incrementalUpdateMode = value;
+        }
+
+        public void setIncrementalUpdateIntervalTicks(int value) {
+            incrementalUpdateIntervalTicks = Math.max(20, Math.min(72000, value));
+        }
+
+        public void setScheduledUpdateHour(int value) {
+            scheduledUpdateHour = Math.max(0, Math.min(23, value));
+        }
+
+        public void setScheduledUpdateMinute(int value) {
+            scheduledUpdateMinute = Math.max(0, Math.min(59, value));
+        }
+
+        public void setDefaultScanMode(ScanMode value) {
+            defaultScanMode = value;
+        }
+
+        public void setDefaultCaveStart(int value) {
+            defaultCaveStart = Math.max(-512, Math.min(512, value));
+        }
+
+        public void setDimensionConfigs(List<String> value) {
+            dimensionConfigs = new ArrayList<>(value);
+        }
+
+        /**
+         * 解析维度配置列表
+         */
+        public List<DimensionScanConfig> parseDimensionConfigs() {
+            List<DimensionScanConfig> result = new ArrayList<>();
+            for (String configStr : dimensionConfigs) {
+                DimensionScanConfig config = parseConfigString(configStr);
+                if (config != null) {
+                    result.add(config);
+                }
+            }
+            return result;
+        }
+
+        /**
+         * 解析单个配置字符串
+         */
+        private DimensionScanConfig parseConfigString(String configStr) {
+            if (configStr == null || configStr.isEmpty()) {
+                return null;
+            }
+
+            String[] parts = configStr.split("\\|");
+            if (parts.length < 1) {
+                return null;
+            }
+
+            String dimension = parts[0];
+            int caveStart = 63;
+            DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimension);
+
+            try {
+                boolean isNewFormat = parts.length > 1 &&
+                    (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
+
+                int scanModeIndex = isNewFormat ? 1 : 2;
+                int caveStartIndex = isNewFormat ? 2 : 3;
+                int dimTypeStartIndex = isNewFormat ? 3 : 4;
+
+                String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
+
+                if (parts.length > caveStartIndex) {
+                    caveStart = Integer.parseInt(parts[caveStartIndex]);
+                }
+
+                if (parts.length >= dimTypeStartIndex + 5) {
+                    boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex]);
+                    boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1]);
+                    int minY = Integer.parseInt(parts[dimTypeStartIndex + 2]);
+                    int height = Integer.parseInt(parts[dimTypeStartIndex + 3]);
+                    int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4]);
+                    dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
+                }
+
+                ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
+                return new DimensionScanConfig(dimension, mode, caveStart, dimTypeInfo);
+            } catch (NumberFormatException e) {
+                return new DimensionScanConfig(dimension, ScanMode.SURFACE, 63, dimTypeInfo);
+            } catch (IllegalArgumentException e) {
+                return new DimensionScanConfig(dimension, ScanMode.SURFACE, caveStart, dimTypeInfo);
+            }
+        }
+
+        /**
+         * 获取特定维度的扫描配置
+         */
+        public DimensionScanConfig getConfigForDimension(String dimensionPath) {
+            String normalizedPath = dimensionPath.replace("minecraft:", "").toLowerCase();
+
+            // 原版维度的内置默认配置
+            if (normalizedPath.equals("the_nether")) {
+                for (DimensionScanConfig config : parseDimensionConfigs()) {
+                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
+                    if (configDim.equals("the_nether")) {
+                        return config;
+                    }
+                }
+                return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, 63,
+                    DimensionTypeInfo.nether());
+            }
+
+            if (normalizedPath.equals("overworld")) {
+                for (DimensionScanConfig config : parseDimensionConfigs()) {
+                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
+                    if (configDim.equals("overworld")) {
+                        return config;
+                    }
+                }
+                return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, 63,
+                    DimensionTypeInfo.overworld());
+            }
+
+            if (normalizedPath.equals("the_end")) {
+                for (DimensionScanConfig config : parseDimensionConfigs()) {
+                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
+                    if (configDim.equals("the_end")) {
+                        return config;
+                    }
+                }
+                return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, 63,
+                    DimensionTypeInfo.theEnd());
+            }
+
+            // 尝试匹配配置列表中的维度
+            for (DimensionScanConfig config : parseDimensionConfigs()) {
+                String configDim = config.dimension();
+                if (configDim.equalsIgnoreCase(dimensionPath) ||
+                    configDim.equalsIgnoreCase("minecraft:" + dimensionPath) ||
+                    configDim.replace("minecraft:", "").equalsIgnoreCase(dimensionPath)) {
+                    return config;
+                }
+            }
+
+            // 未匹配则返回默认配置
+            DimensionTypeInfo inferredDimType = DimensionTypeInfo.fromDimensionId(dimensionPath);
+            return new DimensionScanConfig(dimensionPath, defaultScanMode, defaultCaveStart, inferredDimType);
+        }
+
+        /**
+         * 创建 Cloth Config 配置界面
+         *
+         * @param parentScreen 父屏幕
+         * @return 配置屏幕
+         */
+        public Screen createConfigScreen(Screen parentScreen) {
+            ConfigBuilder builder = ConfigBuilder.create()
+                .setParentScreen(parentScreen)
+                .setTitle(Component.translatable("title.mapsyncer.config"));
+
+            ConfigEntryBuilder entryBuilder = builder.entryBuilder();
+
+            // 通用设置类别
+            ConfigCategory general = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.general"));
+
+            general.addEntry(entryBuilder.startBooleanToggle(
+                    Component.translatable("option.mapsyncer.debug"), enableDebugLogging)
+                .setDefaultValue(false)
+                .setSaveConsumer(value -> enableDebugLogging = value)
+                .build());
+
+            general.addEntry(entryBuilder.startIntSlider(
+                    Component.translatable("option.mapsyncer.concurrent_regions"), maxConcurrentRegions, 1, 16)
+                .setDefaultValue(4)
+                .setSaveConsumer(value -> maxConcurrentRegions = value)
+                .build());
+
+            general.addEntry(entryBuilder.startIntField(
+                    Component.translatable("option.mapsyncer.packet_size"), maxSyncPacketSize)
+                .setDefaultValue(262144)
+                .setMin(65536)
+                .setMax(1048576)
+                .setSaveConsumer(value -> maxSyncPacketSize = value)
+                .build());
+
+            general.addEntry(entryBuilder.startIntField(
+                    Component.translatable("option.mapsyncer.speed_limit"), syncSpeedLimitKBps)
+                .setDefaultValue(1024)
+                .setMin(0)
+                .setMax(10240)
+                .setSaveConsumer(value -> syncSpeedLimitKBps = value)
+                .build());
+
+            // 增量更新设置类别
+            ConfigCategory incremental = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.incremental"));
+
+            incremental.addEntry(entryBuilder.startSelector(
+                    Component.translatable("option.mapsyncer.update_mode"),
+                    UpdateMode.values(),
+                    incrementalUpdateMode)
+                .setDefaultValue(UpdateMode.DISABLED)
+                .setSaveConsumer(value -> incrementalUpdateMode = value)
+                .build());
+
+            incremental.addEntry(entryBuilder.startIntSlider(
+                    Component.translatable("option.mapsyncer.interval_ticks"), incrementalUpdateIntervalTicks, 20, 72000)
+                .setDefaultValue(200)
+                .setSaveConsumer(value -> incrementalUpdateIntervalTicks = value)
+                .build());
+
+            incremental.addEntry(entryBuilder.startIntSlider(
+                    Component.translatable("option.mapsyncer.scheduled_hour"), scheduledUpdateHour, 0, 23)
+                .setDefaultValue(4)
+                .setSaveConsumer(value -> scheduledUpdateHour = value)
+                .build());
+
+            incremental.addEntry(entryBuilder.startIntSlider(
+                    Component.translatable("option.mapsyncer.scheduled_minute"), scheduledUpdateMinute, 0, 59)
+                .setDefaultValue(0)
+                .setSaveConsumer(value -> scheduledUpdateMinute = value)
+                .build());
+
+            builder.setSavingRunnable(this::save);
+
+            return builder.build();
+        }
+    }
+}

@@ -6,6 +6,8 @@ pluginManagement {
         maven { url = 'https://maven.neoforged.net/releases' }
         // Forge 插件仓库
         maven { url = 'https://maven.minecraftforge.net/' }
+        // Fabric 插件仓库
+        maven { url = 'https://maven.fabricmc.net/' }
         maven { url = 'https://maven.aliyun.com/repository/public' }
     }
 }
@@ -16,14 +18,20 @@ plugins {
 
 rootProject.name = mod_id
 
-// 多项目结构（当前活跃的子项目）
-include 'core'              // 纯 Java 核心（MCA/NBT/工具类）- 100% 复用
-include 'platform-api'      // 平台抽象接口 - 100% 复用
-include 'neoforge-1.21'     // NeoForge 1.21 实现（当前主项目）
+// 核心模块（平台无关）
+include 'core'              // 纯 Java 核心（MCA/NBT/工具类）
+include 'platform-api'      // 平台抽象接口
 
-// Forge 子项目（需要进一步调整 API，Forge 1.20 网络层与 NeoForge 有差异）
-// include 'forge-1.20'        // Forge 1.20.1 实现
-// include 'forge-1.21'        // Forge 1.21 实现
+// NeoForge 平台
+include 'neoforge:neoforge-1.21'
 
-// 预留子项目（暂时禁用，待后续实现）
-// include 'neoforge-26'       // NeoForge 26.x 实现
+// Forge 平台
+include 'forge:forge-1.20'
+
+// Fabric 平台（待调试 Loom 配置）
+// include 'fabric:fabric-1.20'
+// include 'fabric:fabric-1.21'
+
+// 预留版本
+// include 'neoforge:neoforge-26'
+// include 'fabric:fabric-26'

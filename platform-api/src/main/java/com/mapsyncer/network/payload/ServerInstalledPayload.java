@@ -1,5 +1,7 @@
 package com.mapsyncer.network.payload;
 
+import com.mapsyncer.network.NetworkHandler;
+
 /**
  * 服务端已安装通知包 - 平台无关版本
  *
@@ -7,4 +9,6 @@ package com.mapsyncer.network.payload;
  *
  * @param version 服务端模组版本号
  */
-public record ServerInstalledPayload(String version) {}
+public record ServerInstalledPayload(String version) {
+    public static final String ID = NetworkHandler.SERVER_INSTALLED_ID;
+}

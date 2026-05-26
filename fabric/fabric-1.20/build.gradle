@@ -1,0 +1,69 @@
+plugins {
+    id 'fabric-loom' version '0.12.56'
+}
+
+version = mod_version + '-fabric-1.20'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Fabric 1.20.1 需要 Java 17
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    // Cloth Config
+    maven { url = 'https://maven.shedaniel.me/' }
+    // Mod Menu (optional)
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+dependencies {
+    // Minecraft and Fabric
+    minecraft "com.mojang:minecraft:${minecraft_120_version}"
+    mappings "net.fabricmc:yarn:1.20.1+build.10:v2"
+    modImplementation "net.fabricmc:fabric-loader:0.15.11"
+
+    // Fabric API
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1"
+
+    // Cloth Config (for configuration)
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:11.0.99"
+
+    // 依赖核心模块
+    implementation project(':core')
+    implementation project(':platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", minecraft_120_version
+    inputs.property "loader_version", "0.15.11"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": minecraft_120_version,
+                "loader_version": "0.15.11"
+    }
+}
+
+publishing {
+    publications {
+        register('fabric120MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

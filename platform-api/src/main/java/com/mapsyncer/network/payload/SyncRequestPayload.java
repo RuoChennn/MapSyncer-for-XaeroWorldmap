@@ -1,5 +1,7 @@
 package com.mapsyncer.network.payload;
 
+import com.mapsyncer.network.NetworkHandler;
+
 import java.util.Map;
 
 /**
@@ -10,4 +12,6 @@ import java.util.Map;
  *
  * @param clientMeta 客户端元数据映射，键为region路径，值为时间戳和哈希值
  */
-public record SyncRequestPayload(Map<String, ClientMeta> clientMeta) {}
+public record SyncRequestPayload(Map<String, ClientMeta> clientMeta) {
+    public static final String ID = NetworkHandler.SYNC_REQUEST_ID;
+}

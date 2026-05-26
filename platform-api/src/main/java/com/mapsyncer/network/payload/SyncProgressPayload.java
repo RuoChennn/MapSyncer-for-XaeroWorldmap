@@ -1,5 +1,7 @@
 package com.mapsyncer.network.payload;
 
+import com.mapsyncer.network.NetworkHandler;
+
 /**
  * 同步进度包 - 平台无关版本
  *
@@ -9,4 +11,6 @@ package com.mapsyncer.network.payload;
  * @param total 总region数量
  * @param status 状态描述文本
  */
-public record SyncProgressPayload(int processed, int total, String status) {}
+public record SyncProgressPayload(int processed, int total, String status) {
+    public static final String ID = NetworkHandler.SYNC_PROGRESS_ID;
+}
