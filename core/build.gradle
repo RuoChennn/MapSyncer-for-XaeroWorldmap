@@ -1,0 +1,25 @@
+plugins {
+    id 'java-library'
+}
+
+group = mod_group_id
+version = mod_version
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+// Core 模块：纯 Java 实现，无 Minecraft/NeoForge 依赖
+// 包含 MCA 解析器、NBT 解析器、工具类
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 无外部依赖
+    // SLF4J API（日志接口，实际日志由平台模块提供）
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

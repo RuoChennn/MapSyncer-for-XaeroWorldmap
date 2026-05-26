@@ -1,0 +1,49 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = mod_version + '-forge-1.20'
+group = mod_group_id
+
+base {
+    archivesName = mod_id + '-forge-1.20'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+// Forge 1.20.1 子项目（预留结构）
+// 待实现：Platform 适配、网络系统、注册表映射
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+
+    runs {
+        client {
+            client()
+            systemProperty 'forge.enabledGameTestNamespaces', mod_id
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'forge.enabledGameTestNamespaces', mod_id
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    implementation project(':platform-api')
+
+    // Forge 1.20.1
+    minecraft "net.minecraftforge:forge:1.20.1-47.2.0"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

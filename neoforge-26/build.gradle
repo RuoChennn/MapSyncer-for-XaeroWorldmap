@@ -1,0 +1,47 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.61-beta'
+}
+
+version = mod_version + '-neoforge-26'
+group = mod_group_id
+
+base {
+    archivesName = mod_id + '-neoforge-26'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+// NeoForge 26.x 子项目（预留结构）
+// 待实现：验证 API 变化，大部分代码应与 NeoForge 1.21 相同
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+neoForge {
+    // TODO: 更新为 26.x 正式版本号
+    version = "26.1.0"
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    implementation project(':platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
