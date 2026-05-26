@@ -11,6 +11,7 @@ import com.mapsyncer.mca.RegionConverterStandalone.ConvertedRegion;
 import com.mapsyncer.server.RegionScanner.DimensionRegions;
 import com.mapsyncer.server.RegionScanner.RegionCoords;
 import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.DimensionTypeHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -340,7 +341,7 @@ public class ConversionOrchestrator {
         }
 
         // 从运行时获取准确的维度类型信息
-        DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+        DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
         LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
             dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
             dimTypeInfo.minY(), dimTypeInfo.height());
@@ -440,7 +441,7 @@ public class ConversionOrchestrator {
         }
 
         // 从运行时获取准确的维度类型信息
-        DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+        DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
         LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
             dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
             dimTypeInfo.minY(), dimTypeInfo.height());
@@ -740,7 +741,7 @@ public class ConversionOrchestrator {
             }
 
             // 从运行时获取准确的维度类型信息
-            DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+            DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
 
             // 获取光照模式和洞穴参数
             LightMode lightMode;

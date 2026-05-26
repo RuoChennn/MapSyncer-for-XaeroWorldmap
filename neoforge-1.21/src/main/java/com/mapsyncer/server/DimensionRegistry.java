@@ -5,6 +5,7 @@ import com.mapsyncer.config.ModConfig.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig.ScanMode;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.DimensionTypeHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -152,7 +153,7 @@ public class DimensionRegistry {
             ServerLevel level = getLevelForDimension(server, dimId);
             DimensionTypeInfo dimTypeInfo;
             if (level != null) {
-                dimTypeInfo = DimensionTypeInfo.fromDimensionType(level.dimensionType());
+                dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
                 LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
                     dimId, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
                     dimTypeInfo.minY(), dimTypeInfo.height());

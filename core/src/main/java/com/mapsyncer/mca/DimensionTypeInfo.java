@@ -109,23 +109,6 @@ public record DimensionTypeInfo(
     }
 
     /**
-     * 从 Minecraft DimensionType API 创建
-     * （需要运行时环境，用于服务端地图生成）
-     *
-     * @param dimensionType Minecraft DimensionType 实例
-     * @return 对应的维度类型信息
-     */
-    public static DimensionTypeInfo fromDimensionType(net.minecraft.world.level.dimension.DimensionType dimensionType) {
-        return new DimensionTypeInfo(
-            dimensionType.hasSkyLight(),
-            dimensionType.hasCeiling(),
-            dimensionType.minY(),
-            dimensionType.height(),
-            dimensionType.logicalHeight()
-        );
-    }
-
-    /**
      * 获取默认 SkyLight 值
      *
      * <p>参考 Xaero WorldDataReader:353 行:</p>

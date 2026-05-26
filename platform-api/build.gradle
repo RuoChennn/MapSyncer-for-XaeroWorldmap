@@ -18,9 +18,8 @@ repositories {
 dependencies {
     implementation project(':core')
 
-    // Minecraft 核心类型（仅用于接口定义的类型引用）
-    // 这些类型在不同平台有相同名称，可以安全引用
-    // 注意：不在此模块中使用平台特定 API
+    // SLF4J API（日志接口）
+    implementation 'org.slf4j:slf4j-api:2.0.9'
 }
 
 tasks.withType(JavaCompile).configureEach {

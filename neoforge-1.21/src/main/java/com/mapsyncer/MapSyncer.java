@@ -2,8 +2,11 @@ package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.config.ModConfig.UpdateMode;
 import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.platform.Platform;
+import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.platform.impl.NeoForgePlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
@@ -71,6 +74,10 @@ public class MapSyncer {
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
+        // 初始化 Platform（NeoForge 1.21 实现）
+        PlatformManager.initialize(new NeoForgePlatform());
+        LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
+
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -122,7 +129,8 @@ public class MapSyncer {
         DimensionRegistry.registerAllDimensions(event.getServer());
 
         // 启动增量更新（如果已配置）
-        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
+        Platform platform = PlatformManager.getPlatform();
+        UpdateMode mode = platform.getIncrementalUpdateMode();
         if (mode != UpdateMode.DISABLED) {
             IncrementalUpdateHandler.getInstance().start(event.getServer());
         }

@@ -1,7 +1,7 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.config.ModConfig.UpdateMode;
+import com.mapsyncer.platform.UpdateMode;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;

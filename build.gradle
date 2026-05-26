@@ -20,9 +20,11 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// 构建所有子项目
-task buildAll {
-    dependsOn project(':core').tasks.build
-    dependsOn project(':platform-api').tasks.build
-    dependsOn project(':neoforge-1.21').tasks.build
+// 构建所有子项目（使用 afterEvaluate 确保子项目已配置）
+afterEvaluate {
+    task buildAll {
+        dependsOn ':core:build'
+        dependsOn ':platform-api:build'
+        dependsOn ':neoforge-1.21:build'
+    }
 }

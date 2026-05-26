@@ -1,7 +1,7 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.config.ModConfig.UpdateMode;
+import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.network.PacketHandler;
 import com.mapsyncer.MapSyncer;
 import com.mapsyncer.client.MapPacketReceiver;

@@ -1,6 +1,7 @@
 package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
+import com.mapsyncer.platform.UpdateMode;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.common.ModConfigSpec.BooleanValue;
 import net.neoforged.neoforge.common.ModConfigSpec.IntValue;
@@ -75,28 +76,6 @@ public class ModConfig {
         var serverPair = new ModConfigSpec.Builder().configure(ServerConfig::new);
         SERVER = serverPair.getLeft();
         SERVER_SPEC = serverPair.getRight();
-    }
-
-    /**
-     * 更新模式枚举
-     *
-     * <p>定义增量地图更新的触发方式</p>
-     */
-    public enum UpdateMode {
-        /**
-         * 禁用增量更新
-         */
-        DISABLED,
-
-        /**
-         * tick周期模式（按固定tick间隔更新）
-         */
-        TICK,
-
-        /**
-         * 每日定时模式（在指定时间更新）
-         */
-        SCHEDULED
     }
 
     /**

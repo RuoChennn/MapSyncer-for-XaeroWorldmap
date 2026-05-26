@@ -213,8 +213,8 @@ public class NeoForgePlatform implements Platform {
     public Map<String, String> parseBlockProperties(String blockStateString) {
         Map<String, String> props = new HashMap<>();
 
-        int bracketStart = blockStateString.indexOf '[';
-        int bracketEnd = blockStateString.lastIndexOf ']';
+        int bracketStart = blockStateString.indexOf('[');
+        int bracketEnd = blockStateString.lastIndexOf(']');
 
         if (bracketStart >= 0 && bracketEnd > bracketStart) {
             String propsStr = blockStateString.substring(bracketStart + 1, bracketEnd);
