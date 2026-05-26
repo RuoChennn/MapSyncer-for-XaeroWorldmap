@@ -94,6 +94,9 @@ public class PlayerJoinHandler {
     public static void onServerStopped(ServerStoppedEvent event) {
         LOGGER.info("Server stopped, cleaning up singleton cache instances");
 
+        // Shutdown conversion thread pool first
+        ConversionOrchestrator.shutdownExecutor();
+
         // Reset singleton instances to release memory
         GenerationCache.resetInstance();
         McaTimestampCache.resetInstance();

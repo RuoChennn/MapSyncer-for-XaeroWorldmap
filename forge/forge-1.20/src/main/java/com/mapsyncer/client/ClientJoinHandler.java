@@ -45,7 +45,7 @@ public class ClientJoinHandler {
         }
 
         // 使用异步线程延迟检测，避免阻塞主线程
-        new Thread(() -> {
+        Thread resumeCheckThread = new Thread(() -> {
             try {
                 Thread.sleep(1000); // 等待1秒让 Xaero 目录初始化
             } catch (InterruptedException e) {
@@ -54,7 +54,9 @@ public class ClientJoinHandler {
             }
             // 在主线程执行检查（因为涉及 Minecraft API）
             mc.execute(() -> checkInterruptedSync(mc));
-        }, "mapsyncer-resume-check").start();
+        }, "mapsyncer-resume-check");
+        resumeCheckThread.setDaemon(true);
+        resumeCheckThread.start();
     }
 
     /**

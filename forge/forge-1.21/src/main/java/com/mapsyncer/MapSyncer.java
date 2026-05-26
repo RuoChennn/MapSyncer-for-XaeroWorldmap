@@ -2,7 +2,8 @@ package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.network.NetworkManager;
+import com.mapsyncer.network.impl.ForgeNetworkHandler;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
@@ -24,6 +25,7 @@ import net.minecraftforge.fml.common.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.network.event.RegisterPayloadHandlersEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +46,16 @@ public class MapSyncer {
         PlatformManager.initialize(new ForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
+        // 初始化 NetworkManager（Forge 1.21 实现）
+        NetworkManager.initialize(new ForgeNetworkHandler());
+        LOGGER.info("NetworkManager initialized for Forge 1.21");
+
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+
+        // 注册网络包处理器
+        modBus.addListener((RegisterPayloadHandlersEvent event) -> {
+            NetworkManager.getHandler().registerHandlers(event);
+        });
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(MapPacketReceiver::register);

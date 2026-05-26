@@ -8,7 +8,7 @@ import com.mapsyncer.network.impl.NeoForgeNetworkHandler;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
-import com.mapsyncer.platform.impl.NeoForgePlatform;
+import com.mapsyncer.platform.impl.NeoForge26Platform;
 import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
@@ -30,7 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer模组的主类 - NeoForge 1.21 版本
+ * MapSyncer模组的主类 - NeoForge 26.x 版本
  *
  * 使用抽象网络层进行跨平台网络通信。
  */
@@ -47,8 +47,8 @@ public class MapSyncer {
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
-        // 初始化 Platform（NeoForge 1.21 实现）
-        PlatformManager.initialize(new NeoForgePlatform());
+        // 初始化 Platform（NeoForge 26.x 实现）
+        PlatformManager.initialize(new NeoForge26Platform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
         // 初始化 NetworkManager（NeoForge 网络实现）
