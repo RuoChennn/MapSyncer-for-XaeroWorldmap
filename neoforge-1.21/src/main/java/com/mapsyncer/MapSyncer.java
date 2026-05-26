@@ -2,7 +2,8 @@ package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.network.NetworkManager;
+import com.mapsyncer.network.impl.NeoForgeNetworkHandler;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
@@ -28,49 +29,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer模组的主类。
+ * MapSyncer模组的主类 - NeoForge 1.21 版本
  *
- * 该模组用于将服务端的Xaero's World Map地图数据同步到客户端，
- * 支持增量更新和全量同步两种模式。通过解析服务端的MCA文件，
- * 转换为Xaero地图格式并传输到客户端进行渲染。
- *
- * 主要功能：
- * - 服务端：MCA文件解析、地图缓存生成、增量更新处理
- * - 客户端：地图数据接收、缓存合并、进度显示
- *
- * @author MapSyncer Team
- * @see PacketHandler 网络包处理器
- * @see ServerSyncHandler 服务端同步处理器
- * @see MapPacketReceiver 客户端数据包接收器
+ * 使用抽象网络层进行跨平台网络通信。
  */
 @Mod(MapSyncer.MOD_ID)
 public class MapSyncer {
 
-    /**
-     * 模组ID，用于标识本模组。
-     */
     public static final String MOD_ID = "mapsyncer";
-
-    /**
-     * 模组版本号，从 modContainer 获取。
-     */
     public static String VERSION = "unknown";
-
-    /**
-     * 日志记录器，用于输出模组运行日志。
-     */
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
 
-    /**
-     * 模组主类构造器。
-     *
-     * 根据运行环境（客户端/服务端）初始化不同的组件：
-     * - 客户端模式：注册网络包接收器
-     * - 服务端模式：注册网络包处理器和事件监听器
-     *
-     * @param modBus 模组事件总线，用于注册模组生命周期事件
-     * @param modContainer 模组容器，用于注册配置文件
-     */
+    /** NeoForge 网络处理器实例（用于发送包） */
+    private static NeoForgeNetworkHandler networkHandler;
+
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
@@ -78,19 +50,31 @@ public class MapSyncer {
         PlatformManager.initialize(new NeoForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
+        // 初始化 NetworkManager（NeoForge 网络实现）
+        networkHandler = new NeoForgeNetworkHandler();
+        NetworkManager.initialize(networkHandler);
+        LOGGER.info("NetworkManager initialized");
+
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            // 客户端初始化：注册网络包接收器和事件监听器
+            // 客户端初始化：注册网络包接收器
             modBus.addListener(MapPacketReceiver::register);
             NeoForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode)");
         } else {
-            // 服务端初始化：注册网络包处理器和事件监听器
+            // 服务端初始化：注册网络包处理器
             modBus.addListener(ServerSyncHandler::register);
             NeoForge.EVENT_BUS.register(this);
             LOGGER.info("MapSyncer initialized (server mode)");
         }
+    }
+
+    /**
+     * 获取网络处理器实例（用于发送包）
+     */
+    public static NeoForgeNetworkHandler getNetworkHandler() {
+        return networkHandler;
     }
 
     /**

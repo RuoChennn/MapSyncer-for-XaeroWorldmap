@@ -2,7 +2,8 @@ package com.mapsyncer.server;
 
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.platform.UpdateMode;
-import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.network.NetworkManager;
+import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.MapSyncer;
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.XaeroMapIntegrator;
@@ -16,7 +17,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,42 +24,23 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 玩家登录事件处理器 - 处理玩家加入/离开事件和服务器停止清理
- *
- * 功能：
- * - 玩家加入时启动增量更新处理器（如果未运行且配置启用）
- * - 玩家离开时中断该玩家的同步任务
- * - 定期清理异常断线玩家的残留状态（防止内存泄漏）
- * - 服务器停止时清理所有单例缓存，防止内存泄漏
+ * 玩家登录事件处理器 - 使用抽象网络层发送包
  */
 @EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
 public class PlayerJoinHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PlayerJoinHandler.class);
-
-    /** 定期清理检查间隔（tick数）- 每60秒检查一次（1200 ticks） */
     private static final int CLEANUP_CHECK_INTERVAL_TICKS = 1200;
-
-    /** tick计数器 */
     private static int cleanupTickCounter = 0;
 
-    /**
-     * 玩家登录事件处理
-     *
-     * 当玩家登录时，如果增量更新处理器未运行且配置未禁用，
-     * 则启动增量更新处理器开始定时扫描。
-     *
-     * @param event 玩家登录事件
-     */
     @SubscribeEvent
     public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
         ServerPlayer player = (ServerPlayer) event.getEntity();
         MinecraftServer server = player.getServer();
         if (server == null) return;
 
-        // 发送服务端已安装通知给客户端
-        PacketDistributor.sendToPlayer(player,
-                new PacketHandler.ServerInstalledPayload(MapSyncer.VERSION));
+        // 使用 NetworkManager 发送服务端已安装通知
+        NetworkManager.sendToPlayer(player, new ServerInstalledPayload(MapSyncer.VERSION));
 
         UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {
