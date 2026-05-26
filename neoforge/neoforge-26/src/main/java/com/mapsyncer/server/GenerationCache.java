@@ -22,10 +22,17 @@ import java.util.Map;
  * - 存储：relativePath -> RegionMeta
  * - 文件：generation_cache.properties
  * - 格式：dimension/region_x_z = timestamp_seconds:hash
+ *
+ * 内存管理：
+ * - 最大缓存条目数限制（MAX_CACHE_REGIONS）
+ * - 超过限制时自动清理最旧的条目
  */
 public class GenerationCache {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GenerationCache.class);
+
+    /** 最大缓存条目数（防止大型服务器内存占用过高） */
+    private static final int MAX_CACHE_REGIONS = 50000;
 
     /** 单例实例 */
     private static volatile GenerationCache instance;
@@ -125,6 +132,31 @@ public class GenerationCache {
      */
     public void update(String relativePath, long timestampSeconds, String hash) {
         cache.put(relativePath, new RegionMeta(timestampSeconds, hash));
+        trimIfOverLimit();
+    }
+
+    /**
+     * 如果缓存超过限制，清理最旧的条目
+     *
+     * 保留最新的条目，因为它们更可能被请求同步。
+     */
+    private void trimIfOverLimit() {
+        if (cache.size() <= MAX_CACHE_REGIONS) {
+            return;
+        }
+
+        int toRemove = cache.size() - MAX_CACHE_REGIONS;
+        LOGGER.info("Cache size {} exceeds limit {}, trimming {} oldest entries",
+            cache.size(), MAX_CACHE_REGIONS, toRemove);
+
+        // 按时间戳排序，删除最旧的条目
+        cache.entrySet().stream()
+            .sorted((a, b) -> Long.compare(a.getValue().timestampSeconds(), b.getValue().timestampSeconds()))
+            .limit(toRemove)
+            .map(Map.Entry::getKey)
+            .forEach(cache::remove);
+
+        LOGGER.info("Cache trimmed to {} entries", cache.size());
     }
 
     /**

@@ -1,48 +1,40 @@
 plugins {
-    id 'net.minecraftforge.gradle' version '6.0.+'
+    id 'net.neoforged.moddev' version '2.0.61-beta'
 }
 
-version = mod_version + '-forge-1.21'
+version = mod_version + '-neoforge-1.21-alt'
 group = mod_group_id
 
 base {
     archivesName = mod_id
 }
 
-// Forge 1.21 使用 Java 21
+// NeoForge 1.21 使用 Java 21
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
     mavenCentral()
-    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://maven.neoforged.net/releases' }
     maven { url = 'https://maven.aliyun.com/repository/public' }
 }
 
-minecraft {
-    mappings channel: 'official', version: minecraft_121_version
+neoForge {
+    version = neo_version
 
     runs {
         client {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-            property 'forge.enabledGameTestNamespaces', mod_id
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
         server {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-            property 'forge.enabledGameTestNamespaces', mod_id
-            args '--nogui'
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
     }
 }
 
 dependencies {
-    // Minecraft Forge
-    minecraft "net.minecraftforge:forge:${forge_121_version}"
-
-    // 依赖核心模块
     implementation project(':core')
     implementation project(':platform-api')
 }
@@ -53,7 +45,7 @@ tasks.withType(JavaCompile).configureEach {
 
 publishing {
     publications {
-        register('forge121MavenJava', MavenPublication) {
+        register('neoforge121AltMavenJava', MavenPublication) {
             from components.java
         }
     }
