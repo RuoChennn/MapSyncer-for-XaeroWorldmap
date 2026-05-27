@@ -315,14 +315,12 @@ public class RegionConverterStandalone {
         int chunkX = chunk.chunkX();
         int chunkZ = chunk.chunkZ();
 
-        // 标记该区块已存在（区分区块未生成和区块内虚空区域）
+        // 标记该区块已存在
         data.chunkExists[chunkX][chunkZ] = true;
 
         // 洞穴模式参数
         int caveStart = caveParams.caveStart();
         int caveDepth = caveParams.caveDepth();
-
-        // 洞穴模式判断
         boolean isCaveMode = caveStart != Integer.MAX_VALUE;
 
         for (int lx = 0; lx < 16; lx++) {
@@ -332,271 +330,347 @@ public class RegionConverterStandalone {
 
                 // 边界检查
                 if (relX >= REGION_SIZE_BLOCKS || relZ >= REGION_SIZE_BLOCKS) {
-                    continue;  // 越界跳过
+                    continue;
                 }
 
                 // 计算扫描范围
-                // 地表模式：使用高度图作为起始高度
-                // 洞穴模式：使用固定的 caveStart 和 caveDepth
-                int startY;
-                int scanBottomY;
-                int heightMapValue = chunk.heightmap()[lx][lz];
-                int chunkBottomY = chunk.chunkBottomY();
+                ScanRange scanRange = computeScanRange(chunk, lx, lz, minBuildHeight, worldTopY, isCaveMode, caveStart, caveDepth);
 
-                if (isCaveMode) {
-                    // 洞穴模式：从 caveStart 向下扫描到 caveStart - caveDepth
-                    startY = caveStart;
-                    scanBottomY = Math.max(caveStart - caveDepth, minBuildHeight);
-                } else {
-                    // 地表模式：从高度图向下扫描
-                    startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
-                    scanBottomY = minBuildHeight;
-                }
-
-                ChunkSectionParser.BlockState topState = null;
-                int topY = -1;
-                int highestBlockY = -1;
-                String biomeName = null;
-                List<OverlayData> overlayList = new ArrayList<>();
-                byte surfaceLight = 0;
-
-                // 洞穴模式状态追踪（参考 Xaero WorldDataReader.java:346-351, 571-596）
-                // underair: 是否已进入洞穴内部的空气区域
-                // 全洞穴模式（caveStart == Integer.MIN_VALUE）初始化为 true，表示从底部开始扫描
-                // 普通洞穴模式初始化为 false，需要等待进入空气区域后才开始记录方块
-                boolean underair = isCaveMode && caveStart == Integer.MIN_VALUE;
-
-                // 从最高 section 向下扫描
-                // 参考 Xaero WorldDataReader: 按 sectionY 从高到低排序
-                int sectionIndex = 0;  // 用于追踪当前 section 位置
-                for (ChunkSectionParser.SectionData section : chunk.sections()) {
-                    if (section.blockPalette().isEmpty()) continue;
-
-                    int sectionY = section.sectionY();
-                    int sectionBaseY = sectionY * 16;
-                    int sectionTopY = sectionBaseY + 15;
-                    int sectionBottomY = sectionBaseY;
-
-                    // 洞穴模式：跳过高于 caveStart 的 section
-                    if (isCaveMode && sectionTopY > startY) continue;
-
-                    // 跳过低于扫描底部的 section
-                    if (sectionBottomY < scanBottomY) continue;
-
-                    if (sectionTopY < chunkBottomY) continue;
-
-                    // 计算扫描起始高度
-                    // 参考 Xaero WorldDataReader.java:425
-                    // 地表模式：startHeight = heightMapValue + 3 (或 sectionBasedHeight)
-                    // 洞穴模式：startHeight = caveStart
-                    // 如果不是第一个 section，额外 +1 (i > 0 && ++startHeight)
-                    int effectiveStartY = startY;
-                    if (sectionIndex > 0) {
-                        effectiveStartY = Math.min(startY + 1, worldTopY - 1);
-                    }
-
-                    // 地表模式：如果高度图值低于 chunkBottomY，使用 section 顶部
-                    if (!isCaveMode && heightMapValue < chunkBottomY) {
-                        effectiveStartY = sectionTopY;
-                    }
-
-                    // 洞穴模式：确保起始高度不超过 section 顶部
-                    if (isCaveMode) {
-                        effectiveStartY = Math.min(effectiveStartY, sectionTopY);
-                    }
-
-                    sectionIndex++;
-
-                    // 单方块 palette section - 需要逐层扫描确定实际高度
-                    if (section.blockPalette().size() == 1 && section.blockData() == null) {
-                        ChunkSectionParser.BlockState singleState = section.blockPalette().get(0);
-
-                        // 洞穴模式：整个 section 都是空气时，标记已进入洞穴内部
-                        if (singleState.isAir()) {
-                            if (isCaveMode) {
-                                underair = true;
-                            }
-                            continue;
-                        }
-
-                        // 洞穴模式：还没进入洞穴内部，跳过此 section
-                        if (isCaveMode && !underair) {
-                            continue;
-                        }
-
-                        // 从该 section 的最高层向下扫描
-                        int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
-                        if (scanStartY < 0) scanStartY = 15;
-
-                        // 洞穴模式：计算 section 内的扫描底部
-                        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
-
-                        for (int ly = scanStartY; ly >= localScanBottomY; ly--) {
-                            int worldY = sectionBaseY + ly;
-
-                            // 洞穴模式：低于扫描底部时停止
-                            if (worldY < scanBottomY) break;
-
-                            // 检查含水方块（方块本身作为表面 + 同层水overlay）
-                            // 含水方块需要添加水 overlay 来表示水覆盖效果
-                            // opacity 使用水的 lightBlock 值，与 Xaero 一致
-                            if (BlockPropertyResolver.isWaterloggedSurface(singleState.name(), singleState.properties())) {
-                                topState = singleState;
-                                topY = worldY;
-                                data.heightMap[relX][relZ] = topY;
-
-                                // 含水方块添加同层水 overlay（使用水的 lightBlock）
-                                int opacity = BlockPropertyResolver.getLightBlock("minecraft:water");
-                                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight);
-                                if (highestBlockY < 0) highestBlockY = worldY;
-
-                                surfaceLight = overlayLight;
-                                biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
-                                break;
-                            }
-
-                            boolean shouldOverlay = BlockPropertyResolver.shouldOverlay(singleState.name());
-
-                            if (shouldOverlay) {
-                                // 使用 lightBlock 作为 opacity（Xaero 方式）
-                                int opacity = BlockPropertyResolver.getLightBlock(singleState.name());
-                                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                                addOverlay(overlayList, singleState.name(), worldY, opacity, overlayLight);
-                                if (highestBlockY < 0) highestBlockY = worldY;
-                                continue;  // 继续向下找表面
-                            }
-
-                            // 非透明方块 = 表面
-                            topState = singleState;
-                            topY = worldY;
-                            if (highestBlockY < 0) highestBlockY = worldY;
-                            data.heightMap[relX][relZ] = topY;
-
-                            // 计算光照（使用光照模式）
-                            surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
-                                heightMapValue, overlayList, lightMode, worldHasSkylight);
-
-                            biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
-                            break;
-                        }
-
-                        if (topState != null) break;  // 找到表面后跳出 section 循环
-                        continue;  // 继续下一个 section
-                    }
-
-                    // 多方块 palette - 需要从位数组读取
-                    // 确定在 section 内的起始局部 Y
-                    int localStartY = 15;
-                    if (effectiveStartY >= sectionBaseY && effectiveStartY <= sectionTopY) {
-                        localStartY = effectiveStartY - sectionBaseY;
-                    }
-
-                    // 洞穴模式：计算 section 内的扫描底部
-                    int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
-
-                    // 从 localStartY 向下扫描
-                    for (int ly = localStartY; ly >= localScanBottomY; ly--) {
-                        int worldY = sectionBaseY + ly;
-
-                        // 低于扫描底部时停止
-                        if (worldY < scanBottomY) break;
-                        if (worldY < chunkBottomY) break;
-
-                        ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
-
-                        // 洞穴模式核心逻辑：必须先进入空气才能记录方块（参考 Xaero WorldDataReader.java:571-596）
-                        if (state.isAir()) {
-                            if (isCaveMode) {
-                                underair = true;  // 进入洞穴内部空气区域
-                            }
-                            continue;
-                        }
-
-                        // 洞穴模式：还没进入洞穴内部空气区域，跳过此方块
-                        if (isCaveMode && !underair) {
-                            continue;
-                        }
-
-                        // Step 1: 检查含水方块（方块本身作为表面 + 同层水overlay）
-                        // 含水方块需要添加水 overlay 来表示水覆盖效果
-                        // opacity 使用水的 lightBlock 值，与 Xaero 一致
-                        if (BlockPropertyResolver.isWaterloggedSurface(state.name(), state.properties())) {
-                            topState = state;
-                            topY = worldY;
-                            data.heightMap[relX][relZ] = topY;
-
-                            // 含水方块添加同层水 overlay（使用水的 lightBlock）
-                            int opacity = BlockPropertyResolver.getLightBlock("minecraft:water");
-                            byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                            addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight);
-                            if (highestBlockY < 0) highestBlockY = worldY;
-
-                            surfaceLight = overlayLight;
-                            biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
-                            break;
-                        }
-
-                        // Step 2: 检查流体（纯水作为 overlay，继续向下找表面）
-                        // opacity 使用 lightBlock 值，与 Xaero 一致
-                        if (BlockPropertyResolver.isTranslucentFluid(state.name())) {
-                            int opacity = BlockPropertyResolver.getLightBlock(state.name());
-                            byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                            addOverlay(overlayList, state.name(), worldY, opacity, overlayLight);
-                            if (highestBlockY < 0) highestBlockY = worldY;
-                            continue;  // 继续向下扫描找表面
-                        }
-
-                        // Step 3: 检查隐形方块（跳过）
-                        if (BlockPropertyResolver.isInvisible(state.name())) {
-                            continue;
-                        }
-
-                        // Step 4: 检查透明方块（作为 overlay）
-                        // 参考 Xaero: overlayBuilder.build(state, state.getLightBlock(...), light, ...)
-                        if (BlockPropertyResolver.isTransparent(state.name())) {
-                            int opacity = BlockPropertyResolver.getLightBlock(state.name());
-                            byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                            addOverlay(overlayList, state.name(), worldY, opacity, overlayLight);
-                            if (highestBlockY < 0) highestBlockY = worldY;
-                            continue;
-                        }
-
-                        // Step 5: 检查是否有地图颜色
-                        if (!BlockPropertyResolver.hasVanillaColor(state.name())) {
-                            continue;
-                        }
-
-                        // 找到可见的实体方块 = 表面
-                        topState = state;
-                        topY = worldY;
-                        data.heightMap[relX][relZ] = topY;
-
-                        // 计算光照（使用光照模式）
-                        surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
-                            heightMapValue, overlayList, lightMode, worldHasSkylight);
-
-                        biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
-                        break;
-                    }
-
-                    if (topState != null) break;
-                }
+                // 扫描区块内的方块，找到表面
+                SurfaceResult surface = scanChunkSections(chunk, data, lx, lz, relX, relZ,
+                    scanRange, minBuildHeight, worldTopY, lightMode, isCaveMode, caveStart, worldHasSkylight);
 
                 // 记录像素数据
-                if (topState != null || !overlayList.isEmpty()) {
-                    data.hasData[relX][relZ] = true;
-                    data.blockNames[relX][relZ] = topState != null ? topState.name() : "minecraft:air";
-                    int topBlockYValue = (highestBlockY >= 0) ? highestBlockY : topY;
-                    data.topBlockY[relX][relZ] = topBlockYValue;
-                    // 参考 Xaero: biomeName 为 null 时使用 THE_VOID（虚空区域的深紫色）
-                    data.biomeNames[relX][relZ] = biomeName != null ? biomeName : DEFAULT_BIOME;
-                    data.lightMap[relX][relZ] = surfaceLight;
-                    if (!overlayList.isEmpty()) {
-                        data.overlays.put(relX * REGION_SIZE_BLOCKS + relZ, overlayList);
-                    }
+                if (surface != null) {
+                    recordPixelData(data, surface, relX, relZ);
                 }
             }
+        }
+    }
+
+    /**
+     * 扫描范围参数
+     */
+    private record ScanRange(int startY, int scanBottomY) {}
+
+    /**
+     * 表面扫描结果
+     */
+    private record SurfaceResult(
+        ChunkSectionParser.BlockState topState,
+        int topY,
+        int highestBlockY,
+        String biomeName,
+        byte surfaceLight,
+        List<OverlayData> overlayList
+    ) {}
+
+    /**
+     * 计算扫描范围
+     */
+    private static ScanRange computeScanRange(ChunkDataParser.ChunkInfo chunk, int lx, int lz,
+                                               int minBuildHeight, int worldTopY,
+                                               boolean isCaveMode, int caveStart, int caveDepth) {
+        int heightMapValue = chunk.heightmap()[lx][lz];
+
+        if (isCaveMode) {
+            int startY = caveStart;
+            int scanBottomY = Math.max(caveStart - caveDepth, minBuildHeight);
+            return new ScanRange(startY, scanBottomY);
+        } else {
+            int startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
+            return new ScanRange(startY, minBuildHeight);
+        }
+    }
+
+    /**
+     * 扫描区块内的所有 section，找到表面方块
+     */
+    private static SurfaceResult scanChunkSections(ChunkDataParser.ChunkInfo chunk, MapRegionData data,
+                                                    int lx, int lz, int relX, int relZ,
+                                                    ScanRange scanRange, int minBuildHeight, int worldTopY,
+                                                    LightMode lightMode, boolean isCaveMode, int caveStart,
+                                                    boolean worldHasSkylight) {
+        int heightMapValue = chunk.heightmap()[lx][lz];
+        int chunkBottomY = chunk.chunkBottomY();
+
+        ChunkSectionParser.BlockState topState = null;
+        int topY = -1;
+        int highestBlockY = -1;
+        String biomeName = null;
+        List<OverlayData> overlayList = new ArrayList<>();
+        byte surfaceLight = 0;
+
+        // 洞穴模式状态追踪
+        boolean underair = isCaveMode && caveStart == Integer.MIN_VALUE;
+
+        int sectionIndex = 0;
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.blockPalette().isEmpty()) continue;
+
+            int sectionY = section.sectionY();
+            int sectionBaseY = sectionY * 16;
+            int sectionTopY = sectionBaseY + 15;
+            int sectionBottomY = sectionBaseY;
+
+            // 洞穴模式：跳过高于 caveStart 的 section
+            if (isCaveMode && sectionTopY > scanRange.startY()) continue;
+
+            // 跳过低于扫描底部的 section
+            if (sectionBottomY < scanRange.scanBottomY()) continue;
+            if (sectionTopY < chunkBottomY) continue;
+
+            // 计算有效起始高度
+            int effectiveStartY = computeEffectiveStartY(sectionIndex, scanRange.startY(), worldTopY,
+                isCaveMode, heightMapValue, chunkBottomY, sectionTopY);
+
+            sectionIndex++;
+
+            // 根据 palette 类型处理
+            SurfaceResult sectionResult;
+            if (section.blockPalette().size() == 1 && section.blockData() == null) {
+                sectionResult = processSinglePaletteSection(section, lx, lz, relX, relZ,
+                    sectionBaseY, effectiveStartY, scanRange.scanBottomY(), chunkBottomY,
+                    isCaveMode, underair, worldHasSkylight, lightMode, heightMapValue, overlayList);
+            } else {
+                sectionResult = processMultiPaletteSection(section, lx, lz, relX, relZ,
+                    sectionBaseY, effectiveStartY, scanRange.scanBottomY(), chunkBottomY,
+                    isCaveMode, underair, worldHasSkylight, lightMode, heightMapValue, overlayList);
+            }
+
+            if (sectionResult != null) {
+                // 更新洞穴模式状态
+                underair = updateUnderairState(section, lx, lz, sectionBaseY, effectiveStartY,
+                    scanRange.scanBottomY(), chunkBottomY, isCaveMode, underair);
+                return sectionResult;
+            }
+
+            // 更新洞穴模式状态继续扫描
+            underair = updateUnderairState(section, lx, lz, sectionBaseY, effectiveStartY,
+                scanRange.scanBottomY(), chunkBottomY, isCaveMode, underair);
+        }
+
+        return null;
+    }
+
+    /**
+     * 计算有效起始高度
+     */
+    private static int computeEffectiveStartY(int sectionIndex, int startY, int worldTopY,
+                                               boolean isCaveMode, int heightMapValue, int chunkBottomY,
+                                               int sectionTopY) {
+        int effectiveStartY = startY;
+        if (sectionIndex > 0) {
+            effectiveStartY = Math.min(startY + 1, worldTopY - 1);
+        }
+
+        if (!isCaveMode && heightMapValue < chunkBottomY) {
+            effectiveStartY = sectionTopY;
+        }
+
+        if (isCaveMode) {
+            effectiveStartY = Math.min(effectiveStartY, sectionTopY);
+        }
+
+        return effectiveStartY;
+    }
+
+    /**
+     * 处理单方块 palette section
+     */
+    private static SurfaceResult processSinglePaletteSection(ChunkSectionParser.SectionData section,
+                                                              int lx, int lz, int relX, int relZ,
+                                                              int sectionBaseY, int effectiveStartY,
+                                                              int scanBottomY, int chunkBottomY,
+                                                              boolean isCaveMode, boolean underair,
+                                                              boolean worldHasSkylight, LightMode lightMode,
+                                                              int heightMapValue, List<OverlayData> overlayList) {
+        ChunkSectionParser.BlockState singleState = section.blockPalette().get(0);
+
+        // 空气 section
+        if (singleState.isAir()) {
+            return null;
+        }
+
+        // 洞穴模式未进入空气区域
+        if (isCaveMode && !underair) {
+            return null;
+        }
+
+        int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
+        if (scanStartY < 0) scanStartY = 15;
+        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
+
+        for (int ly = scanStartY; ly >= localScanBottomY; ly--) {
+            int worldY = sectionBaseY + ly;
+            if (worldY < scanBottomY) break;
+
+            // 检查含水方块
+            if (BlockPropertyResolver.isWaterloggedSurface(singleState.name(), singleState.properties())) {
+                int opacity = BlockPropertyResolver.getLightBlock("minecraft:water");
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight);
+
+                byte surfaceLight = overlayLight;
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
+            }
+
+            // 检查 overlay 方块
+            if (BlockPropertyResolver.shouldOverlay(singleState.name())) {
+                int opacity = BlockPropertyResolver.getLightBlock(singleState.name());
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, singleState.name(), worldY, opacity, overlayLight);
+                continue;
+            }
+
+            // 非透明方块 = 表面
+            byte surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
+                heightMapValue, overlayList, lightMode, worldHasSkylight);
+            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+            return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
+        }
+
+        return null;
+    }
+
+    /**
+     * 处理多方块 palette section
+     */
+    private static SurfaceResult processMultiPaletteSection(ChunkSectionParser.SectionData section,
+                                                             int lx, int lz, int relX, int relZ,
+                                                             int sectionBaseY, int effectiveStartY,
+                                                             int scanBottomY, int chunkBottomY,
+                                                             boolean isCaveMode, boolean underair,
+                                                             boolean worldHasSkylight, LightMode lightMode,
+                                                             int heightMapValue, List<OverlayData> overlayList) {
+        int localStartY = 15;
+        if (effectiveStartY >= sectionBaseY && effectiveStartY <= sectionBaseY + 15) {
+            localStartY = effectiveStartY - sectionBaseY;
+        }
+        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
+
+        int highestBlockY = -1;
+
+        for (int ly = localStartY; ly >= localScanBottomY; ly--) {
+            int worldY = sectionBaseY + ly;
+            if (worldY < scanBottomY) break;
+            if (worldY < chunkBottomY) break;
+
+            ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
+
+            // 洞穴模式：必须先进入空气才能记录方块
+            if (state.isAir()) {
+                continue;  // underair 状态在外部更新
+            }
+
+            // 洞穴模式未进入空气区域
+            if (isCaveMode && !underair) {
+                continue;
+            }
+
+            // 检查含水方块
+            if (BlockPropertyResolver.isWaterloggedSurface(state.name(), state.properties())) {
+                int opacity = BlockPropertyResolver.getLightBlock("minecraft:water");
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight);
+
+                byte surfaceLight = overlayLight;
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
+            }
+
+            // 检查流体（水/熔岩）
+            if (BlockPropertyResolver.isTranslucentFluid(state.name())) {
+                int opacity = BlockPropertyResolver.getLightBlock(state.name());
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, state.name(), worldY, opacity, overlayLight);
+                if (highestBlockY < 0) highestBlockY = worldY;
+                continue;
+            }
+
+            // 检查隐形方块
+            if (BlockPropertyResolver.isInvisible(state.name())) {
+                continue;
+            }
+
+            // 检查透明方块
+            if (BlockPropertyResolver.isTransparent(state.name())) {
+                int opacity = BlockPropertyResolver.getLightBlock(state.name());
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, state.name(), worldY, opacity, overlayLight);
+                if (highestBlockY < 0) highestBlockY = worldY;
+                continue;
+            }
+
+            // 检查是否有地图颜色
+            if (!BlockPropertyResolver.hasVanillaColor(state.name())) {
+                continue;
+            }
+
+            // 找到表面
+            byte surfaceLight = calculateSurfaceLight(section, lx, ly, lz, worldY,
+                heightMapValue, overlayList, lightMode, worldHasSkylight);
+            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+            return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
+        }
+
+        return null;
+    }
+
+    /**
+     * 更新洞穴模式的 underair 状态
+     */
+    private static boolean updateUnderairState(ChunkSectionParser.SectionData section,
+                                                int lx, int lz, int sectionBaseY, int effectiveStartY,
+                                                int scanBottomY, int chunkBottomY,
+                                                boolean isCaveMode, boolean underair) {
+        if (!isCaveMode || underair) {
+            return underair;
+        }
+
+        // 单方块 palette 且是空气
+        if (section.blockPalette().size() == 1 && section.blockData() == null) {
+            if (section.blockPalette().get(0).isAir()) {
+                return true;
+            }
+            return underair;
+        }
+
+        // 多方块 palette：检查是否有空气
+        int localStartY = Math.min(effectiveStartY - sectionBaseY, 15);
+        if (localStartY < 0) localStartY = 15;
+        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
+
+        for (int ly = localStartY; ly >= localScanBottomY; ly--) {
+            int worldY = sectionBaseY + ly;
+            if (worldY < scanBottomY) break;
+            if (worldY < chunkBottomY) break;
+
+            ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
+            if (state.isAir()) {
+                return true;
+            }
+        }
+
+        return underair;
+    }
+
+    /**
+     * 记录像素数据到区域数据对象
+     */
+    private static void recordPixelData(MapRegionData data, SurfaceResult surface,
+                                         int relX, int relZ) {
+        data.hasData[relX][relZ] = true;
+        data.blockNames[relX][relZ] = surface.topState() != null ? surface.topState().name() : "minecraft:air";
+        int topBlockYValue = (surface.highestBlockY() >= 0) ? surface.highestBlockY() : surface.topY();
+        data.topBlockY[relX][relZ] = topBlockYValue;
+        data.heightMap[relX][relZ] = surface.topY();
+        data.biomeNames[relX][relZ] = surface.biomeName() != null ? surface.biomeName() : DEFAULT_BIOME;
+        data.lightMap[relX][relZ] = surface.surfaceLight();
+
+        if (!surface.overlayList().isEmpty()) {
+            data.overlays.put(relX * REGION_SIZE_BLOCKS + relZ, surface.overlayList());
         }
     }
 

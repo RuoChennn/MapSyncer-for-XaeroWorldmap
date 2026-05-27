@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.config.CacheConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -84,8 +85,8 @@ public class BlockPropertyResolver {
     /** 缓存方块属性查询结果（带LRU清理） */
     private static final ConcurrentHashMap<String, BlockProperties> propertiesCache = new ConcurrentHashMap<>();
 
-    /** 缓存最大容量（超过时清理旧条目） */
-    private static final int MAX_CACHE_SIZE = 10000;
+    /** 缓存最大容量（使用集中配置，便于管理） */
+    private static final int MAX_CACHE_SIZE = CacheConfig.MAX_BLOCK_PROPERTIES_CACHE;
 
     /** 有问题的方块集合（MapColor抛出异常的方块） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();

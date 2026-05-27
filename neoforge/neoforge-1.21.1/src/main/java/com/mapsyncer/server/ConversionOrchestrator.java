@@ -12,6 +12,7 @@ import com.mapsyncer.server.RegionScanner.DimensionRegions;
 import com.mapsyncer.server.RegionScanner.RegionCoords;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.DimensionTypeHelper;
+import com.mapsyncer.util.NamedThreadFactory;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -108,7 +109,7 @@ public class ConversionOrchestrator {
         if (conversionExecutor == null || conversionExecutor.isShutdown()) {
             int maxConcurrent = ModConfig.SERVER.maxConcurrentRegions.get();
             conversionExecutor = Executors.newFixedThreadPool(maxConcurrent,
-                r -> new Thread(r, "mapsyncer-converter-" + r.hashCode()));
+                new NamedThreadFactory("mapsyncer-converter"));
             LOGGER.info("Created conversion thread pool with {} threads", maxConcurrent);
         }
         return conversionExecutor;

@@ -26,10 +26,10 @@ import java.util.function.Supplier;
 /**
  * Forge 网络处理器实现（传统 SimpleNetworkWrapper 方式）
  *
- * Forge 1.20.1 使用 SimpleNetworkWrapper.newSimpleChannel() 创建网络通道，
- * 与 NeoForge 的 ChannelBuilder API 不同。
+ * <p>Forge 1.20.1 使用 SimpleNetworkWrapper.newSimpleChannel() 创建网络通道。</p>
+ * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object</p>
  */
-public class ForgeNetworkHandler implements NetworkHandler {
+public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
     private static final String PROTOCOL_VERSION = "1";
     private static SimpleChannel CHANNEL;
@@ -115,21 +115,18 @@ public class ForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncResponsePayload payload) {
-        ServerPlayer sp = (ServerPlayer) player;
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new ForgeSyncResponseMessage(payload));
+    public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ForgeSyncResponseMessage(payload));
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncProgressPayload payload) {
-        ServerPlayer sp = (ServerPlayer) player;
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new ForgeSyncProgressMessage(payload));
+    public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ForgeSyncProgressMessage(payload));
     }
 
     @Override
-    public void sendToPlayer(Object player, ServerInstalledPayload payload) {
-        ServerPlayer sp = (ServerPlayer) player;
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new ForgeServerInstalledMessage(payload));
+    public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ForgeServerInstalledMessage(payload));
     }
 
     @Override
@@ -159,7 +156,7 @@ public class ForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public Object getPlayerFromContext(PayloadContext context) {
+    public ServerPlayer getPlayerFromContext(PayloadContext context) {
         Supplier<NetworkEvent.Context> forgeCtx = (Supplier<NetworkEvent.Context>) context.getPlatformContext();
         return forgeCtx.get().getSender();
     }

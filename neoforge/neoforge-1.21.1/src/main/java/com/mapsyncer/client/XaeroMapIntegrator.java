@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.network.payload.ChunkMapData;
+import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.HashUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -377,18 +378,18 @@ public class XaeroMapIntegrator {
                     loadStateField.setAccessible(true);
                     byte currentLoadState = loadStateField.getByte(region);
 
-                    if (currentLoadState == 2) {  // Only reset loaded regions
-                        // 记录原本已加载的 region，同步后使用 loadState=4
+                    if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_LOADED) {  // Only reset loaded regions
+                        // 记录原本已加载的 region，同步后使用 LOAD_STATE_CLEARED
                         preUnloadedRegions.add(coord);
 
-                        loadStateField.setByte(region, (byte) 0);
+                        loadStateField.setByte(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         count++;
 
-                        LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
-                    } else if (currentLoadState == 4) {
+                        LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=CLEARED", rx, rz);
+                    } else if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_CLEARED) {
                         // 需要重载的状态也记录为已加载
                         preUnloadedRegions.add(coord);
-                        loadStateField.setByte(region, (byte) 0);
+                        loadStateField.setByte(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         count++;
                     }
                 }

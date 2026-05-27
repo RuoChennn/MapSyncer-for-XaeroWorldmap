@@ -1,5 +1,6 @@
 package com.mapsyncer.util;
 
+import com.mapsyncer.config.CacheConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.renderer.block.model.BakedQuad;
@@ -15,8 +16,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,8 +56,8 @@ import java.util.concurrent.ConcurrentHashMap;
     /** 有问题的方块集合（MapColor 抛出异常） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();
 
-    /** 缓存最大条目数（防止无界增长） */
-    private static final int MAX_CACHE_SIZE = 5000;
+    /** 缓存最大条目数（使用集中配置，便于管理） */
+    private static final int MAX_CACHE_SIZE = CacheConfig.MAX_BLOCK_COLOR_CACHE;
 
     /** 缓存是否需要清除的标志 */
     private static volatile boolean clearCachedColors = false;
@@ -334,7 +335,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
         // 尝试获取方块并使用 BlockState
         try {
-            ResourceLocation location = new ResourceLocation(blockName);
+            ResourceLocation location = ResourceLocation.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(location);
 
             if (blockOpt.isPresent()) {
@@ -426,7 +427,7 @@ import java.util.concurrent.ConcurrentHashMap;
                 args = new String[]{"minecraft", args[0]};
             }
 
-            ResourceLocation location = new ResourceLocation(args[0] + ":" + "textures/" + args[1]);
+            ResourceLocation location = ResourceLocation.fromNamespaceAndPath(args[0], "textures/" + args[1]);
 
             var resource = mc.getResourceManager().getResource(location).orElse(null);
             if (resource == null) {
@@ -613,7 +614,7 @@ import java.util.concurrent.ConcurrentHashMap;
         if (block == Blocks.EMERALD_ORE) return 0x33FF66;
         if (block == Blocks.CLAY) return 0xA0A4C9;
         if (block == Blocks.SANDSTONE) return 0xD7D2A0;
-        if (block == Blocks.GRASS) return 0x7ABD47;
+        if (block == Blocks.SHORT_GRASS) return 0x7ABD47;
         if (block == Blocks.FERN) return 0x5B8731;
         if (block == Blocks.DEAD_BUSH) return 0x9B8B6B;
         if (block == Blocks.CACTUS) return 0x5B8731;

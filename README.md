@@ -1,8 +1,43 @@
 # MapSyncer for Xaero's World Map
 
-一个 Minecraft NeoForge 1.21.X 模组，将服务端已探索区域同步到客户端的 Xaero's World Map。
+一个 Minecraft 模组，将服务端已探索区域同步到客户端的 Xaero's World Map。
 
 > **适用场景**：玩家首次进入已开放服务器，或服务器已用 Chunky 预生成地图，需要将地图同步给玩家，减少重复跑图时间成本。
+
+---
+
+## 运行环境
+
+### 平台支持
+
+| 平台 | Minecraft 版本 | 加载器版本 | Java |
+|------|----------------|------------|------|
+| **NeoForge** | 1.20.1 | 43+ | 17 |
+| **NeoForge** | 1.20.4 | 20.4+ | 17 |
+| **NeoForge** | 1.21.1 | 21.1+ | 21 |
+| **NeoForge** | 1.21.11 | 21.11+ | 21 |
+| **NeoForge** | 26.1 | 26.1+ | 21 |
+| **Forge** | 1.20.1 | 47+ | 17 |
+| **Forge** | 1.20.4 | 49+ | 17 |
+| **Forge** | 1.21.1 | 52+ | 21 |
+| **Forge** | 1.21.11 | 55+ | 21 |
+| **Forge** | 26.1 | 56+ | 21 |
+| **Fabric** | 1.20.1 | Fabric API 0.83+ | 17 |
+| **Fabric** | 1.20.4 | Fabric API 0.92+ | 17 |
+| **Fabric** | 1.21.1 | Fabric API 0.107+ | 21 |
+| **Fabric** | 1.21.11 | Fabric API 0.141+ | 21 |
+| **Fabric** | 26.1 | Fabric API 0.92+ | 21 |
+
+### 客户端依赖
+
+| 依赖 | 要求 |
+|------|------|
+| Xaero's World Map | 1.40.11+ |
+
+### 服务端要求
+
+- 无需安装 Xaero，可独立运行
+- 推荐配合 Chunky 等预生成工具使用
 
 ---
 
@@ -16,18 +51,6 @@
 | **断点续传** | 同步中断后自动恢复，无需重新开始 |
 | **维度支持** | 主世界、地狱、末地及 Mod 维度（暮光森林等） |
 | **增量更新** | 服务端可配置周期性/定时自动更新地图缓存 |
-
----
-
-## 运行环境
-
-| 环境 | 要求 |
-|------|------|
-| Minecraft | 1.21.X (1.21, 1.21.1) |
-| NeoForge | 21.0+ |
-| Java | 21 |
-| 客户端 | Xaero's World Map 1.40.11+ |
-| 服务端 | 无需安装 Xaero，可独立运行 |
 
 ---
 
@@ -148,10 +171,13 @@ dimension_configs = [
 
 | 模块 | 路径 | 功能 |
 |------|------|------|
-| MCA 解析 | [mca/](src/main/java/com/mapsyncer/mca/) | 解析 Minecraft 区域文件，提取区块数据 |
-| 网络同步 | [network/](src/main/java/com/mapsyncer/network/) | 数据包处理、分批传输、进度追踪 |
-| Xaero 集成 | [client/XaeroMapIntegrated.java](src/main/java/com/mapsyncer/client/XaeroMapIntegrator.java) | 反射调用 Xaero API 写入地图 |
-| 增量更新 | [server/IncrementalUpdateHandler.java](src/main/java/com/mapsyncer/server/IncrementalUpdateHandler.java) | 服务端自动更新机制 |
+| **core** | [core/](core/) | 平台无关核心：MCA/NBT 解析、工具类 |
+| **platform-api** | [platform-api/](platform-api/) | 平台抽象接口、网络 Payload 定义 |
+| MCA 解析 | [core/src/main/java/com/mapsyncer/mca/](core/src/main/java/com/mapsyncer/mca/) | 解析 Minecraft 区域文件，提取区块数据 |
+| 网络同步 | [platform-api/src/main/java/com/mapsyncer/network/](platform-api/src/main/java/com/mapsyncer/network/) | 数据包处理、分批传输、进度追踪 |
+| NeoForge 平台 | [neoforge/](neoforge/) | NeoForge 1.20.1 / 1.21.1 / 26.1 实现 |
+| Forge 平台 | [forge/](forge/) | Forge 1.20.1 / 1.20.4 / 1.21.1 实现 |
+| Fabric 平台 | [fabric/](fabric/) | Fabric 1.20.1 / 1.21.1 / 26.1 实现 |
 
 ### 文件存储
 

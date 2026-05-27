@@ -5,6 +5,7 @@ import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
+import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
@@ -13,7 +14,6 @@ import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
@@ -73,17 +73,6 @@ public class MapPacketReceiver {
 
     /** 已加载的区域集合（避免重复加载） */
     private static volatile Set<XaeroMapIntegrator.RegionCoord> loadedRegions = new HashSet<>();
-
-    /** 反射 API 缓存（避免重复反射调用开销） */
-    private static volatile Object cachedMapProcessor = null;
-    private static volatile Object cachedMapSaveLoad = null;
-    private static volatile Method cachedGetLeafMapRegion = null;
-    private static volatile Method cachedRequestLoad = null;
-    private static volatile java.lang.reflect.Field cachedLoadStateField = null;
-    private static volatile Method cachedCancelRefresh = null;
-
-    /** 反射 API 是否已初始化 */
-    private static volatile boolean reflectionInitialized = false;
 
     /**
      * 检查当前同步是否陈旧（运行时间过长）。
@@ -343,13 +332,7 @@ public class MapPacketReceiver {
      * 清理反射 API 缓存。
      */
     private static void clearReflectionCache() {
-        reflectionInitialized = false;
-        cachedMapProcessor = null;
-        cachedMapSaveLoad = null;
-        cachedGetLeafMapRegion = null;
-        cachedRequestLoad = null;
-        cachedLoadStateField = null;
-        cachedCancelRefresh = null;
+        XaeroReflectionHelper.clearCache();
     }
 
     // ========== 边接收边加载优化方法 ==========
@@ -359,61 +342,18 @@ public class MapPacketReceiver {
      * 在首次收到同步数据时调用。
      */
     private static void initializeReflectionCache() {
-        if (reflectionInitialized) return;
+        if (XaeroReflectionHelper.isInitialized()) return;
 
-        try {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player == null) return;
-
-            // 获取 WorldMapSession
-            Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
-            Object session = worldMapSessionClass.getMethod("getCurrentSession").invoke(null);
-            if (session == null) {
-                LOGGER.warn("无法初始化反射缓存: WorldMapSession 为空");
-                return;
-            }
-
-            // 获取 MapProcessor
-            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
-            cachedMapProcessor = worldMapSessionClass.getMethod("getMapProcessor").invoke(session);
-            if (cachedMapProcessor == null) {
-                LOGGER.warn("无法初始化反射缓存: MapProcessor 为空");
-                return;
-            }
-
-            // 获取 MapSaveLoad
-            Class<?> mapSaveLoadClass = Class.forName("xaero.map.file.MapSaveLoad");
-            cachedMapSaveLoad = mapProcessorClass.getMethod("getMapSaveLoad").invoke(cachedMapProcessor);
-            if (cachedMapSaveLoad == null) {
-                LOGGER.warn("无法初始化反射缓存: MapSaveLoad 为空");
-                return;
-            }
-
-            // 缓存常用反射方法和字段
-            cachedGetLeafMapRegion = mapProcessorClass.getMethod("getLeafMapRegion", int.class, int.class, int.class, boolean.class);
-            cachedRequestLoad = mapSaveLoadClass.getMethod("requestLoad", Class.forName("xaero.map.region.MapRegion"), String.class, boolean.class);
-
-            Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
-            cachedLoadStateField = mapRegionClass.getDeclaredField("loadState");
-            cachedLoadStateField.setAccessible(true);
-            cachedCancelRefresh = mapRegionClass.getMethod("cancelRefresh", mapProcessorClass);
-
-            reflectionInitialized = true;
-
+        if (XaeroReflectionHelper.initialize()) {
             // 关键：设置 regionDetectionComplete = true，否则 getLeafMapRegion 会返回 null
-            Method setRegionDetectionComplete = mapSaveLoadClass.getMethod("setRegionDetectionComplete", boolean.class);
-            setRegionDetectionComplete.invoke(cachedMapSaveLoad, true);
-
+            XaeroReflectionHelper.setRegionDetectionComplete(true);
             LOGGER.info("反射 API 缓存已初始化，regionDetectionComplete=true");
-
-        } catch (Exception e) {
-            LOGGER.error("初始化反射缓存失败", e);
         }
     }
 
     /**
      * 立即加载单个区域。
-     * 使用缓存的反射 API，设置 shouldCache=true 确保加载后生成缓存。
+     * 使用 XaeroReflectionHelper 封装的反射 API。
      *
      * 视距内 region：使用 requestLoad(prioritize=true) 插入队头，优先加载
      * 视距外 region：直接添加到 toLoad 队列队尾，绕过 loadingFiles 检查
@@ -423,7 +363,7 @@ public class MapPacketReceiver {
      * @param inViewDistance 是否在视距内（用于优先级判断）
      */
     private static void triggerSingleRegionLoad(XaeroMapIntegrator.RegionCoord coord, int caveLayer, boolean inViewDistance) {
-        if (!reflectionInitialized || cachedMapProcessor == null) {
+        if (!XaeroReflectionHelper.isInitialized()) {
             LOGGER.warn("反射缓存未初始化，无法加载区域 ({}, {}) layer={}", coord.x(), coord.z(), caveLayer);
             return;
         }
@@ -435,53 +375,33 @@ public class MapPacketReceiver {
         }
 
         try {
-            // 获取或创建 MapRegion - 使用正确的 caveLayer
-            Object mapRegion = cachedGetLeafMapRegion.invoke(cachedMapProcessor,
-                caveLayer, coord.x(), coord.z(), true);
+            // 获取或创建 MapRegion
+            Object mapRegion = XaeroReflectionHelper.getLeafMapRegion(caveLayer, coord.x(), coord.z(), true);
             if (mapRegion == null) {
                 LOGGER.warn("无法创建 MapRegion ({}, {}) layer={}", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
             // 调试：检查 region 的属性是否正确
-            Class<?> leveledRegionClass = Class.forName("xaero.map.region.LeveledRegion");
-            java.lang.reflect.Field worldIdField = leveledRegionClass.getDeclaredField("worldId");
-            java.lang.reflect.Field dimIdField = leveledRegionClass.getDeclaredField("dimId");
-            java.lang.reflect.Field mwIdField = leveledRegionClass.getDeclaredField("mwId");
-            worldIdField.setAccessible(true);
-            dimIdField.setAccessible(true);
-            mwIdField.setAccessible(true);
-            String regionWorldId = (String) worldIdField.get(mapRegion);
-            String regionDimId = (String) dimIdField.get(mapRegion);
-            String regionMwId = (String) mwIdField.get(mapRegion);
+            String regionWorldId = XaeroReflectionHelper.getWorldId(mapRegion);
+            String regionDimId = XaeroReflectionHelper.getDimId(mapRegion);
+            String regionMwId = XaeroReflectionHelper.getMwId(mapRegion);
             LOGGER.info("Region ({}, {}) 属性: worldId={}, dimId={}, mwId={}, lastMwDir={}",
                 coord.x(), coord.z(), regionWorldId, regionDimId, regionMwId, lastMwDir);
 
-            // 清除 refresh 状态
-            cachedCancelRefresh.invoke(mapRegion, cachedMapProcessor);
+            // 准备区域加载（取消刷新、设置缓存标志、设置地形标志）
+            XaeroReflectionHelper.prepareRegionLoad(mapRegion);
 
-            // 获取 MapRegion 类（用于 setHasHadTerrain）
-            Class<?> mapRegionClass = Class.forName("xaero.map.region.MapRegion");
-
-            // 设置 shouldCache=true，确保完整加载条件满足
-            java.lang.reflect.Field shouldCacheField = leveledRegionClass.getDeclaredField("shouldCache");
-            shouldCacheField.setAccessible(true);
-            shouldCacheField.setBoolean(mapRegion, true);
-
-            // 关键：设置 hasHadTerrain=true，否则 loadCacheTextures 会直接返回元数据
-            // 如果 hasHadTerrain=false，加载时会跳过完整数据加载
-            java.lang.reflect.Method setHasHadTerrainMethod = mapRegionClass.getMethod("setHasHadTerrain");
-            setHasHadTerrainMethod.invoke(mapRegion);
+            // 设置 loadState = LOAD_STATE_CLEARED（需要加载）
+            XaeroReflectionHelper.setLoadState(mapRegion, XaeroReflectionHelper.LOAD_STATE_CLEARED);
 
             if (inViewDistance) {
                 // 视距内：使用 requestLoad(prioritize=true) 插入队头，优先加载
-                cachedLoadStateField.setByte(mapRegion, (byte) 4);
-                cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync view", true);
+                XaeroReflectionHelper.requestLoad(mapRegion, "sync view", true);
                 LOGGER.info("区域 ({}, {}) layer={} 视距内，插入队头优先加载", coord.x(), coord.z(), caveLayer);
             } else {
                 // 视距外：使用 requestLoad(prioritize=true) 强制添加到队列
-                cachedLoadStateField.setByte(mapRegion, (byte) 4);
-                cachedRequestLoad.invoke(cachedMapSaveLoad, mapRegion, "sync outside", true);
+                XaeroReflectionHelper.requestLoad(mapRegion, "sync outside", true);
                 LOGGER.info("区域 ({}, {}) layer={} 视距外，添加到加载队列", coord.x(), coord.z(), caveLayer);
             }
 

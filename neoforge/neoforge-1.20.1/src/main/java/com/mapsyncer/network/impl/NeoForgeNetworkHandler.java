@@ -18,9 +18,10 @@ import java.util.function.BiConsumer;
 /**
  * NeoForge 网络处理器实现 - 1.20.1 版本
  *
- * 实现 NetworkHandler 接口，适配 NeoForge 43.x 的网络 API。
+ * <p>实现 NetworkHandler 泛型接口，适配 NeoForge 43.x 的网络 API。</p>
+ * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=RegisterPayloadHandlersEvent</p>
  */
-public class NeoForgeNetworkHandler implements NetworkHandler {
+public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, RegisterPayloadHandlersEvent> {
 
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
@@ -28,9 +29,8 @@ public class NeoForgeNetworkHandler implements NetworkHandler {
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
     @Override
-    public void registerHandlers(Object event) {
-        RegisterPayloadHandlersEvent neoEvent = (RegisterPayloadHandlersEvent) event;
-        PayloadRegistrar registrar = neoEvent.registrar("1").optional();
+    public void registerHandlers(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar("1").optional();
 
         // 同步请求（客户端 -> 服务端）
         registrar.playToServer(
@@ -83,20 +83,20 @@ public class NeoForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncResponsePayload payload) {
-        PacketDistributor.sendToPlayer((ServerPlayer) player,
+    public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeSyncResponsePayload(payload));
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncProgressPayload payload) {
-        PacketDistributor.sendToPlayer((ServerPlayer) player,
+    public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeSyncProgressPayload(payload));
     }
 
     @Override
-    public void sendToPlayer(Object player, ServerInstalledPayload payload) {
-        PacketDistributor.sendToPlayer((ServerPlayer) player,
+    public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeServerInstalledPayload(payload));
     }
 
@@ -127,8 +127,8 @@ public class NeoForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public Object getPlayerFromContext(PayloadContext context) {
+    public ServerPlayer getPlayerFromContext(PayloadContext context) {
         IPayloadContext neoCtx = (IPayloadContext) context.getPlatformContext();
-        return neoCtx.player();
+        return (ServerPlayer) neoCtx.player();
     }
 }

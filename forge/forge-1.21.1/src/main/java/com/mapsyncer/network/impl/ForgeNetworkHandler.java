@@ -25,10 +25,11 @@ import java.util.function.BiConsumer;
 /**
  * Forge 1.21 网络处理器实现
  *
- * 实现 NetworkHandler 接口，适配 Forge 1.21 的网络 API。
- * Forge 1.21 使用 ChannelBuilder/SimpleChannel API，使用 FriendlyByteBuf 和 CustomPayloadEvent.Context。
+ * <p>实现 NetworkHandler 泛型接口，适配 Forge 1.21 的网络 API。</p>
+ * <p>Forge 1.21 使用 ChannelBuilder/SimpleChannel API，使用 FriendlyByteBuf 和 CustomPayloadEvent.Context。</p>
+ * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object（Forge不需要事件）</p>
  */
-public class ForgeNetworkHandler implements NetworkHandler {
+public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
     private static final SimpleChannel CHANNEL = ChannelBuilder
         .named(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "main"))
@@ -99,21 +100,18 @@ public class ForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncResponsePayload payload) {
-        ServerPlayer sp = (ServerPlayer) player;
-        CHANNEL.send(new ForgeSyncResponseMessage(payload), PacketDistributor.PLAYER.with(sp));
+    public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        CHANNEL.send(new ForgeSyncResponseMessage(payload), PacketDistributor.PLAYER.with(player));
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncProgressPayload payload) {
-        ServerPlayer sp = (ServerPlayer) player;
-        CHANNEL.send(new ForgeSyncProgressMessage(payload), PacketDistributor.PLAYER.with(sp));
+    public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        CHANNEL.send(new ForgeSyncProgressMessage(payload), PacketDistributor.PLAYER.with(player));
     }
 
     @Override
-    public void sendToPlayer(Object player, ServerInstalledPayload payload) {
-        ServerPlayer sp = (ServerPlayer) player;
-        CHANNEL.send(new ForgeServerInstalledMessage(payload), PacketDistributor.PLAYER.with(sp));
+    public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        CHANNEL.send(new ForgeServerInstalledMessage(payload), PacketDistributor.PLAYER.with(player));
     }
 
     @Override
@@ -147,7 +145,7 @@ public class ForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public Object getPlayerFromContext(PayloadContext context) {
+    public ServerPlayer getPlayerFromContext(PayloadContext context) {
         Object platformContext = context.getPlatformContext();
         if (platformContext instanceof CustomPayloadEvent.Context forgeCtx) {
             return forgeCtx.getSender();

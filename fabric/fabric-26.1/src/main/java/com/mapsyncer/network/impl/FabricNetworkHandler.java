@@ -20,13 +20,13 @@ import java.util.function.BiConsumer;
 /**
  * Fabric 26.x 网络处理器实现
  *
- * Fabric 26.x 使用 Fabric Networking API v1 (PayloadTypeRegistry + ServerPlayNetworking/ClientPlayNetworking)
- * API 预估与 Fabric 1.21 高度兼容。
- *
- * Payload DTOs 在 platform-api 中定义为平台无关的纯 record。
- * Fabric 版本使用 FabricPayloadAdapters 进行序列化/反序列化。
+ * <p>Fabric 26.x 使用 Fabric Networking API v1 (PayloadTypeRegistry + ServerPlayNetworking/ClientPlayNetworking)</p>
+ * <p>API 预估与 Fabric 1.21 高度兼容。</p>
+ * <p>Payload DTOs 在 platform-api 中定义为平台无关的纯 record。</p>
+ * <p>Fabric 版本使用 FabricPayloadAdapters 进行序列化/反序列化。</p>
+ * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object</p>
  */
-public class FabricNetworkHandler implements NetworkHandler {
+public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
@@ -90,18 +90,18 @@ public class FabricNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncResponsePayload payload) {
-        ServerPlayNetworking.send((ServerPlayer) player, payload);
+    public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        ServerPlayNetworking.send(player, payload);
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncProgressPayload payload) {
-        ServerPlayNetworking.send((ServerPlayer) player, payload);
+    public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        ServerPlayNetworking.send(player, payload);
     }
 
     @Override
-    public void sendToPlayer(Object player, ServerInstalledPayload payload) {
-        ServerPlayNetworking.send((ServerPlayer) player, payload);
+    public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        ServerPlayNetworking.send(player, payload);
     }
 
     @Override
@@ -131,7 +131,7 @@ public class FabricNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public Object getPlayerFromContext(PayloadContext context) {
+    public ServerPlayer getPlayerFromContext(PayloadContext context) {
         return context.getPlatformContext().player();
     }
 }

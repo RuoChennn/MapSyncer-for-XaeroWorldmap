@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.config.CacheConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -41,7 +42,7 @@ import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
 import net.minecraft.world.level.block.TallGrassBlock;
 import net.minecraft.world.level.block.TallSeagrassBlock;
-// TransparentBlock 在 Minecraft 1.20.1 中不存在，使用其他方式判断透明性
+import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.block.TorchflowerCropBlock;
 import net.minecraft.world.level.block.TwistingVinesBlock;
 import net.minecraft.world.level.block.TwistingVinesPlantBlock;
@@ -84,8 +85,8 @@ public class BlockPropertyResolver {
     /** 缓存方块属性查询结果（带LRU清理） */
     private static final ConcurrentHashMap<String, BlockProperties> propertiesCache = new ConcurrentHashMap<>();
 
-    /** 缓存最大容量（超过时清理旧条目） */
-    private static final int MAX_CACHE_SIZE = 10000;
+    /** 缓存最大容量（使用集中配置，便于管理） */
+    private static final int MAX_CACHE_SIZE = CacheConfig.MAX_BLOCK_PROPERTIES_CACHE;
 
     /** 有问题的方块集合（MapColor抛出异常的方块） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();
@@ -207,7 +208,7 @@ public class BlockPropertyResolver {
      */
     private static BlockProperties resolveProperties(String blockName) {
         try {
-            ResourceLocation location = new ResourceLocation(blockName);
+            ResourceLocation location = ResourceLocation.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(location);
 
             if (blockOpt.isEmpty()) {
@@ -346,9 +347,9 @@ public class BlockPropertyResolver {
      * @return true表示是透明方块
      */
     private static boolean checkTransparency(Block block, BlockState state) {
-        // 1. AirBlock 类（TransparentBlock 在 1.20.1 不存在）
-        // 透明方块包括：玻璃、冰等，需要通过其他方式判断
-        if (block instanceof AirBlock) {
+        // 1. AirBlock 或 TransparentBlock 类（Xaero 方式）
+        // TransparentBlock 包括：玻璃、冰、遮光玻璃等
+        if (block instanceof AirBlock || block instanceof TransparentBlock) {
             return true;
         }
 
@@ -412,8 +413,8 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 3. 矮草（Xaero 默认跳过）- 在 1.20.1 中是 Blocks.GRASS
-        if (block == Blocks.GRASS) {
+        // 3. 矮草（Xaero 默认跳过）
+        if (block == Blocks.SHORT_GRASS) {
             return true;
         }
 

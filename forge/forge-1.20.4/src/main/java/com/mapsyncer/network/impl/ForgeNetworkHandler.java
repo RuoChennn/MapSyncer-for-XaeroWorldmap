@@ -20,9 +20,10 @@ import java.util.function.BiConsumer;
 /**
  * Forge 1.20.4 网络处理器实现
  *
- * Forge 49.x 使用 SimpleChannel + FriendlyByteBuf。
+ * <p>Forge 49.x 使用 SimpleChannel + FriendlyByteBuf。</p>
+ * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object</p>
  */
-public class ForgeNetworkHandler implements NetworkHandler {
+public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
     private static final SimpleChannel CHANNEL = ChannelBuilder
             .named(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "main"))
@@ -96,18 +97,18 @@ public class ForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncResponsePayload payload) {
-        CHANNEL.send(payload, NetworkDirection.PLAY_TO_CLIENT, (ServerPlayer) player);
+    public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        CHANNEL.send(payload, NetworkDirection.PLAY_TO_CLIENT, player);
     }
 
     @Override
-    public void sendToPlayer(Object player, SyncProgressPayload payload) {
-        CHANNEL.send(payload, NetworkDirection.PLAY_TO_CLIENT, (ServerPlayer) player);
+    public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        CHANNEL.send(payload, NetworkDirection.PLAY_TO_CLIENT, player);
     }
 
     @Override
-    public void sendToPlayer(Object player, ServerInstalledPayload payload) {
-        CHANNEL.send(payload, NetworkDirection.PLAY_TO_CLIENT, (ServerPlayer) player);
+    public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        CHANNEL.send(payload, NetworkDirection.PLAY_TO_CLIENT, player);
     }
 
     @Override
@@ -136,7 +137,7 @@ public class ForgeNetworkHandler implements NetworkHandler {
     }
 
     @Override
-    public Object getPlayerFromContext(PayloadContext context) {
+    public ServerPlayer getPlayerFromContext(PayloadContext context) {
         return context.getPlatformContext().getPlayer();
     }
 }

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Chunk Section数据解析器
@@ -24,6 +25,23 @@ import java.util.Map;
  * @see BlockState 方块状态记录
  */
 public class ChunkSectionParser {
+
+    /**
+     * 花朵方块名称集合
+     *
+     * <p>使用 Set 常量替代多次字符串比较，提高判断效率。</p>
+     */
+    private static final Set<String> FLOWER_NAMES = Set.of(
+        "minecraft:dandelion", "minecraft:poppy",
+        "minecraft:blue_orchid", "minecraft:allium",
+        "minecraft:red_tulip", "minecraft:orange_tulip",
+        "minecraft:white_tulip", "minecraft:pink_tulip",
+        "minecraft:oxeye_daisy", "minecraft:cornflower",
+        "minecraft:lily_of_the_valley", "minecraft:wither_rose",
+        "minecraft:sunflower", "minecraft:rose_bush",
+        "minecraft:peony", "minecraft:azure_bluet",
+        "minecraft:pitcher_plant"
+    );
 
     /**
      * 方块状态数据记录（包含名称和属性）
@@ -155,16 +173,10 @@ public class ChunkSectionParser {
          * @return 如果方块是花朵类型则返回true
          */
         public boolean isFlower() {
-            return name.equals("minecraft:dandelion") || name.equals("minecraft:poppy") ||
-                   name.equals("minecraft:blue_orchid") || name.equals("minecraft:allium") ||
-                   name.equals("minecraft:red_tulip") || name.equals("minecraft:orange_tulip") ||
-                   name.equals("minecraft:white_tulip") || name.equals("minecraft:pink_tulip") ||
-                   name.equals("minecraft:oxeye_daisy") || name.equals("minecraft:cornflower") ||
-                   name.equals("minecraft:lily_of_the_valley") || name.equals("minecraft:wither_rose") ||
-                   name.equals("minecraft:sunflower") || name.equals("minecraft:rose_bush") ||
-                   name.equals("minecraft:peony") || name.equals("minecraft:azure_bluet") ||
-                   name.endsWith("_tulip") || name.contains("orchid") ||
-                   name.equals("minecraft:pitcher_plant") || name.endsWith("_pitcher_crop");
+            return FLOWER_NAMES.contains(name) ||
+                   name.endsWith("_tulip") ||
+                   name.contains("orchid") ||
+                   name.endsWith("_pitcher_crop");
         }
 
         /**

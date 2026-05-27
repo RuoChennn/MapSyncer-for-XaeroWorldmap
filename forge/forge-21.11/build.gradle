@@ -1,0 +1,70 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+}
+
+version = mod_version + '-forge-21.11'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Forge 21.11 使用 Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+minecraft {
+    // Mappings 配置 - 1.21.11
+    mappings channel: 'official', version: '1.21.11'
+
+    reobf = false
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+        }
+    }
+}
+
+dependencies {
+    // Minecraft Forge 21.11 (Forge 55.x)
+    minecraft "net.minecraftforge:forge:1.21.11-55.0.22"
+
+    implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
+
+    implementation project(':core')
+    implementation project(':platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        register('forge2111MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

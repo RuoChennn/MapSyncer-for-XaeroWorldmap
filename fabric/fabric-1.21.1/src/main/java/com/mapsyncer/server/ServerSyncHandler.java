@@ -1,8 +1,6 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.platform.UpdateMode;
-import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
@@ -56,7 +54,8 @@ import java.util.stream.Stream;
  * - 断线重连后，客户端发送已接收区域的哈希，服务端比对后只同步差异
  * - 无需服务端保留进度索引，简化实现并避免内存泄漏
  *
- * 注意：此类通过 NetworkManager.getHandler().registerSyncRequestHandler() 注册处理器。
+ * 注意：此类通过主mod类的modBus.addListener()手动注册，
+ * 因为RegisterPayloadHandlersEvent是MOD总线事件。
  */
 public class ServerSyncHandler {
 
@@ -72,7 +71,7 @@ public class ServerSyncHandler {
      * @return 最大单包大小（字节）
      */
     private static int getMaxPacketSize() {
-        int configValue = ModConfig.SERVER().getMaxSyncPacketSize();
+        int configValue = ModConfig.SERVER.maxSyncPacketSize.get();
         return Math.min(configValue, MAX_PACKET_SIZE_LIMIT);
     }
 
@@ -84,7 +83,7 @@ public class ServerSyncHandler {
      * @return 批次累积阈值（字节）
      */
     private static int getBatchThreshold() {
-        int limitKBps = ModConfig.SERVER().getSyncSpeedLimitKBps();
+        int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
         if (limitKBps <= 0) {
             // 无限速：使用最大包大小
             return getMaxPacketSize();
@@ -223,10 +222,13 @@ public class ServerSyncHandler {
 
     /**
      * 注册网络数据包处理器
+     *
+     * @param event 数据包处理器注册事件
      */
-    public static void register() {
-        NetworkHandler handler = NetworkManager.getHandler();
-        handler.registerSyncRequestHandler(ServerSyncHandler::handleSyncRequest);
+    public static void register(final Object event) {
+        NetworkManager.getHandler().registerSyncRequestHandler(
+            (payload, context) -> handleSyncRequest(payload, context)
+        );
     }
 
     /**
@@ -336,7 +338,7 @@ public class ServerSyncHandler {
      * @return true 表示速度限制完成，false 表示玩家已掉线应中断同步
      */
     private static boolean applySpeedLimit(int bytesSent, ServerPlayer player, UUID playerId) {
-        int limitKBps = ModConfig.SERVER().getSyncSpeedLimitKBps();
+        int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
         if (limitKBps <= 0) return true; // No limit
 
         // 获取或初始化限速周期状态
@@ -436,7 +438,13 @@ public class ServerSyncHandler {
     private static void cleanupSyncState(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
-        syncThreads.remove(playerId);
+
+        // 清理线程引用并确保线程已停止
+        Thread syncThread = syncThreads.remove(playerId);
+        if (syncThread != null && syncThread.isAlive()) {
+            syncThread.interrupt();
+        }
+
         clearSpeedLimitState(playerId);
     }
 
@@ -449,10 +457,10 @@ public class ServerSyncHandler {
      * **重要**：同步处理在异步线程执行，避免阻塞服务器主线程导致 Watchdog 崩溃。
      *
      * @param payload 同步请求数据包
-     * @param context Payload上下文
+     * @param context 数据包上下文
      */
     private static void handleSyncRequest(SyncRequestPayload payload, PayloadContext context) {
-        Player player = (Player) context.getPlayer();
+        Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
         if (!(player instanceof ServerPlayer serverPlayer)) return;
 
         UUID playerId = serverPlayer.getUUID();
@@ -899,20 +907,45 @@ public class ServerSyncHandler {
         // 清理离线玩家的状态
         for (UUID playerId : toRemove) {
             LOGGER.info("Cleaning up stale state for offline player {}", playerId);
-            syncingPlayers.remove(playerId);
-            playerSyncDimensions.remove(playerId);
-
-            // 中断同步线程（如果仍在运行）
-            Thread syncThread = syncThreads.remove(playerId);
-            if (syncThread != null && syncThread.isAlive()) {
-                syncThread.interrupt();
-            }
-
-            clearSpeedLimitState(playerId);
+            cleanupSyncState(playerId);
         }
+
+        // 清理已结束但未移除的线程引用（防止内存泄漏）
+        cleanupCompletedThreads();
 
         if (!toRemove.isEmpty()) {
             LOGGER.debug("Cleaned up {} stale player states", toRemove.size());
+        }
+    }
+
+    /**
+     * 清理已结束的同步线程引用。
+     *
+     * <p>线程正常完成后，Thread对象可能残留在syncThreads Map中。
+     * 此方法检查并清理所有已终止的线程，防止内存泄漏。</p>
+     */
+    private static void cleanupCompletedThreads() {
+        Set<UUID> completedThreads = new HashSet<>();
+
+        for (Map.Entry<UUID, Thread> entry : syncThreads.entrySet()) {
+            Thread thread = entry.getValue();
+            // 线程已终止（不再存活），标记为需要清理
+            if (thread == null || !thread.isAlive()) {
+                completedThreads.add(entry.getKey());
+            }
+        }
+
+        for (UUID playerId : completedThreads) {
+            LOGGER.debug("Cleaning up completed thread for player {}", playerId);
+            syncThreads.remove(playerId);
+            // 同时清理相关状态（如果线程已完成但状态未清理）
+            syncingPlayers.remove(playerId);
+            playerSyncDimensions.remove(playerId);
+            clearSpeedLimitState(playerId);
+        }
+
+        if (!completedThreads.isEmpty()) {
+            LOGGER.info("Cleaned up {} completed thread references", completedThreads.size());
         }
     }
 

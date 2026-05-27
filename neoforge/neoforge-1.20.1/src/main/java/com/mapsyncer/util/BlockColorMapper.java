@@ -1,5 +1,6 @@
 package com.mapsyncer.util;
 
+import com.mapsyncer.config.CacheConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.renderer.block.model.BakedQuad;
@@ -55,8 +56,8 @@ import java.util.concurrent.ConcurrentHashMap;
     /** 有问题的方块集合（MapColor 抛出异常） */
     private static final ConcurrentHashMap<String, Boolean> buggedBlocks = new ConcurrentHashMap<>();
 
-    /** 缓存最大条目数（防止无界增长） */
-    private static final int MAX_CACHE_SIZE = 5000;
+    /** 缓存最大条目数（使用集中配置，便于管理） */
+    private static final int MAX_CACHE_SIZE = CacheConfig.MAX_BLOCK_COLOR_CACHE;
 
     /** 缓存是否需要清除的标志 */
     private static volatile boolean clearCachedColors = false;

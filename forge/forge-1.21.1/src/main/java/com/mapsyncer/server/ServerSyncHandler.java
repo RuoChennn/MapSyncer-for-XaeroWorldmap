@@ -438,7 +438,13 @@ public class ServerSyncHandler {
     private static void cleanupSyncState(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
-        syncThreads.remove(playerId);
+
+        // 清理线程引用并确保线程已停止
+        Thread syncThread = syncThreads.remove(playerId);
+        if (syncThread != null && syncThread.isAlive()) {
+            syncThread.interrupt();
+        }
+
         clearSpeedLimitState(playerId);
     }
 
@@ -901,20 +907,45 @@ public class ServerSyncHandler {
         // 清理离线玩家的状态
         for (UUID playerId : toRemove) {
             LOGGER.info("Cleaning up stale state for offline player {}", playerId);
-            syncingPlayers.remove(playerId);
-            playerSyncDimensions.remove(playerId);
-
-            // 中断同步线程（如果仍在运行）
-            Thread syncThread = syncThreads.remove(playerId);
-            if (syncThread != null && syncThread.isAlive()) {
-                syncThread.interrupt();
-            }
-
-            clearSpeedLimitState(playerId);
+            cleanupSyncState(playerId);
         }
+
+        // 清理已结束但未移除的线程引用（防止内存泄漏）
+        cleanupCompletedThreads();
 
         if (!toRemove.isEmpty()) {
             LOGGER.debug("Cleaned up {} stale player states", toRemove.size());
+        }
+    }
+
+    /**
+     * 清理已结束的同步线程引用。
+     *
+     * <p>线程正常完成后，Thread对象可能残留在syncThreads Map中。
+     * 此方法检查并清理所有已终止的线程，防止内存泄漏。</p>
+     */
+    private static void cleanupCompletedThreads() {
+        Set<UUID> completedThreads = new HashSet<>();
+
+        for (Map.Entry<UUID, Thread> entry : syncThreads.entrySet()) {
+            Thread thread = entry.getValue();
+            // 线程已终止（不再存活），标记为需要清理
+            if (thread == null || !thread.isAlive()) {
+                completedThreads.add(entry.getKey());
+            }
+        }
+
+        for (UUID playerId : completedThreads) {
+            LOGGER.debug("Cleaning up completed thread for player {}", playerId);
+            syncThreads.remove(playerId);
+            // 同时清理相关状态（如果线程已完成但状态未清理）
+            syncingPlayers.remove(playerId);
+            playerSyncDimensions.remove(playerId);
+            clearSpeedLimitState(playerId);
+        }
+
+        if (!completedThreads.isEmpty()) {
+            LOGGER.info("Cleaned up {} completed thread references", completedThreads.size());
         }
     }
 

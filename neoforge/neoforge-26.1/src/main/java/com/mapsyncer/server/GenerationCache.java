@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.config.CacheConfig;
 import com.mapsyncer.util.HashUtils;
 import com.mapsyncer.util.PropertiesCacheIO;
 import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
@@ -24,15 +25,15 @@ import java.util.Map;
  * - 格式：dimension/region_x_z = timestamp_seconds:hash
  *
  * 内存管理：
- * - 最大缓存条目数限制（MAX_CACHE_REGIONS）
+ * - 使用 {@link CacheConfig#MAX_REGION_META_CACHE} 作为上限
  * - 超过限制时自动清理最旧的条目
  */
 public class GenerationCache {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GenerationCache.class);
 
-    /** 最大缓存条目数（防止大型服务器内存占用过高） */
-    private static final int MAX_CACHE_REGIONS = 50000;
+    /** 最大缓存条目数（使用集中配置，便于管理） */
+    private static final int MAX_CACHE_REGIONS = CacheConfig.MAX_REGION_META_CACHE;
 
     /** 单例实例 */
     private static volatile GenerationCache instance;
