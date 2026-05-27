@@ -2,14 +2,14 @@ plugins {
     id 'fabric-loom' version '1.16-SNAPSHOT'
 }
 
-version = mod_version + '-fabric-21.11'
+version = mod_version + '-fabric-1.21.11'
 group = mod_group_id
 
 base {
     archivesName = mod_id
 }
 
-// Fabric 21.11 使用 Java 21
+// Fabric 1.21.11 使用 Java 21
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 loom {

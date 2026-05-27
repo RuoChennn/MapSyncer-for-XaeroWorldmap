@@ -2,14 +2,14 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
 }
 
-version = mod_version + '-forge-21.11'
+version = mod_version + '-forge-1.21.11'
 group = mod_group_id
 
 base {
     archivesName = mod_id
 }
 
-// Forge 21.11 使用 Java 21
+// Forge 1.21.11 使用 Java 21
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
@@ -43,7 +43,7 @@ minecraft {
 }
 
 dependencies {
-    // Minecraft Forge 21.11 (Forge 55.x)
+    // Minecraft Forge 1.21.11 (Forge 55.x)
     minecraft "net.minecraftforge:forge:1.21.11-55.0.22"
 
     implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }

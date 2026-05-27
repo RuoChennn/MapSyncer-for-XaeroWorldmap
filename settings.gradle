@@ -26,7 +26,7 @@ include 'platform-api'      // 平台抽象接口
 include 'neoforge:neoforge-1.20.1'
 include 'neoforge:neoforge-1.20.4'
 include 'neoforge:neoforge-1.21.1'
-include 'neoforge:neoforge-21.11'
+include 'neoforge:neoforge-1.21.11'
 // neoforge-26.1 可能需要 Java 25，暂未安装
 // include 'neoforge:neoforge-26.1'
 
@@ -34,14 +34,14 @@ include 'neoforge:neoforge-21.11'
 include 'forge:forge-1.20.1'
 include 'forge:forge-1.20.4'
 include 'forge:forge-1.21.1'
-// forge-21.11 和 forge-26.1 - Forge 可能不支持这些新版本
-// include 'forge:forge-21.11'
+// forge-1.21.11 和 forge-26.1 - Forge 可能不支持这些新版本
+// include 'forge:forge-1.21.11'
 // include 'forge:forge-26.1'
 
 // Fabric 平台
 include 'fabric:fabric-1.20.1'
 include 'fabric:fabric-1.20.4'
 include 'fabric:fabric-1.21.1'
-// fabric-21.11 和 fabric-26.1 需要 Gradle 9.x + Loom 1.16，暂时排除
-// include 'fabric:fabric-21.11'
+// fabric-1.21.11 和 fabric-26.1 需要 Gradle 9.x + Loom 1.16，暂时排除
+// include 'fabric:fabric-1.21.11'
 // include 'fabric:fabric-26.1'

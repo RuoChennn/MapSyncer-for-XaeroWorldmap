@@ -23,10 +23,10 @@ import net.minecraftforge.event.network.CustomPayloadEvent;
 import java.util.function.BiConsumer;
 
 /**
- * Forge 21.11 网络处理器实现
+ * Forge 1.21.11 网络处理器实现
  *
- * <p>实现 NetworkHandler 泛型接口，适配 Forge 21.11 的网络 API。</p>
- * <p>Forge 21.11 使用 ChannelBuilder/SimpleChannel API。</p>
+ * <p>实现 NetworkHandler 泛型接口，适配 Forge 1.21.11 的网络 API。</p>
+ * <p>Forge 1.21.11 使用 ChannelBuilder/SimpleChannel API。</p>
  * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object</p>
  */
 public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object> {

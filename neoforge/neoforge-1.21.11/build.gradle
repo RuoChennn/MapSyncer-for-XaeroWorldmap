@@ -2,14 +2,14 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.61-beta'
 }
 
-version = mod_version + '-neoforge-21.11'
+version = mod_version + '-neoforge-1.21.11'
 group = mod_group_id
 
 base {
     archivesName = mod_id
 }
 
-// NeoForge 21.11 使用 Java 21
+// NeoForge 1.21.11 使用 Java 21
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
