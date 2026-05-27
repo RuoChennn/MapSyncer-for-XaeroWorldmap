@@ -30,6 +30,7 @@ logs/
 
 # Decompiler output
 .decompiled/
+.xaeroworldmap/
 
 # Eclipse metadata
 .eclipse/
