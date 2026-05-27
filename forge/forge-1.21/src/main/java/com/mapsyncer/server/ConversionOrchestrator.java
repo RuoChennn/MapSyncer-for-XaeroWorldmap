@@ -57,6 +57,9 @@ public class ConversionOrchestrator {
     /** 已处理的区域数量（原子变量，支持并发更新） */
     private static final AtomicInteger processedCountAtomic = new AtomicInteger(0);
 
+    /** 已处理的区域数量（兼容旧代码的快捷访问） */
+    private static volatile int processedCount = 0;
+
     /** 跳过的区域数量（时间戳未变化） */
     private static volatile int skippedCount = 0;
 

@@ -25,7 +25,8 @@ repositories {
 dependencies {
     // Minecraft and Fabric
     minecraft "com.mojang:minecraft:${minecraft_120_version}"
-    mappings "net.fabricmc:yarn:1.20.1+build.10:v2"
+    // 使用 official mappings (Mojmap) 以保持与其他平台一致
+    mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:0.15.11"
 
     // Fabric API

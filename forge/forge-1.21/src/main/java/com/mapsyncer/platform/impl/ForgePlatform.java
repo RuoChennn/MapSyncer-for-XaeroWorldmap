@@ -1,10 +1,13 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.BlockProperties;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.server.BlockPropertyResolver;
+import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;

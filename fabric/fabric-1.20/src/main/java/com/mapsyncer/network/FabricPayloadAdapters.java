@@ -7,7 +7,6 @@ import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
-import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
@@ -18,9 +17,12 @@ import java.util.Map;
 /**
  * Fabric Payload 适配器
  *
- * Fabric 使用 PacketByteBuf 进行序列化，Payload 类实现 PacketByteBuf 读写。
+ * 提供 Fabric Networking API v1 需要的 Identifier 常量和 PacketByteBuf 序列化方法。
+ * Payload DTOs 在 platform-api 中定义为平台无关的纯 record。
  */
 public class FabricPayloadAdapters {
+
+    // ===== Identifier 常量（Fabric 需要 Identifier 类型） =====
 
     public static final Identifier SYNC_REQUEST_ID = Identifier.of(MapSyncer.MOD_ID, "sync_request");
     public static final Identifier SYNC_RESPONSE_ID = Identifier.of(MapSyncer.MOD_ID, "sync_response");

@@ -2,11 +2,11 @@ package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.MapSyncerCommand;
+import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,11 +50,8 @@ public class MapSyncerClient implements ClientModInitializer {
             MapPacketReceiver.clearSyncData();
             // 清理 XaeroMapIntegrator 区域追踪
             com.mapsyncer.client.XaeroMapIntegrator.clearRegionTracking();
-        });
-
-        // 注册客户端 Tick 事件（用于进度追踪超时检查）
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            com.mapsyncer.client.SyncProgressTracker.shutdown();
+            // 关闭进度追踪器的线程池（防止内存泄漏）
+            SyncProgressTracker.shutdown();
         });
 
         LOGGER.info("MapSyncer client initialized");

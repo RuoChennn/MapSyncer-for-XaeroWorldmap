@@ -6,8 +6,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import com.mapsyncer.client.ClientHashManager.ClientMeta;
-import com.mapsyncer.network.PacketHandler;
+import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.NetworkManager;
+import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
@@ -20,8 +21,7 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.EventBusSubscriber;
-import net.minecraftforge.neoforge.client.event.RegisterClientCommandsEvent;
-import net.minecraftforge.network.PacketDistributor;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -383,7 +383,7 @@ public class MapSyncerCommand {
             tsCache.markSyncStart(dimensions, command);
         }
 
-        PacketDistributor.sendToServer(new PacketHandler.SyncRequestPayload(metaMap));
+        NetworkManager.sendToServer(new SyncRequestPayload(metaMap));
         SyncProgressTracker.startTracking();
     }
 

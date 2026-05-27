@@ -21,23 +21,39 @@ import java.util.function.BiConsumer;
  * Fabric 网络处理器实现
  *
  * Fabric 1.20+ 使用 Fabric Networking API v1 (PayloadTypeRegistry + ServerPlayNetworking/ClientPlayNetworking)
+ *
+ * Payload DTOs 在 platform-api 中定义为平台无关的纯 record。
+ * Fabric 版本使用 FabricPayloadAdapters 进行序列化/反序列化。
  */
 public class FabricNetworkHandler implements NetworkHandler {
 
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
-    private BiConsumer<SyncProgressPayload, PayloadContext> serverInstalledHandler;
+    private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
+    private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
     @Override
     public void registerHandlers(Object event) {
-        // 注册 Payload 类型
-        PayloadTypeRegistry.playC2S().register(SyncRequestPayload.ID, SyncRequestPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SyncResponsePayload.ID, SyncResponsePayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SyncProgressPayload.ID, SyncProgressPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(ServerInstalledPayload.ID, ServerInstalledPayload.CODEC);
+        // 注册 Payload 类型 - 使用 FabricPayloadAdapters 的 Codec
+        PayloadTypeRegistry.playC2S().register(
+                FabricPayloadAdapters.SYNC_REQUEST_ID,
+                PacketByteBuf.createCodec(FabricPayloadAdapters::writeSyncRequest, FabricPayloadAdapters::readSyncRequest)
+        );
+        PayloadTypeRegistry.playS2C().register(
+                FabricPayloadAdapters.SYNC_RESPONSE_ID,
+                PacketByteBuf.createCodec(FabricPayloadAdapters::writeSyncResponse, FabricPayloadAdapters::readSyncResponse)
+        );
+        PayloadTypeRegistry.playS2C().register(
+                FabricPayloadAdapters.SYNC_PROGRESS_ID,
+                PacketByteBuf.createCodec(FabricPayloadAdapters::writeSyncProgress, FabricPayloadAdapters::readSyncProgress)
+        );
+        PayloadTypeRegistry.playS2C().register(
+                FabricPayloadAdapters.SERVER_INSTALLED_ID,
+                PacketByteBuf.createCodec(FabricPayloadAdapters::writeServerInstalled, FabricPayloadAdapters::readServerInstalled)
+        );
 
         // 注册服务端接收器
-        ServerPlayNetworking.registerGlobalReceiver(SyncRequestPayload.ID, (payload, context) -> {
+        ServerPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_REQUEST_ID, (payload, context) -> {
             if (syncRequestHandler != null) {
                 syncRequestHandler.accept(payload, new PayloadContext(context));
             }
@@ -48,19 +64,19 @@ public class FabricNetworkHandler implements NetworkHandler {
      * 注册客户端接收器（在客户端初始化时调用）
      */
     public void registerClientHandlers() {
-        ClientPlayNetworking.registerGlobalReceiver(SyncResponsePayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_RESPONSE_ID, (payload, context) -> {
             if (syncResponseHandler != null) {
                 syncResponseHandler.accept(payload, new PayloadContext(context));
             }
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(SyncProgressPayload.ID, (payload, context) -> {
-            if (serverInstalledHandler != null) {
-                serverInstalledHandler.accept(payload, new PayloadContext(context));
+        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_PROGRESS_ID, (payload, context) -> {
+            if (syncProgressHandler != null) {
+                syncProgressHandler.accept(payload, new PayloadContext(context));
             }
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(ServerInstalledPayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SERVER_INSTALLED_ID, (payload, context) -> {
             if (serverInstalledHandler != null) {
                 serverInstalledHandler.accept(payload, new PayloadContext(context));
             }
@@ -94,7 +110,7 @@ public class FabricNetworkHandler implements NetworkHandler {
 
     @Override
     public void registerSyncProgressHandler(BiConsumer<SyncProgressPayload, PayloadContext> handler) {
-        // Fabric 进度处理也通过 syncResponseHandler 处理
+        this.syncProgressHandler = handler;
     }
 
     @Override
@@ -109,7 +125,7 @@ public class FabricNetworkHandler implements NetworkHandler {
 
     @Override
     public void enqueueWork(PayloadContext context, Runnable work) {
-        // Fabric 的 context.client() 或 context.server() 已经提供了线程安全的执行方式
+        // Fabric 的 context.server() 已经提供了线程安全的执行方式
         context.getPlatformContext().enqueueWork(work);
     }
 

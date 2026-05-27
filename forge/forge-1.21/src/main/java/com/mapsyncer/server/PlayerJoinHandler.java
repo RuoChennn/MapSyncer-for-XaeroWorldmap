@@ -11,12 +11,12 @@ import com.mapsyncer.client.ClientHashManager;
 import com.mapsyncer.util.BlockColorMapper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.EventBusSubscriber;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.event.TickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,10 +103,15 @@ public class PlayerJoinHandler {
      * <p>检查逻辑：遍历syncingPlayers集合，验证玩家是否仍然在线。
      * 如果玩家不在服务器玩家列表中，清理其所有状态。</p>
      *
-     * @param event 服务器Tick后事件
+     * @param event 服务器Tick事件
      */
     @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Post event) {
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        // 只在 END 阶段执行
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+
         cleanupTickCounter++;
 
         // 每60秒检查一次

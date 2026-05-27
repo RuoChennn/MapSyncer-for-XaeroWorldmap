@@ -2,11 +2,11 @@ package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.UpdateMode;
-import net.minecraftforge.neoforge.common.ModConfigSpec;
-import net.minecraftforge.neoforge.common.ModConfigSpec.BooleanValue;
-import net.minecraftforge.neoforge.common.ModConfigSpec.IntValue;
-import net.minecraftforge.neoforge.common.ModConfigSpec.EnumValue;
-import net.minecraftforge.neoforge.common.ModConfigSpec.ConfigValue;
+import net.minecraftforge.common.ForgeConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec.BooleanValue;
+import net.minecraftforge.common.ForgeConfigSpec.IntValue;
+import net.minecraftforge.common.ForgeConfigSpec.EnumValue;
+import net.minecraftforge.common.ForgeConfigSpec.ConfigValue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +21,7 @@ import java.util.List;
  *   <li>维度扫描配置（扫描模式、起始高度等）</li>
  * </ul>
  *
- * <p>使用 NeoForge 的 ModConfigSpec 进行配置管理</p>
+ * <p>使用 NeoForge 的 ForgeConfigSpec 进行配置管理</p>
  *
  * @see ServerConfig 服务端配置内部类
  * @see DimensionScanConfig 维度扫描配置记录
@@ -33,7 +33,7 @@ public class ModConfig {
     /**
      * 服务端配置规范对象
      */
-    public static final ModConfigSpec SERVER_SPEC;
+    public static final ForgeConfigSpec SERVER_SPEC;
 
     /**
      * 服务端配置实例
@@ -73,7 +73,7 @@ public class ModConfig {
      * 初始化配置的静态代码块
      */
     static {
-        var serverPair = new ModConfigSpec.Builder().configure(ServerConfig::new);
+        var serverPair = new ForgeConfigSpec.Builder().configure(ServerConfig::new);
         SERVER = serverPair.getLeft();
         SERVER_SPEC = serverPair.getRight();
     }
@@ -250,9 +250,9 @@ public class ModConfig {
          *
          * <p>定义所有配置选项及其默认值、范围和注释</p>
          *
-         * @param builder ModConfigSpec 构建器
+         * @param builder ForgeConfigSpec 构建器
          */
-        public ServerConfig(ModConfigSpec.Builder builder) {
+        public ServerConfig(ForgeConfigSpec.Builder builder) {
             builder.push("general");
             builder.comment("General settings / 通用设置");
 
