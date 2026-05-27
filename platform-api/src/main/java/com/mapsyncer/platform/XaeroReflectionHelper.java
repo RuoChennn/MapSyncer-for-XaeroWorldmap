@@ -66,6 +66,12 @@ public final class XaeroReflectionHelper {
     private static Class<?> mapSaveLoadClass;
     private static Class<?> mapRegionClass;
     private static Class<?> leveledRegionClass;
+    private static Class<?> mapWorldClass;
+    private static Class<?> mapDimensionClass;
+    private static Class<?> layeredRegionManagerClass;
+    private static Class<?> mapLayerClass;
+    private static Class<?> leveledRegionManagerClass;
+    private static Class<?> branchLeveledRegionClass;
 
     // 反射方法缓存
     private static Method getCurrentSessionMethod;
@@ -76,6 +82,11 @@ public final class XaeroReflectionHelper {
     private static Method cancelRefreshMethod;
     private static Method setHasHadTerrainMethod;
     private static Method setRegionDetectionCompleteMethod;
+    private static Method getMapWorldMethod;
+    private static Method getCurrentDimensionMethod;
+    private static Method getLayeredMapRegionsMethod;
+    private static Method getLayerMethod;
+    private static Method getMapRegionsMethod;
 
     // 反射字段缓存
     private static Field loadStateField;
@@ -83,6 +94,10 @@ public final class XaeroReflectionHelper {
     private static Field worldIdField;
     private static Field dimIdField;
     private static Field mwIdField;
+    private static Field regionXField;
+    private static Field regionZField;
+    private static Field regionTextureMapField;
+    private static Field childrenField;
 
     // 运行时对象缓存
     private static Object cachedSession;
@@ -111,6 +126,12 @@ public final class XaeroReflectionHelper {
             mapSaveLoadClass = Class.forName("xaero.map.file.MapSaveLoad");
             mapRegionClass = Class.forName("xaero.map.region.MapRegion");
             leveledRegionClass = Class.forName("xaero.map.region.LeveledRegion");
+            mapWorldClass = Class.forName("xaero.map.world.MapWorld");
+            mapDimensionClass = Class.forName("xaero.map.world.MapDimension");
+            layeredRegionManagerClass = Class.forName("xaero.map.region.LayeredRegionManager");
+            mapLayerClass = Class.forName("xaero.map.region.MapLayer");
+            leveledRegionManagerClass = Class.forName("xaero.map.region.LeveledRegionManager");
+            branchLeveledRegionClass = Class.forName("xaero.map.region.BranchLeveledRegion");
 
             // 缓存方法
             getCurrentSessionMethod = worldMapSessionClass.getMethod("getCurrentSession");
@@ -121,6 +142,11 @@ public final class XaeroReflectionHelper {
             cancelRefreshMethod = mapRegionClass.getMethod("cancelRefresh", mapProcessorClass);
             setHasHadTerrainMethod = mapRegionClass.getMethod("setHasHadTerrain");
             setRegionDetectionCompleteMethod = mapSaveLoadClass.getMethod("setRegionDetectionComplete", boolean.class);
+            getMapWorldMethod = mapProcessorClass.getMethod("getMapWorld");
+            getCurrentDimensionMethod = mapWorldClass.getMethod("getCurrentDimension");
+            getLayeredMapRegionsMethod = mapDimensionClass.getMethod("getLayeredMapRegions");
+            getLayerMethod = layeredRegionManagerClass.getMethod("getLayer", int.class);
+            getMapRegionsMethod = mapLayerClass.getMethod("getMapRegions");
 
             // 缓存字段
             loadStateField = mapRegionClass.getDeclaredField("loadState");
@@ -133,6 +159,14 @@ public final class XaeroReflectionHelper {
             dimIdField.setAccessible(true);
             mwIdField = leveledRegionClass.getDeclaredField("mwId");
             mwIdField.setAccessible(true);
+            regionXField = mapRegionClass.getDeclaredField("regionX");
+            regionXField.setAccessible(true);
+            regionZField = mapRegionClass.getDeclaredField("regionZ");
+            regionZField.setAccessible(true);
+            regionTextureMapField = leveledRegionManagerClass.getDeclaredField("regionTextureMap");
+            regionTextureMapField.setAccessible(true);
+            childrenField = branchLeveledRegionClass.getDeclaredField("children");
+            childrenField.setAccessible(true);
 
             initialized = true;
             LOGGER.info("Xaero reflection helper initialized successfully");
@@ -420,5 +454,210 @@ public final class XaeroReflectionHelper {
         cancelRefresh(mapRegion);
         setShouldCache(mapRegion, true);
         setHasHadTerrain(mapRegion);
+    }
+
+    // ========== MapWorld/MapDimension 相关方法 ==========
+
+    /**
+     * 获取 MapWorld 实例
+     *
+     * @return MapWorld 实例，获取失败返回 null
+     */
+    public static Object getMapWorld() {
+        if (!initialized || getMapWorldMethod == null) return null;
+
+        try {
+            Object processor = getMapProcessor();
+            if (processor == null) return null;
+            return getMapWorldMethod.invoke(processor);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get MapWorld: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取当前维度实例
+     *
+     * @return MapDimension 实例，获取失败返回 null
+     */
+    public static Object getCurrentMapDimension() {
+        if (!initialized || getCurrentDimensionMethod == null) return null;
+
+        try {
+            Object mapWorld = getMapWorld();
+            if (mapWorld == null) return null;
+            return getCurrentDimensionMethod.invoke(mapWorld);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get current dimension: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取 LayeredRegionManager 实例
+     *
+     * @return LayeredRegionManager 实例，获取失败返回 null
+     */
+    public static Object getLayeredMapRegions() {
+        if (!initialized || getLayeredMapRegionsMethod == null) return null;
+
+        try {
+            Object dimension = getCurrentMapDimension();
+            if (dimension == null) return null;
+            return getLayeredMapRegionsMethod.invoke(dimension);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get LayeredRegionManager: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取指定层的 MapLayer 实例
+     *
+     * @param layer 层编号（地表层使用 Integer.MAX_VALUE）
+     * @return MapLayer 实例，获取失败返回 null
+     */
+    public static Object getMapLayer(int layer) {
+        if (!initialized || getLayerMethod == null) return null;
+
+        try {
+            Object layeredManager = getLayeredMapRegions();
+            if (layeredManager == null) return null;
+            return getLayerMethod.invoke(layeredManager, layer);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get MapLayer for layer {}: {}", layer, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取 LeveledRegionManager 实例（从 MapLayer）
+     *
+     * @param layer 层编号（地表层使用 Integer.MAX_VALUE）
+     * @return LeveledRegionManager 实例，获取失败返回 null
+     */
+    public static Object getLeveledRegionManager(int layer) {
+        if (!initialized || getMapRegionsMethod == null) return null;
+
+        try {
+            Object mapLayer = getMapLayer(layer);
+            if (mapLayer == null) return null;
+            return getMapRegionsMethod.invoke(mapLayer);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get LeveledRegionManager for layer {}: {}", layer, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取区域纹理映射
+     *
+     * <p>返回的是一个二维 Map 结构：Map<Integer, Map<Integer, Object region></p>
+     *
+     * @param layer 层编号（地表层使用 Integer.MAX_VALUE）
+     * @return regionTextureMap 实例，获取失败返回 null
+     */
+    public static Object getRegionTextureMap(int layer) {
+        if (!initialized || regionTextureMapField == null) return null;
+
+        try {
+            Object leveledManager = getLeveledRegionManager(layer);
+            if (leveledManager == null) return null;
+            return regionTextureMapField.get(leveledManager);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get regionTextureMap for layer {}: {}", layer, e.getMessage());
+            return null;
+        }
+    }
+
+    // ========== 区域坐标相关方法 ==========
+
+    /**
+     * 获取区域的 X 坐标
+     *
+     * @param mapRegion MapRegion 实例
+     * @return 区域 X 坐标，获取失败返回 -1
+     */
+    public static int getRegionX(Object mapRegion) {
+        if (!initialized || regionXField == null) return -1;
+
+        try {
+            return regionXField.getInt(mapRegion);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get regionX: {}", e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * 获取区域的 Z 坐标
+     *
+     * @param mapRegion MapRegion 实例
+     * @return 区域 Z 坐标，获取失败返回 -1
+     */
+    public static int getRegionZ(Object mapRegion) {
+        if (!initialized || regionZField == null) return -1;
+
+        try {
+            return regionZField.getInt(mapRegion);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get regionZ: {}", e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * 获取区域的加载状态
+     *
+     * @param mapRegion MapRegion 实例
+     * @return loadState 值，获取失败返回 -1
+     */
+    public static byte getLoadState(Object mapRegion) {
+        if (!initialized || loadStateField == null) return -1;
+
+        try {
+            return loadStateField.getByte(mapRegion);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get loadState: {}", e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * 获取 BranchLeveledRegion 的 children 数组
+     *
+     * @param branchRegion BranchLeveledRegion 实例
+     * @return children 二维数组，获取失败返回 null
+     */
+    public static Object getBranchChildren(Object branchRegion) {
+        if (!initialized || childrenField == null) return null;
+
+        try {
+            return childrenField.get(branchRegion);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get children: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 检查对象是否是 MapRegion 类
+     *
+     * @param obj 要检查的对象
+     * @return true 如果是 MapRegion 类
+     */
+    public static boolean isMapRegion(Object obj) {
+        return obj != null && obj.getClass() == mapRegionClass;
+    }
+
+    /**
+     * 检查对象是否是 BranchLeveledRegion 类
+     *
+     * @param obj 要检查的对象
+     * @return true 如果是 BranchLeveledRegion 类
+     */
+    public static boolean isBranchLeveledRegion(Object obj) {
+        return obj != null && obj.getClass() == branchLeveledRegionClass;
     }
 }

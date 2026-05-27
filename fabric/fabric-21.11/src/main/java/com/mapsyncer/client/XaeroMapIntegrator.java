@@ -10,13 +10,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Field;
+import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -250,84 +250,23 @@ public class XaeroMapIntegrator {
     public static int resetSpecificRegionLoadStates(Set<RegionCoord> regionsToReset) {
         int resetCount = 0;
 
+        // 确保 XaeroReflectionHelper 已初始化
+        if (!XaeroReflectionHelper.isInitialized()) {
+            LOGGER.warn("XaeroReflectionHelper not initialized for selective reset");
+            return 0;
+        }
+
         try {
-            Class<?> worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
-            Method getCurrentSession = worldMapSessionClass.getMethod("getCurrentSession");
-            Object session = getCurrentSession.invoke(null);
-
-            if (session == null) {
-                LOGGER.warn("Could not get WorldMapSession for selective reset");
+            // 使用封装方法获取 regionTextureMap
+            Object regionTextureMap = XaeroReflectionHelper.getRegionTextureMap(Integer.MAX_VALUE);
+            if (regionTextureMap == null) {
+                LOGGER.warn("Could not get regionTextureMap for selective reset");
                 return 0;
             }
 
-            Method getMapProcessor = worldMapSessionClass.getMethod("getMapProcessor");
-            Object mapProcessor = getMapProcessor.invoke(session);
-
-            if (mapProcessor == null) {
-                LOGGER.warn("Could not get MapProcessor for selective reset");
-                return 0;
-            }
-
-            Class<?> mapProcessorClass = Class.forName("xaero.map.MapProcessor");
-            Method getMapWorld = mapProcessorClass.getMethod("getMapWorld");
-            Object mapWorld = getMapWorld.invoke(mapProcessor);
-
-            if (mapWorld == null) {
-                LOGGER.warn("Could not get MapWorld for selective reset");
-                return 0;
-            }
-
-            Class<?> mapWorldClass = Class.forName("xaero.map.world.MapWorld");
-            Method getCurrentDimension = mapWorldClass.getMethod("getCurrentDimension");
-            Object mapDimension = getCurrentDimension.invoke(mapWorld);
-
-            if (mapDimension == null) {
-                LOGGER.warn("Could not get current dimension for selective reset");
-                return 0;
-            }
-
-            // Get the LayeredRegionManager
-            Class<?> mapDimensionClass = Class.forName("xaero.map.world.MapDimension");
-            Method getLayeredMapRegions = mapDimensionClass.getMethod("getLayeredMapRegions");
-            Object layeredRegionManager = getLayeredMapRegions.invoke(mapDimension);
-
-            if (layeredRegionManager == null) {
-                LOGGER.warn("Could not get LayeredRegionManager");
-                return 0;
-            }
-
-            // Get the surface layer
-            Class<?> layeredRegionManagerClass = Class.forName("xaero.map.region.LayeredRegionManager");
-            Method getLayer = layeredRegionManagerClass.getMethod("getLayer", int.class);
-            Object mapLayer = getLayer.invoke(layeredRegionManager, Integer.MAX_VALUE);
-
-            if (mapLayer == null) {
-                LOGGER.warn("Could not get surface MapLayer");
-                return 0;
-            }
-
-            // Get LeveledRegionManager
-            Class<?> mapLayerClass = Class.forName("xaero.map.region.MapLayer");
-            Method getMapRegions = mapLayerClass.getMethod("getMapRegions");
-            Object leveledRegionManager = getMapRegions.invoke(mapLayer);
-
-            if (leveledRegionManager == null) {
-                LOGGER.warn("Could not get LeveledRegionManager");
-                return 0;
-            }
-
-            // Access regionTextureMap
-            Class<?> leveledRegionManagerClass = Class.forName("xaero.map.region.LeveledRegionManager");
-            Field regionTextureMapField = leveledRegionManagerClass.getDeclaredField("regionTextureMap");
-            regionTextureMapField.setAccessible(true);
-            Object regionTextureMap = regionTextureMapField.get(leveledRegionManager);
-
-            if (regionTextureMap != null && regionTextureMap instanceof java.util.Map) {
-                java.util.Map<?, ?> map = (java.util.Map<?, ?>) regionTextureMap;
-
+            if (regionTextureMap instanceof Map<?, ?> map) {
                 for (Object columnEntry : map.values()) {
-                    if (columnEntry instanceof java.util.Map) {
-                        java.util.Map<?, ?> column = (java.util.Map<?, ?>) columnEntry;
+                    if (columnEntry instanceof Map<?, ?> column) {
                         for (Object regionEntry : column.values()) {
                             // Traverse and selectively reset
                             resetCount += selectiveResetLeafRegions(regionEntry, regionsToReset);
@@ -357,55 +296,45 @@ public class XaeroMapIntegrator {
     private static int selectiveResetLeafRegions(Object region, Set<RegionCoord> regionsToReset) {
         int count = 0;
         try {
-            Class<?> regionClass = region.getClass();
-
             // Check if this is a MapRegion (leaf)
-            if (regionClass.getName().equals("xaero.map.region.MapRegion")) {
-                // Get region coordinates from the MapRegion object
-                Field regionXField = regionClass.getDeclaredField("regionX");
-                Field regionZField = regionClass.getDeclaredField("regionZ");
-                regionXField.setAccessible(true);
-                regionZField.setAccessible(true);
-                int rx = regionXField.getInt(region);
-                int rz = regionZField.getInt(region);
+            if (XaeroReflectionHelper.isMapRegion(region)) {
+                // Get region coordinates using encapsulated methods
+                int rx = XaeroReflectionHelper.getRegionX(region);
+                int rz = XaeroReflectionHelper.getRegionZ(region);
 
                 RegionCoord coord = new RegionCoord(rx, rz);
 
                 // Only reset if this region is in our target set
                 if (regionsToReset.contains(coord)) {
-                    Field loadStateField = regionClass.getDeclaredField("loadState");
-                    loadStateField.setAccessible(true);
-                    byte currentLoadState = loadStateField.getByte(region);
+                    byte currentLoadState = XaeroReflectionHelper.getLoadState(region);
 
-                    if (currentLoadState == 2) {  // Only reset loaded regions
+                    if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_LOADED) {
                         // 记录原本已加载的 region，同步后使用 loadState=4
                         preUnloadedRegions.add(coord);
 
-                        loadStateField.setByte(region, (byte) 0);
+                        XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         count++;
 
                         LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
-                    } else if (currentLoadState == 4) {
+                    } else if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_CLEARED) {
                         // 需要重载的状态也记录为已加载
                         preUnloadedRegions.add(coord);
-                        loadStateField.setByte(region, (byte) 0);
+                        XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         count++;
                     }
                 }
-            } else if (regionClass.getName().equals("xaero.map.region.BranchLeveledRegion")) {
-                // Traverse children
-                Field childrenField = regionClass.getDeclaredField("children");
-                childrenField.setAccessible(true);
-                Object childrenArray = childrenField.get(region);
+            } else if (XaeroReflectionHelper.isBranchLeveledRegion(region)) {
+                // Traverse children using encapsulated method
+                Object childrenArray = XaeroReflectionHelper.getBranchChildren(region);
 
                 if (childrenArray != null && childrenArray.getClass().isArray()) {
-                    int outerLength = java.lang.reflect.Array.getLength(childrenArray);
+                    int outerLength = Array.getLength(childrenArray);
                     for (int i = 0; i < outerLength; i++) {
-                        Object innerArray = java.lang.reflect.Array.get(childrenArray, i);
+                        Object innerArray = Array.get(childrenArray, i);
                         if (innerArray != null && innerArray.getClass().isArray()) {
-                            int innerLength = java.lang.reflect.Array.getLength(innerArray);
+                            int innerLength = Array.getLength(innerArray);
                             for (int j = 0; j < innerLength; j++) {
-                                Object child = java.lang.reflect.Array.get(innerArray, j);
+                                Object child = Array.get(innerArray, j);
                                 if (child != null) {
                                     count += selectiveResetLeafRegions(child, regionsToReset);
                                 }
