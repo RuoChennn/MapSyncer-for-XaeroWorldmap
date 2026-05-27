@@ -1,5 +1,6 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
@@ -35,13 +36,56 @@ import java.util.stream.Stream;
  *   <li>哈希匹配 → 跳过同步（文件内容相同）</li>
  *   <li>哈希不匹配 + 客户端时间戳较旧 → 同步</li>
  * </ul>
+ *
+ * <p>线程配置：</p>
+ * <ul>
+ *   <li>线程数通过客户端配置 ModConfig.CLIENT.getHashThreads() 控制</li>
+ *   <li>默认使用 JVM 可用处理器数的一半</li>
+ *   <li>可在游戏内通过配置界面调整</li>
+ * </ul>
  */
 public class ClientHashManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientHashManager.class);
 
-    /** 共享的 ForkJoinPool，限制 2 个线程避免阻塞游戏 */
-    private static final ForkJoinPool SHARED_POOL = new ForkJoinPool(2);
+    /** 共享的 ForkJoinPool（延迟初始化，支持配置更改时重建） */
+    private static volatile ForkJoinPool sharedPool;
+
+    /** 当前 pool 使用的线程数（用于检测配置更改） */
+    private static volatile int currentPoolThreads;
+
+    /**
+     * 获取共享的 ForkJoinPool。
+     *
+     * <p>使用延迟初始化，并根据配置动态调整线程数。</p>
+     * <p>如果配置更改，会重建 pool 以使用新的线程数。</p>
+     *
+     * @return 共享的 ForkJoinPool
+     */
+    private static ForkJoinPool getSharedPool() {
+        int configuredThreads = ModConfig.CLIENT.getHashThreads();
+
+        // 如果 pool 未创建或配置已更改，重建 pool
+        if (sharedPool == null || sharedPool.isShutdown() || currentPoolThreads != configuredThreads) {
+            synchronized (ClientHashManager.class) {
+                // 双重检查
+                if (sharedPool == null || sharedPool.isShutdown() || currentPoolThreads != configuredThreads) {
+                    // 关闭旧的 pool（如果存在）
+                    if (sharedPool != null && !sharedPool.isShutdown()) {
+                        sharedPool.shutdown();
+                        LOGGER.info("Shutting down old ForkJoinPool (threads={})", currentPoolThreads);
+                    }
+
+                    // 创建新的 pool
+                    sharedPool = new ForkJoinPool(configuredThreads);
+                    currentPoolThreads = configuredThreads;
+                    LOGGER.info("Created new ForkJoinPool with {} threads (configured via client settings)", configuredThreads);
+                }
+            }
+        }
+
+        return sharedPool;
+    }
 
     /**
      * 收集所有区域的修改时间戳和哈希值。
@@ -93,11 +137,12 @@ public class ClientHashManager {
             return metaMap;
         }
 
-        LOGGER.info("Computing hashes for {} region files in {} (parallel=2)", zipFiles.size(), mapDir);
+        LOGGER.info("Computing hashes for {} region files in {} (parallel threads={})", zipFiles.size(), mapDir, currentPoolThreads);
 
-        // 使用共享的 ForkJoinPool（限制2个线程）避免阻塞游戏和重复创建开销
+        // 使用共享的 ForkJoinPool（配置线程数）避免阻塞游戏和重复创建开销
+        ForkJoinPool pool = getSharedPool();
         try {
-            SHARED_POOL.submit(() ->
+            pool.submit(() ->
                     zipFiles.parallelStream()
                             .forEach(zipPath -> {
                                 try {
@@ -349,9 +394,10 @@ public class ClientHashManager {
      * 在客户端离开服务器或停止时调用，释放资源。
      */
     public static void shutdown() {
-        if (!SHARED_POOL.isShutdown()) {
-            SHARED_POOL.shutdown();
-            LOGGER.debug("ClientHashManager shared ForkJoinPool shutdown");
+        ForkJoinPool pool = sharedPool;
+        if (pool != null && !pool.isShutdown()) {
+            pool.shutdown();
+            LOGGER.debug("ClientHashManager shared ForkJoinPool shutdown (threads={})", currentPoolThreads);
         }
     }
 }

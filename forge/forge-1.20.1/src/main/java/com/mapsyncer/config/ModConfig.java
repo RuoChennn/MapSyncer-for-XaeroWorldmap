@@ -12,13 +12,44 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Mod 配置类 - Forge 1.20.1 版本
+ * Mod 配置类
  *
- * 使用 ForgeConfigSpec 进行配置管理
+ * <p>管理 MapSyncer for XaeroWorldMap 的配置，包括:</p>
+ * <ul>
+ *   <li>客户端设置（哈希计算线程数等）</li>
+ *   <li>服务器端设置（调试日志、并发限制等）</li>
+ *   <li>增量更新设置（更新模式、时间间隔）</li>
+ *   <li>维度扫描配置（扫描模式、起始高度等）</li>
+ * </ul>
+ *
+ * <p>使用 Forge 的 ForgeConfigSpec 进行配置管理</p>
+ *
+ * @see ClientConfig 客户端配置内部类
+ * @see ServerConfig 服务端配置内部类
+ * @see DimensionScanConfig 维度扫描配置记录
+ * @see ScanMode 扫描模式枚举
+ * @see UpdateMode 更新模式枚举
  */
 public class ModConfig {
 
+    /**
+     * 客户端配置规范对象
+     */
+    public static final ForgeConfigSpec CLIENT_SPEC;
+
+    /**
+     * 客户端配置实例
+     */
+    public static final ClientConfig CLIENT;
+
+    /**
+     * 服务端配置规范对象
+     */
     public static final ForgeConfigSpec SERVER_SPEC;
+
+    /**
+     * 服务端配置实例
+     */
     public static final ServerConfig SERVER;
 
     /**
@@ -54,9 +85,86 @@ public class ModConfig {
      * 初始化配置的静态代码块
      */
     static {
+        var clientPair = new ForgeConfigSpec.Builder().configure(ClientConfig::new);
+        CLIENT = clientPair.getLeft();
+        CLIENT_SPEC = clientPair.getRight();
+
         var serverPair = new ForgeConfigSpec.Builder().configure(ServerConfig::new);
         SERVER = serverPair.getLeft();
         SERVER_SPEC = serverPair.getRight();
+    }
+
+    /**
+     * 客户端配置内部类
+     *
+     * <p>包含所有客户端可配置的选项</p>
+     */
+    public static class ClientConfig {
+
+        /**
+         * 哈希计算线程数
+         *
+         * <p>用于 ClientHashManager 的 ForkJoinPool 并行计算区域文件哈希。</p>
+         * <p>默认值使用 JVM 可用处理器数的一半，避免阻塞游戏主线程。</p>
+         *
+         * <p>线程数选择建议：</p>
+         * <ul>
+         *   <li>1-2 核：使用 1 线程</li>
+         *   <li>4 核：使用 2 线程</li>
+         *   <li>8 核及以上：使用 4-8 线程</li>
+         *   <li>最大不超过可用处理器数</li>
+         * </ul>
+         */
+        public final IntValue hashThreads;
+
+        /**
+         * 构造客户端配置
+         *
+         * <p>定义所有配置选项及其默认值、范围和注释</p>
+         *
+         * @param builder ForgeConfigSpec 构建器
+         */
+        public ClientConfig(ForgeConfigSpec.Builder builder) {
+            builder.push("client");
+            builder.comment("Client settings / 客户端设置");
+
+            // 计算默认线程数：可用处理器数的一半，最少 1 个
+            int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+            int maxThreads = Runtime.getRuntime().availableProcessors();
+
+            hashThreads = builder
+                    .comment("Number of threads for hash computation during map sync",
+                             "哈希计算线程数（用于地图同步时的并行计算）",
+                             "",
+                             "Default uses half of available processors to avoid blocking game main thread",
+                             "默认使用可用处理器数的一半，避免阻塞游戏主线程",
+                             "",
+                             "Thread count recommendations:",
+                             "线程数选择建议：",
+                             "  1-2 cores: use 1 thread",
+                             "  1-2 核：使用 1 线程",
+                             "  4 cores: use 2 threads (default for most setups)",
+                             "  4 核：使用 2 线程（大多数配置的默认值）",
+                             "  8+ cores: use 4-8 threads for faster sync",
+                             "  8+ 核：使用 4-8 线程加快同步速度",
+                             "",
+                             "Default: " + defaultThreads + " (half of " + maxThreads + " available processors)",
+                             "默认：" + defaultThreads + "（可用 " + maxThreads + " 个处理器的一半）",
+                             "Range: 1 - " + maxThreads,
+                             "范围：1 - " + maxThreads)
+                    .defineInRange("hashThreads", defaultThreads, 1, maxThreads);
+
+            builder.pop();
+        }
+
+        /**
+         * 获取哈希计算线程数
+         *
+         * @return 配置的线程数
+         */
+        public int getHashThreads() {
+            return hashThreads.get();
+        }
     }
 
     /**
@@ -231,7 +339,7 @@ public class ModConfig {
          *
          * <p>定义所有配置选项及其默认值、范围和注释</p>
          *
-         * @param builder ModConfigSpec 构建器
+         * @param builder ForgeConfigSpec 构建器
          */
         public ServerConfig(ForgeConfigSpec.Builder builder) {
             builder.push("general");

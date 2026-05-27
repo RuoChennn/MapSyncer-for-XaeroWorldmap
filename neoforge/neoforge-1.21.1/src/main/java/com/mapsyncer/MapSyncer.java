@@ -57,6 +57,7 @@ public class MapSyncer {
         LOGGER.info("NetworkManager initialized");
 
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+        modContainer.registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // 客户端初始化：注册网络包接收器

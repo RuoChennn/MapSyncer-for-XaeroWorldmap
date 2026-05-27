@@ -51,6 +51,7 @@ public class MapSyncer {
 
         // 注册配置文件（Forge 1.21.1 使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+        ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         // 创建网络处理器实例
         ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();

@@ -18,6 +18,8 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.server.ServerLifecycleHandler;
@@ -51,6 +53,10 @@ public class MapSyncer {
         platform = new ForgePlatform();
         PlatformManager.initialize(platform);
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
+
+        // 注册配置文件
+        ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+        ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         // 初始化 NetworkManager（Forge 网络实现）
         networkHandler = new ForgeNetworkHandler();

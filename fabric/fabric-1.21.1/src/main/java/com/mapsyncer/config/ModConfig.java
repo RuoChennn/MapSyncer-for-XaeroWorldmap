@@ -20,22 +20,39 @@ import java.util.Set;
 import java.util.Properties;
 
 /**
- * Mod 配置类 - Fabric 1.20.1 版本
+ * Mod 配置类 - Fabric 版本
  *
  * 使用 Cloth Config API 进行配置管理，配置文件使用 Properties 格式存储。
+ *
+ * <p>管理 MapSyncer for XaeroWorldMap 的配置，包括:</p>
+ * <ul>
+ *   <li>客户端设置（哈希计算线程数等）</li>
+ *   <li>服务器端设置（调试日志、并发限制等）</li>
+ *   <li>增量更新设置（更新模式、时间间隔）</li>
+ *   <li>维度扫描配置（扫描模式、起始高度等）</li>
+ * </ul>
  */
 public class ModConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ModConfig.class);
 
-    /** 配置文件名 */
-    private static final String CONFIG_FILE_NAME = "mapsyncer-server.properties";
+    /** 服务端配置文件名 */
+    private static final String SERVER_CONFIG_FILE_NAME = "mapsyncer-server.properties";
 
-    /** 单例实例 */
-    private static volatile ServerConfig instance;
+    /** 客户端配置文件名 */
+    private static final String CLIENT_CONFIG_FILE_NAME = "mapsyncer-client.properties";
 
-    /** 配置文件路径 */
-    private static volatile Path configPath;
+    /** 服务端配置单例实例 */
+    private static volatile ServerConfig serverInstance;
+
+    /** 客户端配置单例实例 */
+    private static volatile ClientConfig clientInstance;
+
+    /** 服务端配置文件路径 */
+    private static volatile Path serverConfigPath;
+
+    /** 客户端配置文件路径 */
+    private static volatile Path clientConfigPath;
 
     /**
      * 获取服务端配置实例
@@ -44,37 +61,196 @@ public class ModConfig {
      * @return 服务端配置实例
      */
     public static ServerConfig getServerConfig(Path configDir) {
-        if (instance == null) {
+        if (serverInstance == null) {
             synchronized (ServerConfig.class) {
-                if (instance == null) {
-                    configPath = configDir.resolve(CONFIG_FILE_NAME);
-                    instance = new ServerConfig(configPath);
-                    LOGGER.info("ModConfig initialized with path: {}", configPath);
+                if (serverInstance == null) {
+                    serverConfigPath = configDir.resolve(SERVER_CONFIG_FILE_NAME);
+                    serverInstance = new ServerConfig(serverConfigPath);
+                    LOGGER.info("ServerConfig initialized with path: {}", serverConfigPath);
                 }
             }
         }
-        return instance;
+        return serverInstance;
+    }
+
+    /**
+     * 获取客户端配置实例
+     *
+     * @param configDir 配置目录路径（通常是游戏目录下的 config 目录）
+     * @return 客户端配置实例
+     */
+    public static ClientConfig getClientConfig(Path configDir) {
+        if (clientInstance == null) {
+            synchronized (ClientConfig.class) {
+                if (clientInstance == null) {
+                    clientConfigPath = configDir.resolve(CLIENT_CONFIG_FILE_NAME);
+                    clientInstance = new ClientConfig(clientConfigPath);
+                    LOGGER.info("ClientConfig initialized with path: {}", clientConfigPath);
+                }
+            }
+        }
+        return clientInstance;
     }
 
     /**
      * 重置配置实例（用于测试或服务器重启）
      */
     public static void resetInstance() {
-        if (instance != null) {
-            instance = null;
-            configPath = null;
-            LOGGER.info("ModConfig instance reset");
+        if (serverInstance != null) {
+            serverInstance = null;
+            serverConfigPath = null;
+            LOGGER.info("ServerConfig instance reset");
+        }
+        if (clientInstance != null) {
+            clientInstance = null;
+            clientConfigPath = null;
+            LOGGER.info("ClientConfig instance reset");
         }
     }
 
     /**
-     * 获取当前配置实例
+     * 获取当前服务端配置实例
      */
     public static ServerConfig SERVER() {
-        if (instance == null) {
+        if (serverInstance == null) {
             throw new IllegalStateException("ServerConfig not initialized. Call getServerConfig() first.");
         }
-        return instance;
+        return serverInstance;
+    }
+
+    /**
+     * 获取当前客户端配置实例
+     */
+    public static ClientConfig CLIENT() {
+        if (clientInstance == null) {
+            throw new IllegalStateException("ClientConfig not initialized. Call getClientConfig() first.");
+        }
+        return clientInstance;
+    }
+
+    /**
+     * 客户端配置类
+     *
+     * 使用 Properties 格式存储配置，支持 Cloth Config GUI。
+     */
+    public static class ClientConfig {
+
+        /**
+         * 哈希计算线程数
+         *
+         * <p>用于 ClientHashManager 的 ForkJoinPool 并行计算区域文件哈希。</p>
+         * <p>默认值使用 JVM 可用处理器数的一半，避免阻塞游戏主线程。</p>
+         */
+        private volatile int hashThreads;
+
+        /** 配置文件路径 */
+        private final Path configFile;
+
+        /**
+         * 构造客户端配置
+         *
+         * @param configFile 配置文件路径
+         */
+        public ClientConfig(Path configFile) {
+            this.configFile = configFile;
+            // 计算默认线程数：可用处理器数的一半，最少 1 个
+            int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+            this.hashThreads = defaultThreads;
+            load();
+        }
+
+        /**
+         * 从文件加载配置
+         */
+        private void load() {
+            if (!Files.exists(configFile)) {
+                LOGGER.info("Client config file not found, using defaults (hashThreads={})", hashThreads);
+                return;
+            }
+
+            try (InputStream is = Files.newInputStream(configFile)) {
+                Properties props = new Properties();
+                props.load(is);
+
+                int maxThreads = Runtime.getRuntime().availableProcessors();
+                int loadedThreads = Integer.parseInt(props.getProperty("hashThreads", String.valueOf(hashThreads)));
+                // 确保线程数在有效范围内
+                hashThreads = Math.max(1, Math.min(maxThreads, loadedThreads));
+
+                LOGGER.info("Loaded client config from: {} (hashThreads={})", configFile, hashThreads);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to load client config, using defaults: {}", e.getMessage());
+            }
+        }
+
+        /**
+         * 保存配置到文件
+         */
+        public void save() {
+            try {
+                Files.createDirectories(configFile.getParent());
+
+                Properties props = new Properties();
+                props.setProperty("hashThreads", String.valueOf(hashThreads));
+
+                try (OutputStream os = Files.newOutputStream(configFile)) {
+                    props.store(os, "MapSyncer Client Configuration\nHash computation thread count for map sync");
+                }
+
+                LOGGER.info("Saved client config to: {} (hashThreads={})", configFile, hashThreads);
+            } catch (Exception e) {
+                LOGGER.error("Failed to save client config: {}", e.getMessage());
+            }
+        }
+
+        /**
+         * 获取哈希计算线程数
+         *
+         * @return 配置的线程数
+         */
+        public int getHashThreads() {
+            return hashThreads;
+        }
+
+        /**
+         * 设置哈希计算线程数
+         *
+         * @param value 线程数
+         */
+        public void setHashThreads(int value) {
+            int maxThreads = Runtime.getRuntime().availableProcessors();
+            hashThreads = Math.max(1, Math.min(maxThreads, value));
+        }
+
+        /**
+         * 创建 Cloth Config 配置界面
+         *
+         * @param parentScreen 父屏幕
+         * @return 配置屏幕
+         */
+        public Screen createConfigScreen(Screen parentScreen) {
+            ConfigBuilder builder = ConfigBuilder.create()
+                .setParentScreen(parentScreen)
+                .setTitle(Component.translatable("title.mapsyncer.client_config"));
+
+            ConfigEntryBuilder entryBuilder = builder.entryBuilder();
+
+            // 客户端设置类别
+            ConfigCategory client = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.client"));
+
+            int maxThreads = Runtime.getRuntime().availableProcessors();
+            int defaultThreads = Math.max(1, maxThreads / 2);
+
+            client.addEntry(entryBuilder.startIntSlider(
+                    Component.translatable("option.mapsyncer.hash_threads"), hashThreads, 1, maxThreads)
+                .setDefaultValue(defaultThreads)
+                .setSaveConsumer(value -> hashThreads = value)
+                .build());
+
+            builder.setSavingRunnable(this::save);
+
+            return builder.build();
+        }
     }
 
     /**

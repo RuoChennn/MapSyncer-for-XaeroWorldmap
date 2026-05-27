@@ -55,6 +55,7 @@ public class MapSyncer {
 
         // 注册配置文件（Forge 1.20.1 使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+        ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // 客户端：注册网络处理器
