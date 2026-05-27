@@ -24,15 +24,15 @@ include 'platform-api'      // 平台抽象接口
 
 // NeoForge 平台
 include 'neoforge:neoforge-1.20.1'
-include 'neoforge:neoforge-1.21'
+include 'neoforge:neoforge-1.21.1'
 include 'neoforge:neoforge-26'
 
 // Forge 平台
 include 'forge:forge-1.20.1'
 include 'forge:forge-1.20.4'
-include 'forge:forge-1.21'
+include 'forge:forge-1.21.1'
 
 // Fabric 平台
 include 'fabric:fabric-1.20.1'
-include 'fabric:fabric-1.21'
+include 'fabric:fabric-1.21.1'
 include 'fabric:fabric-26'

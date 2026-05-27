@@ -1,0 +1,73 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+}
+
+version = mod_version + '-forge-1.21.1'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Forge 1.21.1 使用 Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+minecraft {
+    // Mappings 配置（ForgeGradle 6.0+）- 1.21.1
+    mappings channel: 'official', version: '1.21.1'
+
+    // 使用 Official mappings 时必须设置 reobf = false
+    reobf = false
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+        }
+    }
+}
+
+dependencies {
+    // Minecraft Forge 1.21.1 (Forge 52.x)
+    minecraft "net.minecraftforge:forge:1.21.1-52.0.0"
+
+    // 强制 jopt-simple 版本（Mojang 使用的版本）
+    implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
+
+    // 依赖核心模块
+    implementation project(':core')
+    implementation project(':platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        register('forge121MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}
