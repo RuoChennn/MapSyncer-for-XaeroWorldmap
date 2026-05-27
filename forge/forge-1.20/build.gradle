@@ -1,5 +1,5 @@
 plugins {
-    id 'net.minecraftforge.gradle' version '6.0.+'
+    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
 }
 
 version = mod_version + '-forge-1.20'
@@ -9,7 +9,7 @@ base {
     archivesName = mod_id
 }
 
-// Forge 1.20.1 需要 Java 17（toolchain 将自动下载）
+// Forge 1.20.1 需要 Java 17
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 repositories {
@@ -19,19 +19,21 @@ repositories {
 }
 
 minecraft {
-    mappings channel: 'official', version: minecraft_120_version
+    // ForgeGradle 6.0+ mappings 配置
+    mappings channel: mapping_channel_120, version: mapping_version_120
 
     runs {
-        client {
+        configureEach {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+        }
+
+        client {
             property 'forge.enabledGameTestNamespaces', mod_id
         }
+
         server {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
         }
@@ -39,8 +41,11 @@ minecraft {
 }
 
 dependencies {
-    // Minecraft Forge
-    minecraft "net.minecraftforge:forge:${forge_120_version}"
+    // Minecraft Forge 1.20.1
+    minecraft "net.minecraftforge:forge:${minecraft_120_version}-${forge_120_version}"
+
+    // 强制 jopt-simple 版本（Mojang 使用的版本）
+    implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
 
     // 依赖核心模块
     implementation project(':core')

@@ -27,7 +27,7 @@ include 'neoforge:neoforge-1.21'
 
 // Forge 平台
 include 'forge:forge-1.20'
-// include 'forge:forge-1.21' // ForgeGradle 配置问题待解决
+// include 'forge:forge-1.21' // ForgeGradle 6.0 mapped artifact 问题待解决
 
 // Fabric 平台（待完成 Fabric API 适配）
 // include 'fabric:fabric-1.20'
