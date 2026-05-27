@@ -2,17 +2,17 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.61-beta'
 }
 
-version = mod_version + '-neoforge-26'
+version = mod_version + '-neoforge-26.1'
 group = mod_group_id
 
 base {
-    archivesName = mod_id + '-neoforge-26'
+    archivesName = mod_id + '-neoforge-26.1'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
-// NeoForge 26.x 子项目（预留结构）
-// 待实现：验证 API 变化，大部分代码应与 NeoForge 1.21 相同
+// NeoForge 26.1.x 子项目
+// 支持 Minecraft 26.1, 26.1.1, 26.1.2 等版本
 
 repositories {
     mavenCentral()
@@ -21,8 +21,8 @@ repositories {
 }
 
 neoForge {
-    // TODO: 更新为 26.x 正式版本号
-    version = "26.1.0"
+    // NeoForge 26.1.x for Minecraft 26.1
+    version = "26.1.77"
 
     runs {
         client {

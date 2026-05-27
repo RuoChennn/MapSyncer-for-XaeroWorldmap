@@ -27,10 +27,10 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabric 26.x 平台实现
+ * Fabric 26.1.x 平台实现
  *
- * 实现 Platform 接口，适配 Fabric 26.x 的 API。
- * API 预估与 Fabric 1.21 高度兼容。
+ * 实现 Platform 接口，适配 Fabric 26.1.x 的 API。
+ * 支持 Minecraft 26.1, 26.1.1, 26.1.2 等版本。
  */
 public class FabricPlatform implements Platform {
 
@@ -52,7 +52,7 @@ public class FabricPlatform implements Platform {
 
     @Override
     public String getMinecraftVersion() {
-        return "26.x";
+        return "26.1";
     }
 
     @Override

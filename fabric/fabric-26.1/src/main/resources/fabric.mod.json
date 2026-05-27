@@ -16,7 +16,7 @@
   "mixins": [],
   "depends": {
     "fabricloader": ">=0.16.0",
-    "minecraft": ">=26.0",
+    "minecraft": ">=26.1 <26.2",
     "java": ">=21",
     "fabric-api": "*"
   },

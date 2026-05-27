@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="[26,)"
+loaderVersion="[26.1,)"
 license="All Rights Reserved"
 
 [[mods]]
@@ -12,13 +12,13 @@ authors="Ruo_Chen"
 [[dependencies.mapsyncer]]
 modId="neoforge"
 type="required"
-versionRange="[26,)"
+versionRange="[26.1,)"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.mapsyncer]]
 modId="minecraft"
 type="required"
-versionRange="[26,)"
+versionRange="[26.1,26.2)"
 ordering="NONE"
 side="BOTH"

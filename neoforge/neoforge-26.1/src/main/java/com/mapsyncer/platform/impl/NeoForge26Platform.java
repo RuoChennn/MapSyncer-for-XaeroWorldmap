@@ -25,10 +25,10 @@ import java.util.Set;
 import java.util.HashSet;
 
 /**
- * NeoForge 26.x 平台实现
+ * NeoForge 26.1.x 平台实现
  *
- * 实现 Platform 接口，适配 NeoForge 26.x 的 API。
- * API 预估与 NeoForge 1.21 高度兼容。
+ * 实现 Platform 接口，适配 NeoForge 26.1.x 的 API。
+ * 支持 Minecraft 26.1, 26.1.1, 26.1.2 等版本。
  */
 public class NeoForge26Platform implements Platform {
 
@@ -44,7 +44,7 @@ public class NeoForge26Platform implements Platform {
 
     @Override
     public String getMinecraftVersion() {
-        return "26.x";
+        return "26.1";
     }
 
     @Override
@@ -54,7 +54,7 @@ public class NeoForge26Platform implements Platform {
 
     @Override
     public String getPlatformName() {
-        return "NeoForge 26.x";
+        return "NeoForge 26.1";
     }
 
     // ===== 方块属性 =====
