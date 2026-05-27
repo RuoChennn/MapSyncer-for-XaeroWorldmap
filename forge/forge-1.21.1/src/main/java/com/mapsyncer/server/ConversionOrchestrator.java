@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -58,7 +59,7 @@ public class ConversionOrchestrator {
     /** 已处理的区域数量（原子变量，支持并发更新） */
     private static final AtomicInteger processedCountAtomic = new AtomicInteger(0);
 
-    /** 已处理的区域数量（兼容旧代码的快捷访问） */
+    /** 已处理的区域数量（兼容旧代码） */
     private static volatile int processedCount = 0;
 
     /** 跳过的区域数量（时间戳未变化） */
@@ -578,8 +579,11 @@ public class ConversionOrchestrator {
                 future.get(60, TimeUnit.SECONDS);  // 单个任务最多等待 60 秒
             } catch (java.util.concurrent.TimeoutException e) {
                 LOGGER.warn("Region conversion task timeout");
-            } catch (Exception e) {
-                LOGGER.error("Region conversion task failed", e);
+            } catch (ExecutionException e) {
+                LOGGER.error("Region conversion task failed: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+            } catch (InterruptedException e) {
+                LOGGER.error("Region conversion task interrupted", e);
+                Thread.currentThread().interrupt();
             }
         }
 
@@ -634,8 +638,13 @@ public class ConversionOrchestrator {
             for (java.util.concurrent.Future<?> future : futures) {
                 try {
                     future.get(60, TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    LOGGER.error("New region conversion task failed", e);
+                } catch (ExecutionException e) {
+                    LOGGER.error("New region conversion task failed: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+                } catch (InterruptedException e) {
+                    LOGGER.error("New region conversion task interrupted", e);
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.TimeoutException e) {
+                    LOGGER.warn("New region conversion task timeout");
                 }
             }
         }
@@ -714,8 +723,8 @@ public class ConversionOrchestrator {
             LOGGER.error("Interrupted while waiting for chunk save", e);
             Thread.currentThread().interrupt();
             return false;
-        } catch (Exception e) {
-            LOGGER.error("Error during chunk flush", e);
+        } catch (RuntimeException e) {
+            LOGGER.error("Runtime error during chunk flush: {}", e.getMessage());
             return false;
         }
     }
@@ -758,8 +767,8 @@ public class ConversionOrchestrator {
                 }
             }
             LOGGER.warn("Dimension not found: {}", id);
-        } catch (Exception e) {
-            LOGGER.error("Invalid dimension id format: {}", id, e);
+        } catch (RuntimeException e) {
+            LOGGER.error("Invalid dimension id format '{}': {}", id, e.getMessage());
         }
 
         return null;
@@ -783,8 +792,11 @@ public class ConversionOrchestrator {
         // This is called from server thread via ServerTickEvent, so direct call is safe
         try {
             server.saveEverything(false, true, true);
-        } catch (Exception e) {
-            LOGGER.error("Failed to save chunks for incremental scan", e);
+        } catch (RuntimeException e) {
+            LOGGER.error("Runtime error saving chunks for incremental scan: {}", e.getMessage());
+            return;
+        } catch (IOException e) {
+            LOGGER.error("IO error saving chunks for incremental scan: {}", e.getMessage());
             return;
         }
 

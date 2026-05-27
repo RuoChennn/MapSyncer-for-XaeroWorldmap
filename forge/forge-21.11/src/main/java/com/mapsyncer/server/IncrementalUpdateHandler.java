@@ -3,10 +3,10 @@ package com.mapsyncer.server;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.platform.UpdateMode;
 import net.minecraft.server.MinecraftServer;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
-import net.minecraftforge.event.TickEvent;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 通过MCA文件时间戳检测哪些区域需要重新生成，
  * 仅更新有变化的区域以提高效率。
  */
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
 public class IncrementalUpdateHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IncrementalUpdateHandler.class);
@@ -122,13 +122,10 @@ public class IncrementalUpdateHandler {
      * 每个服务器tick都会调用此方法，根据配置的更新模式
      * 检查是否需要执行增量扫描。
      *
-     * @param event 服务器Tick事件
+     * @param event 服务器Tick后事件
      */
     @SubscribeEvent
-    public static void onServerTick(TickEvent.ServerTickEvent event) {
-        // 只在 END 阶段执行
-        if (event.phase != TickEvent.Phase.END) return;
-
+    public static void onServerTick(ServerTickEvent.Post event) {
         IncrementalUpdateHandler handler = getInstance();
         if (!handler.running || handler.server == null) return;
 
@@ -193,8 +190,8 @@ public class IncrementalUpdateHandler {
 
         try {
             ConversionOrchestrator.performIncrementalScan(server);
-        } catch (Exception e) {
-            LOGGER.error("Error during scheduled incremental update", e);
+        } catch (RuntimeException e) {
+            LOGGER.error("Error during scheduled incremental update: {}", e.getMessage());
         }
 
         // 检查是否有玩家在线，无人则停止处理器节省资源

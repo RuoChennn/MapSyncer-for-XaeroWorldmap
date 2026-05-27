@@ -3,6 +3,10 @@ package com.mapsyncer.server;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.platform.UpdateMode;
 import net.minecraft.server.MinecraftServer;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,8 +21,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - TICK模式：每隔指定tick数执行一次增量扫描
  * - SCHEDULED模式：每天在指定时间执行增量扫描
  *
- * 注意：Fabric 版本的事件注册在 MapSyncer 主类中使用 ServerTickEvents。
+ * 通过MCA文件时间戳检测哪些区域需要重新生成，
+ * 仅更新有变化的区域以提高效率。
  */
+@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
 public class IncrementalUpdateHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IncrementalUpdateHandler.class);
@@ -40,6 +46,8 @@ public class IncrementalUpdateHandler {
 
     /**
      * 获取单例实例
+     *
+     * @return 增量更新处理器实例
      */
     public static IncrementalUpdateHandler getInstance() {
         if (instance == null) {
@@ -54,6 +62,8 @@ public class IncrementalUpdateHandler {
 
     /**
      * 启动增量更新处理器
+     *
+     * @param server Minecraft服务器实例
      */
     public void start(MinecraftServer server) {
         if (running) {
@@ -65,15 +75,15 @@ public class IncrementalUpdateHandler {
         this.tickCounter.set(0);
         this.lastScheduledUpdate = null;
 
-        UpdateMode mode = ModConfig.SERVER().getIncrementalUpdateMode();
+        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
         if (mode == UpdateMode.TICK) {
             LOGGER.info("Incremental update handler started (TICK mode, interval: {} ticks = {} seconds)",
-                ModConfig.SERVER().getIncrementalUpdateIntervalTicks(),
-                ModConfig.SERVER().getIncrementalUpdateIntervalTicks() / 20);
+                ModConfig.SERVER.incrementalUpdateIntervalTicks.get(),
+                ModConfig.SERVER.incrementalUpdateIntervalTicks.get() / 20);
         } else if (mode == UpdateMode.SCHEDULED) {
             LOGGER.info("Incremental update handler started (SCHEDULED mode, daily at {}:{})",
-                ModConfig.SERVER().getScheduledUpdateHour(),
-                ModConfig.SERVER().getScheduledUpdateMinute());
+                ModConfig.SERVER.scheduledUpdateHour.get(),
+                ModConfig.SERVER.scheduledUpdateMinute.get());
         }
     }
 
@@ -90,6 +100,8 @@ public class IncrementalUpdateHandler {
 
     /**
      * 检查处理器是否正在运行
+     *
+     * @return true表示正在运行，false表示已停止
      */
     public boolean isRunning() {
         return running;
@@ -97,6 +109,8 @@ public class IncrementalUpdateHandler {
 
     /**
      * 获取当前tick计数
+     *
+     * @return tick计数器值
      */
     public int getTickCounter() {
         return tickCounter.get();
@@ -105,13 +119,17 @@ public class IncrementalUpdateHandler {
     /**
      * 服务器Tick事件处理
      *
-     * 由 MapSyncer 主类通过 ServerTickEvents.END_SERVER_TICK 调用。
+     * 每个服务器tick都会调用此方法，根据配置的更新模式
+     * 检查是否需要执行增量扫描。
+     *
+     * @param event 服务器Tick后事件
      */
-    public static void onServerTick(MinecraftServer server) {
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
         IncrementalUpdateHandler handler = getInstance();
         if (!handler.running || handler.server == null) return;
 
-        UpdateMode mode = ModConfig.SERVER().getIncrementalUpdateMode();
+        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
         if (mode == UpdateMode.DISABLED) return;
 
         switch (mode) {
@@ -122,6 +140,7 @@ public class IncrementalUpdateHandler {
                 handler.checkScheduledMode();
                 break;
             case DISABLED:
+                // Do nothing
                 break;
         }
     }
@@ -130,7 +149,7 @@ public class IncrementalUpdateHandler {
      * 检查TICK模式是否需要执行更新
      */
     private void checkTickMode() {
-        int interval = ModConfig.SERVER().getIncrementalUpdateIntervalTicks();
+        int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
         int currentTick = tickCounter.incrementAndGet();
 
         if (currentTick >= interval) {
@@ -141,15 +160,18 @@ public class IncrementalUpdateHandler {
 
     /**
      * 检查SCHEDULED模式是否需要执行更新
+     *
+     * 在目标时间前后1分钟的窗口内检查，确保只在每天执行一次。
      */
     private void checkScheduledMode() {
         LocalDateTime now = LocalDateTime.now();
-        int targetHour = ModConfig.SERVER().getScheduledUpdateHour();
-        int targetMinute = ModConfig.SERVER().getScheduledUpdateMinute();
+        int targetHour = ModConfig.SERVER.scheduledUpdateHour.get();
+        int targetMinute = ModConfig.SERVER.scheduledUpdateMinute.get();
         LocalTime targetTime = LocalTime.of(targetHour, targetMinute);
         LocalTime currentTime = now.toLocalTime();
 
         // Check if we've reached the scheduled time (within 1 minute window)
+        // and haven't already updated today
         if (currentTime.isAfter(targetTime) && currentTime.isBefore(targetTime.plusMinutes(1))) {
             if (lastScheduledUpdate == null || !lastScheduledUpdate.toLocalDate().equals(now.toLocalDate())) {
                 lastScheduledUpdate = now;
@@ -160,14 +182,16 @@ public class IncrementalUpdateHandler {
 
     /**
      * 执行计划更新
+     *
+     * @param reason 更新原因描述
      */
     private void performScheduledUpdate(String reason) {
         LOGGER.info("Performing incremental update: {}", reason);
 
         try {
             ConversionOrchestrator.performIncrementalScan(server);
-        } catch (Exception e) {
-            LOGGER.error("Error during scheduled incremental update", e);
+        } catch (RuntimeException e) {
+            LOGGER.error("Error during scheduled incremental update: {}", e.getMessage());
         }
 
         // 检查是否有玩家在线，无人则停止处理器节省资源
@@ -179,24 +203,28 @@ public class IncrementalUpdateHandler {
 
     /**
      * 获取处理器状态信息
+     *
+     * 返回当前状态和下次更新的预计时间，用于status命令显示。
+     *
+     * @return 状态信息字符串
      */
     public String getStatusInfo() {
         if (!running) {
             return "Stopped";
         }
 
-        UpdateMode mode = ModConfig.SERVER().getIncrementalUpdateMode();
+        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
         switch (mode) {
             case DISABLED:
                 return "Running but disabled";
             case TICK:
-                int interval = ModConfig.SERVER().getIncrementalUpdateIntervalTicks();
+                int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
                 int remaining = interval - tickCounter.get();
                 return String.format("TICK mode: next update in %d ticks (%.1f seconds)",
                     remaining, remaining / 20.0f);
             case SCHEDULED:
-                int targetHour = ModConfig.SERVER().getScheduledUpdateHour();
-                int targetMinute = ModConfig.SERVER().getScheduledUpdateMinute();
+                int targetHour = ModConfig.SERVER.scheduledUpdateHour.get();
+                int targetMinute = ModConfig.SERVER.scheduledUpdateMinute.get();
                 LocalDateTime now = LocalDateTime.now();
                 LocalTime targetTime = LocalTime.of(targetHour, targetMinute);
                 LocalDateTime nextUpdate = now.toLocalDate().atTime(targetTime);
@@ -213,6 +241,8 @@ public class IncrementalUpdateHandler {
 
     /**
      * 重置单例实例以释放内存
+     *
+     * 在服务器停止时调用，防止专用服务器重启时的内存泄漏。
      */
     public static void resetInstance() {
         if (instance != null) {

@@ -269,7 +269,7 @@ public class BlockPropertyResolver {
                 hasVanillaColor, hasMapColor
             );
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             LOGGER.warn("Failed to resolve block properties for {}: {}", blockName, e.getMessage());
             return getFallbackProperties(blockName);
         }
@@ -308,7 +308,7 @@ public class BlockPropertyResolver {
         try {
             // getLightBlock 需要 BlockGetter 和 BlockPos 参数
             return state.getLightBlock(PLACEHOLDER_BLOCK_GETTER, PLACEHOLDER_BLOCKPOS);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // 备用：基于方块类型估算
             FluidState fluidState = state.getFluidState();
             if (!fluidState.isEmpty()) {

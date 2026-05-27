@@ -25,6 +25,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.awt.image.Raster;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
@@ -494,7 +495,7 @@ import java.util.concurrent.ConcurrentHashMap;
                 return (alpha << 24) | (red << 16) | (green << 8) | blue;
             }
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOGGER.debug("Failed to extract color from texture {}: {}", textureName, e.getMessage());
         }
 

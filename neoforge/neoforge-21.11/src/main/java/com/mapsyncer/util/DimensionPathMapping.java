@@ -5,6 +5,7 @@ import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -650,7 +651,7 @@ public class DimensionPathMapping {
                                             }
                                         }
                                     });
-                            } catch (Exception e) {
+                            } catch (IOException e) {
                                 LOGGER.warn("Error scanning namespace directory: {}", namespace, e);
                             }
                         });
@@ -683,7 +684,7 @@ public class DimensionPathMapping {
                 LOGGER.info("Confirmed overworld using traditional format: region/");
             }
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOGGER.warn("Error scanning world directory: {}", e.getMessage());
         }
 
