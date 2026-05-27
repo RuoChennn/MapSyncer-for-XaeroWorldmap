@@ -1,6 +1,7 @@
 package com.mapsyncer.util;
 
 import com.mapsyncer.config.CacheConfig;
+import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.renderer.block.model.BakedQuad;
@@ -511,8 +512,8 @@ import java.util.concurrent.ConcurrentHashMap;
      */
     private static int tryGetMapColor(BlockState state, String blockName) {
         try {
-            // 创建占位 BlockGetter
-            BlockGetter placeholderBlockGetter = new PlaceholderBlockGetter();
+            // 使用工厂获取占位 BlockGetter
+            BlockGetter placeholderBlockGetter = (BlockGetter) PlaceholderBlockGetterFactory.getInstance();
             BlockPos placeholderPos = BlockPos.ZERO;
 
             MapColor mapColor = state.getMapColor(placeholderBlockGetter, placeholderPos);
@@ -747,66 +748,6 @@ import java.util.concurrent.ConcurrentHashMap;
     public static void addPatternColors(Map<String, Integer> colors) {
         for (Map.Entry<String, Integer> entry : colors.entrySet()) {
             patternColors.put(entry.getKey().toLowerCase(), entry.getValue());
-        }
-    }
-
-    /**
-     * 占位 BlockGetter（用于需要 BlockGetter 参数的 API）
-     *
-     * 提供空的 BlockGetter 实现，用于调用需要 BlockGetter 参数的方法时作为占位参数使用
-     */
-    private static class PlaceholderBlockGetter implements BlockGetter {
-        /**
-         * 获取指定位置的方块实体
-         *
-         * @param pos 方块位置
-         * @return null（占位实现）
-         */
-        @Override
-        public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
-            return null;
-        }
-
-        /**
-         * 获取指定位置的方块状态
-         *
-         * @param pos 方块位置
-         * @return AIR 方块的默认状态（占位实现）
-         */
-        @Override
-        public BlockState getBlockState(BlockPos pos) {
-            return Blocks.AIR.defaultBlockState();
-        }
-
-        /**
-         * 获取指定位置的流体状态
-         *
-         * @param pos 方块位置
-         * @return EMPTY 流体的默认状态（占位实现）
-         */
-        @Override
-        public net.minecraft.world.level.material.FluidState getFluidState(BlockPos pos) {
-            return net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState();
-        }
-
-        /**
-         * 获取世界高度
-         *
-         * @return 256（占位实现）
-         */
-        @Override
-        public int getHeight() {
-            return 256;
-        }
-
-        /**
-         * 获取最小建筑高度
-         *
-         * @return -64（占位实现）
-         */
-        @Override
-        public int getMinBuildHeight() {
-            return -64;
         }
     }
 }

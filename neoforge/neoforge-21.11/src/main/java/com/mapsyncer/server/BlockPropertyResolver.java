@@ -1,6 +1,7 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.config.CacheConfig;
+import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -79,7 +80,7 @@ public class BlockPropertyResolver {
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockPropertyResolver.class);
 
     /** 占位用的BlockGetter和BlockPos（用于需要参数的API调用） */
-    private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = new PlaceholderBlockGetter();
+    private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = (BlockGetter) PlaceholderBlockGetterFactory.getInstance();
     private static final BlockPos PLACEHOLDER_BLOCKPOS = BlockPos.ZERO;
 
     /** 缓存方块属性查询结果（带LRU清理） */
@@ -960,38 +961,5 @@ public class BlockPropertyResolver {
      */
     public static boolean isWaterloggedSurface(String blockName, Map<String, String> properties) {
         return getProperties(blockName).isWaterloggedSurface(properties);
-    }
-
-    /**
-     * 占位BlockGetter（用于需要BlockGetter参数的API）
-     *
-     * 提供默认的空气方块和空流体状态，
-     * 用于调用需要BlockGetter参数的方块属性查询方法。
-     */
-    private static class PlaceholderBlockGetter implements BlockGetter {
-        @Override
-        public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
-            return null;
-        }
-
-        @Override
-        public BlockState getBlockState(BlockPos pos) {
-            return Blocks.AIR.defaultBlockState();
-        }
-
-        @Override
-        public net.minecraft.world.level.material.FluidState getFluidState(BlockPos pos) {
-            return net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState();
-        }
-
-        @Override
-        public int getHeight() {
-            return 256;
-        }
-
-        @Override
-        public int getMinBuildHeight() {
-            return -64;
-        }
     }
 }

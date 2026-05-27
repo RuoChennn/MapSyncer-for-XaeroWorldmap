@@ -3,6 +3,7 @@ package com.mapsyncer.server;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig.ScanMode;
+import com.mapsyncer.config.TimeoutConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.RegionConverterStandalone;
@@ -711,7 +712,7 @@ public class ConversionOrchestrator {
     private static void waitForCompletion(List<java.util.concurrent.Future<?>> futures, String taskName) {
         for (java.util.concurrent.Future<?> future : futures) {
             try {
-                future.get(60, TimeUnit.SECONDS);
+                future.get(TimeoutConfig.TASK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             } catch (java.util.concurrent.TimeoutException e) {
                 LOGGER.warn("{} task timeout", taskName);
             } catch (ExecutionException e) {
@@ -753,7 +754,7 @@ public class ConversionOrchestrator {
 
             // Wait for save to complete (with timeout)
             long startTime = System.currentTimeMillis();
-            long timeoutMs = 60000; // 60 seconds timeout
+            long timeoutMs = TimeoutConfig.SAVE_TIMEOUT_MS;
             while (!success[0] && error[0] == null) {
                 if (System.currentTimeMillis() - startTime > timeoutMs) {
                     LOGGER.error("Timeout waiting for chunk save to complete");
