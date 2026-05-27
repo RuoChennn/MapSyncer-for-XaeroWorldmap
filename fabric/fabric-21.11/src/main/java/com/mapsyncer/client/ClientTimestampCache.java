@@ -5,6 +5,7 @@ import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -187,7 +188,7 @@ public class ClientTimestampCache {
             }
 
             LOGGER.info("Loaded cache: state={}, regions={}, file={}", syncState, cache.size(), cacheFile.getFileName());
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOGGER.warn("Failed to load cache file: {}", e.getMessage());
             syncState = null;
         }
@@ -237,7 +238,7 @@ public class ClientTimestampCache {
             }
 
             LOGGER.debug("Saved cache: state={}, regions={}", syncState, cache.size());
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOGGER.warn("Failed to save cache file: {}", e.getMessage());
         }
     }
@@ -336,7 +337,7 @@ public class ClientTimestampCache {
         try {
             Files.deleteIfExists(cacheFile);
             LOGGER.info("Cleared cache");
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOGGER.warn("Failed to delete cache file: {}", e.getMessage());
         }
     }

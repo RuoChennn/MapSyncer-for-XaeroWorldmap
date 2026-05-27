@@ -313,8 +313,10 @@ public class ServerSyncHandler {
                     }
                 }
             }
-        } catch (Exception e) {
-            LOGGER.error("Failed to read xaeromap.txt", e);
+        } catch (IOException e) {
+            LOGGER.error("Failed to read xaeromap.txt: {}", e.getMessage());
+        } catch (NumberFormatException e) {
+            LOGGER.error("Invalid worldId format in xaeromap.txt: {}", e.getMessage());
         }
         return 0;
     }

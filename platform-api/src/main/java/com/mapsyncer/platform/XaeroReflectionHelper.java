@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 /**
@@ -160,7 +161,7 @@ public final class XaeroReflectionHelper {
         try {
             cachedSession = getCurrentSessionMethod.invoke(null);
             return cachedSession;
-        } catch (Exception e) {
+        } catch (ReflectiveOperationException e) {
             LOGGER.warn("Failed to get WorldMapSession: {}", e.getMessage());
             return null;
         }
