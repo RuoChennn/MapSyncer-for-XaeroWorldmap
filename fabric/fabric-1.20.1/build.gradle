@@ -24,7 +24,7 @@ repositories {
 
 dependencies {
     // Minecraft and Fabric
-    minecraft "com.mojang:minecraft:${minecraft_120_version}"
+    minecraft "com.mojang:minecraft:${minecraft_1201_version}"
     // 使用 official mappings (Mojmap) 以保持与其他平台一致
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:0.15.11"
@@ -46,12 +46,12 @@ tasks.withType(JavaCompile).configureEach {
 
 processResources {
     inputs.property "version", project.version
-    inputs.property "minecraft_version", minecraft_120_version
+    inputs.property "minecraft_version", minecraft_1201_version
     inputs.property "loader_version", "0.15.11"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
-                "minecraft_version": minecraft_120_version,
+                "minecraft_version": minecraft_1201_version,
                 "loader_version": "0.15.11"
     }
 }

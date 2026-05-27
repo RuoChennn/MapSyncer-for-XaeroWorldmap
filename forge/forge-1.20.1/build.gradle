@@ -20,7 +20,7 @@ repositories {
 
 minecraft {
     // ForgeGradle 6.0+ mappings 配置
-    mappings channel: mapping_channel_120, version: mapping_version_120
+    mappings channel: 'official', version: '1.20.1'
 
     runs {
         configureEach {
@@ -42,7 +42,7 @@ minecraft {
 
 dependencies {
     // Minecraft Forge 1.20.1
-    minecraft "net.minecraftforge:forge:${minecraft_120_version}-${forge_120_version}"
+    minecraft "net.minecraftforge:forge:${minecraft_1201_version}-${forge_1201_version}"
 
     // 强制 jopt-simple 版本（Mojang 使用的版本）
     implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
