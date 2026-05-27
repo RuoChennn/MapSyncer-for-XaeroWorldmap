@@ -28,6 +28,7 @@ include 'neoforge:neoforge-26'
 
 // Forge 平台
 include 'forge:forge-1.20.1'
+include 'forge:forge-1.20.4'
 include 'forge:forge-1.21'
 
 // Fabric 平台
