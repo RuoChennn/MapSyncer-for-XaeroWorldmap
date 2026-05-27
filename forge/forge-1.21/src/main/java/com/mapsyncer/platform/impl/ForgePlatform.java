@@ -43,7 +43,7 @@ public class ForgePlatform implements Platform {
 
     @Override
     public PlatformType getType() {
-        return PlatformType.FORGE;
+        return PlatformType.FORGE_MODERN;
     }
 
     @Override

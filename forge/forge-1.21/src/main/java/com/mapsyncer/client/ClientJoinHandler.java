@@ -8,7 +8,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.EventBusSubscriber;
+import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +22,7 @@ import java.nio.file.Path;
  * - 玩家加入服务器时检测上次同步是否未完成（状态为 in_progress）
  * - 显示可点击的提示信息，让玩家可以继续上次同步
  */
-@EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+@EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.FORGE)
 public class ClientJoinHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientJoinHandler.class);
@@ -35,7 +35,7 @@ public class ClientJoinHandler {
      * @param event 玩家登录服务器事件
      */
     @SubscribeEvent
-    public static void onPlayerLoggedIn(ClientPlayerNetworkEvent.PlayerLoggedInEvent event) {
+    public static void onPlayerLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
         LOGGER.info("Player logging in to server, checking sync state...");
 
         Minecraft mc = Minecraft.getInstance();

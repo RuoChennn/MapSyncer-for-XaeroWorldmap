@@ -108,26 +108,25 @@ dimension_configs = [
 
 ## 项目解读
 
-### 工作原理
+### 工作流
 
 ```
 服务端 MCA 文件 (region/*.mca)
         │
         ▼
-    MCA 解析器 (独立实现)
+    MCA 解析器 (不依赖xaero)
    解压 → NBT 解析 → 提取区块数据
         │
         ▼
    区域转换 (RegionConverter)
-  方块状态 + 生物群系 + 光照数据
         │
         ▼
 压制成 Xaero 格式 (region.zip)
-        │        │
-        │        ▼
-        │   时间戳+哈希缓存 (GenerationCache)
-        │        │
-        ▼        ▼
+        │
+        ▼
+  时间戳+哈希缓存 (GenerationCache)
+        │
+        ▼
     增量更新处理器 (可选)
   TICK模式 / SCHEDULED模式
         │
@@ -138,14 +137,11 @@ dimension_configs = [
         │
         ▼
     流式加载接收
-  边接收边写入 → 清除缓存
+  边接收边写入（mw$worldId/）
         │
         ▼
    Xaero 加载触发 (反射调用)
   requestLoad → 地图重新渲染
-        │
-        ▼
-客户端 Xaero 地图 (mw$worldId/)
 ```
 
 ### 核心模块

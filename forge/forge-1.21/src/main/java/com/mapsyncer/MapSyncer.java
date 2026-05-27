@@ -20,7 +20,9 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModContainer;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -47,19 +49,22 @@ public class MapSyncer {
         PlatformManager.initialize(new ForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
-        // 初始化 NetworkManager（Forge 1.21 实现）
-        // 网络注册在 ForgeNetworkHandler 的静态初始化中完成
-        NetworkManager.initialize(new ForgeNetworkHandler());
+        // 注册配置文件（Forge 1.21 使用 ModLoadingContext）
+        ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+
+        // 创建网络处理器实例
+        ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();
+        NetworkManager.initialize(networkHandler);
         LOGGER.info("NetworkManager initialized for Forge 1.21");
 
-        modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
-
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            MapPacketReceiver.register();
+            // 客户端：注册网络处理器
+            networkHandler.registerHandlers(null);
             MinecraftForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode, Forge 1.21)");
         } else {
-            ServerSyncHandler.register();
+            // 服务端：注册网络处理器
+            networkHandler.registerHandlers(null);
             MinecraftForge.EVENT_BUS.register(this);
             LOGGER.info("MapSyncer initialized (server mode, Forge 1.21)");
         }
@@ -68,7 +73,7 @@ public class MapSyncer {
     @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.FORGE)
     public static class ClientEventHandler {
         @SubscribeEvent
-        public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggedOutEvent event) {
+        public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
             MapPacketReceiver.resetServerStatus();
             MapPacketReceiver.clearSyncData();
             LOGGER.info("Client disconnected from server, reset server status");

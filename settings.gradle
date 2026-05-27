@@ -24,15 +24,13 @@ include 'platform-api'      // 平台抽象接口
 
 // NeoForge 平台
 include 'neoforge:neoforge-1.21'
+include 'neoforge:neoforge-26'
 
 // Forge 平台
 include 'forge:forge-1.20'
-// include 'forge:forge-1.21' // Forge 1.21 事件/API 系统需要研究正确包名
+include 'forge:forge-1.21'
 
-// Fabric 平台（待专门适配 Fabric API 和 Yarn mappings）
-// include 'fabric:fabric-1.20'
-// include 'fabric:fabric-1.21'
-
-// 预留版本
-// include 'neoforge:neoforge-26'
-// include 'fabric:fabric-26'
+// Fabric 平台
+include 'fabric:fabric-1.20'
+include 'fabric:fabric-1.21'
+include 'fabric:fabric-26'

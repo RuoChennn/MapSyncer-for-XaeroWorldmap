@@ -7,9 +7,7 @@ import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -20,35 +18,34 @@ import java.util.Map;
 /**
  * Forge 1.21 Payload 适配器
  *
- * 将平台无关的 Payload DTO 适配到 Forge 1.21 的 CustomPacketPayload 接口。
- * Forge 1.21 使用与 NeoForge 类似的网络 API（ChannelBuilder/PayloadRegistrar）。
+ * 将平台无关的 Payload DTO 适配到 Forge 1.21 的消息系统。
+ * Forge 1.21 使用 ChannelBuilder/SimpleChannel API，使用 FriendlyByteBuf 进行序列化。
  */
 public class ForgePayloadAdapters {
 
-    // ===== 同步请求适配器 =====
+    // ===== 同步请求消息 =====
 
-    public record ForgeSyncRequestPayload(SyncRequestPayload data) implements CustomPacketPayload {
-        public static final Type<ForgeSyncRequestPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_REQUEST_ID));
+    public static class ForgeSyncRequestMessage {
+        private final SyncRequestPayload data;
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, ForgeSyncRequestPayload> STREAM_CODEC =
-            StreamCodec.of(ForgeSyncRequestPayload::encode, ForgeSyncRequestPayload::decode);
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ForgeSyncRequestMessage(SyncRequestPayload data) {
+            this.data = data;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, ForgeSyncRequestPayload payload) {
-            buf.writeInt(payload.data.clientMeta().size());
-            for (var entry : payload.data.clientMeta().entrySet()) {
+        public SyncRequestPayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeSyncRequestMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.clientMeta().size());
+            for (var entry : msg.data.clientMeta().entrySet()) {
                 buf.writeUtf(entry.getKey());
                 buf.writeLong(entry.getValue().timestampSeconds());
                 buf.writeUtf(entry.getValue().hash());
             }
         }
 
-        public static ForgeSyncRequestPayload decode(RegistryFriendlyByteBuf buf) {
+        public static ForgeSyncRequestMessage decode(FriendlyByteBuf buf) {
             int size = buf.readInt();
             Map<String, ClientMeta> metaMap = new HashMap<>();
             for (int i = 0; i < size; i++) {
@@ -57,35 +54,34 @@ public class ForgePayloadAdapters {
                 String hash = buf.readUtf();
                 metaMap.put(path, new ClientMeta(timestampSeconds, hash));
             }
-            return new ForgeSyncRequestPayload(new SyncRequestPayload(metaMap));
+            return new ForgeSyncRequestMessage(new SyncRequestPayload(metaMap));
         }
     }
 
-    // ===== 同步响应适配器 =====
+    // ===== 同步响应消息 =====
 
-    public record ForgeSyncResponsePayload(SyncResponsePayload data) implements CustomPacketPayload {
-        public static final Type<ForgeSyncResponsePayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_RESPONSE_ID));
+    public static class ForgeSyncResponseMessage {
+        private final SyncResponsePayload data;
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, ForgeSyncResponsePayload> STREAM_CODEC =
-            StreamCodec.of(ForgeSyncResponsePayload::encode, ForgeSyncResponsePayload::decode);
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ForgeSyncResponseMessage(SyncResponsePayload data) {
+            this.data = data;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, ForgeSyncResponsePayload payload) {
-            buf.writeInt(payload.data.worldId());
-            buf.writeInt(payload.data.chunks().size());
-            for (ChunkMapData chunk : payload.data.chunks()) {
+        public SyncResponsePayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeSyncResponseMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.worldId());
+            buf.writeInt(msg.data.chunks().size());
+            for (ChunkMapData chunk : msg.data.chunks()) {
                 encodeChunkMapData(buf, chunk);
             }
-            buf.writeBoolean(payload.data.isComplete());
-            buf.writeUtf(payload.data.status());
+            buf.writeBoolean(msg.data.isComplete());
+            buf.writeUtf(msg.data.status());
         }
 
-        public static ForgeSyncResponsePayload decode(RegistryFriendlyByteBuf buf) {
+        public static ForgeSyncResponseMessage decode(FriendlyByteBuf buf) {
             int worldId = buf.readInt();
             int size = buf.readInt();
             List<ChunkMapData> chunks = new ArrayList<>();
@@ -94,61 +90,59 @@ public class ForgePayloadAdapters {
             }
             boolean isComplete = buf.readBoolean();
             String status = buf.readUtf();
-            return new ForgeSyncResponsePayload(new SyncResponsePayload(chunks, isComplete, worldId, status));
+            return new ForgeSyncResponseMessage(new SyncResponsePayload(chunks, isComplete, worldId, status));
         }
     }
 
-    // ===== 同步进度适配器 =====
+    // ===== 同步进度消息 =====
 
-    public record ForgeSyncProgressPayload(SyncProgressPayload data) implements CustomPacketPayload {
-        public static final Type<ForgeSyncProgressPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_PROGRESS_ID));
+    public static class ForgeSyncProgressMessage {
+        private final SyncProgressPayload data;
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, ForgeSyncProgressPayload> STREAM_CODEC =
-            StreamCodec.of(ForgeSyncProgressPayload::encode, ForgeSyncProgressPayload::decode);
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ForgeSyncProgressMessage(SyncProgressPayload data) {
+            this.data = data;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, ForgeSyncProgressPayload payload) {
-            buf.writeInt(payload.data.processed());
-            buf.writeInt(payload.data.total());
-            buf.writeUtf(payload.data.status());
+        public SyncProgressPayload getData() {
+            return data;
         }
 
-        public static ForgeSyncProgressPayload decode(RegistryFriendlyByteBuf buf) {
-            return new ForgeSyncProgressPayload(new SyncProgressPayload(buf.readInt(), buf.readInt(), buf.readUtf()));
+        public static void encode(ForgeSyncProgressMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.processed());
+            buf.writeInt(msg.data.total());
+            buf.writeUtf(msg.data.status());
+        }
+
+        public static ForgeSyncProgressMessage decode(FriendlyByteBuf buf) {
+            return new ForgeSyncProgressMessage(new SyncProgressPayload(buf.readInt(), buf.readInt(), buf.readUtf()));
         }
     }
 
-    // ===== 服务端已安装适配器 =====
+    // ===== 服务端已安装消息 =====
 
-    public record ForgeServerInstalledPayload(ServerInstalledPayload data) implements CustomPacketPayload {
-        public static final Type<ForgeServerInstalledPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SERVER_INSTALLED_ID));
+    public static class ForgeServerInstalledMessage {
+        private final ServerInstalledPayload data;
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, ForgeServerInstalledPayload> STREAM_CODEC =
-            StreamCodec.of(ForgeServerInstalledPayload::encode, ForgeServerInstalledPayload::decode);
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ForgeServerInstalledMessage(ServerInstalledPayload data) {
+            this.data = data;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, ForgeServerInstalledPayload payload) {
-            buf.writeUtf(payload.data.version());
+        public ServerInstalledPayload getData() {
+            return data;
         }
 
-        public static ForgeServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
-            return new ForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf()));
+        public static void encode(ForgeServerInstalledMessage msg, FriendlyByteBuf buf) {
+            buf.writeUtf(msg.data.version());
+        }
+
+        public static ForgeServerInstalledMessage decode(FriendlyByteBuf buf) {
+            return new ForgeServerInstalledMessage(new ServerInstalledPayload(buf.readUtf()));
         }
     }
 
     // ===== ChunkMapData 序列化（共享逻辑）=====
 
-    private static void encodeChunkMapData(RegistryFriendlyByteBuf buf, ChunkMapData data) {
+    private static void encodeChunkMapData(FriendlyByteBuf buf, ChunkMapData data) {
         buf.writeInt(data.regionX);
         buf.writeInt(data.regionZ);
         buf.writeUtf(data.dimension);
@@ -162,7 +156,7 @@ public class ForgePayloadAdapters {
         }
     }
 
-    private static ChunkMapData decodeChunkMapData(RegistryFriendlyByteBuf buf) {
+    private static ChunkMapData decodeChunkMapData(FriendlyByteBuf buf) {
         int regionX = buf.readInt();
         int regionZ = buf.readInt();
         String dimension = buf.readUtf();

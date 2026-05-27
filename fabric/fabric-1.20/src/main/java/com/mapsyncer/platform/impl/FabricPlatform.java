@@ -1,27 +1,62 @@
 package com.mapsyncer.platform.impl;
 
 import com.mapsyncer.config.ModConfig;
+import com.mapsyncer.mca.DimensionTypeInfo;
+import com.mapsyncer.platform.BlockProperties;
 import com.mapsyncer.platform.Platform;
+import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.BlockPropertyResolver;
-import com.mapsyncer.server.ConversionOrchestrator;
 import com.mapsyncer.util.BlockColorMapper;
+import com.mapsyncer.util.DimensionPathMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.LevelResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabric 平台实现
+ * Fabric 1.20 平台实现
+ *
+ * 实现 Platform 接口，适配 Fabric 1.20.1 的 API。
  */
 public class FabricPlatform implements Platform {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(FabricPlatform.class);
+
     private MinecraftServer server;
+
+    // 缓存方块属性查询结果
+    private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     public void setServer(MinecraftServer server) {
         this.server = server;
+    }
+
+    @Override
+    public PlatformType getType() {
+        return PlatformType.FABRIC;
+    }
+
+    @Override
+    public String getMinecraftVersion() {
+        return "1.20.x";
+    }
+
+    @Override
+    public int getMajorVersion() {
+        return 20;
     }
 
     @Override
@@ -29,25 +64,96 @@ public class FabricPlatform implements Platform {
         return "Fabric 1.20";
     }
 
+    // ===== 方块属性 =====
+
     @Override
-    public Path getWorldDataPath() {
-        if (server == null) return null;
-        return server.getWorldPath(LevelResource.LEVEL_DATA_FILE).getParent();
+    public BlockProperties getBlockProperties(String blockName) {
+        // 检查缓存
+        BlockProperties cached = blockPropertiesCache.get(blockName);
+        if (cached != null) {
+            return cached;
+        }
+
+        try {
+            ResourceLocation loc = new ResourceLocation(blockName);
+            Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
+
+            if (blockOpt.isEmpty()) {
+                LOGGER.debug("Block not found: {}, using pattern color", blockName);
+                BlockProperties fallback = new BlockProperties(
+                    false, false, false, false, false, false, false, false,
+                    false, false, 15, 0, false, getPatternColor(blockName)
+                );
+                blockPropertiesCache.put(blockName, fallback);
+                return fallback;
+            }
+
+            Block block = blockOpt.get();
+            BlockState state = block.defaultBlockState();
+
+            // 使用 BlockPropertyResolver 获取属性（服务端可用）
+            BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
+
+            BlockProperties result = new BlockProperties(
+                props.isAir(),
+                props.isWater(),
+                props.isLava(),
+                props.isFluid(),
+                props.isTransparent(),
+                props.isInvisible(),
+                props.isFlower(),
+                props.isPlant(),
+                props.isGrassBlock(),
+                props.isGlowing(),
+                props.lightBlock(),
+                props.lightEmission(),
+                props.canBeWaterlogged(),
+                BlockColorMapper.getBlockColor(state)
+            );
+
+            blockPropertiesCache.put(blockName, result);
+            return result;
+
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get block properties for {}: {}", blockName, e.getMessage());
+            return BlockProperties.EMPTY;
+        }
     }
 
     @Override
-    public Path getCacheDirectory() {
-        return ConversionOrchestrator.CACHE_DIR;
+    public int getPatternColor(String blockName) {
+        return BlockColorMapper.getBlockColorByName(blockName);
+    }
+
+    // ===== 世界信息 =====
+
+    @Override
+    public int getDefaultMinBuildHeight() {
+        return -64;
     }
 
     @Override
-    public UpdateMode getIncrementalUpdateMode() {
-        return ModConfig.SERVER.incrementalUpdateMode.get();
+    public int getDefaultMaxBuildHeight() {
+        return 320;
+    }
+
+    // ===== 维度信息 =====
+
+    @Override
+    public String getXaeroDimensionPath(String dimensionId) {
+        return DimensionPathMapping.getInstance().toXaeroDimension(dimensionId);
     }
 
     @Override
-    public int getIncrementalUpdateInterval() {
-        return ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+    public DimensionTypeInfo getDimensionTypeInfo(String dimensionId) {
+        return DimensionTypeInfo.fromDimensionId(dimensionId);
+    }
+
+    // ===== 配置系统 =====
+
+    @Override
+    public int getSyncSpeedLimitKBps() {
+        return ModConfig.SERVER.syncSpeedLimitKBps.get();
     }
 
     @Override
@@ -56,8 +162,8 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
-    public int getSyncSpeedLimitKBps() {
-        return ModConfig.SERVER.syncSpeedLimitKBps.get();
+    public int getMaxConcurrentRegions() {
+        return ModConfig.SERVER.maxConcurrentRegions.get();
     }
 
     @Override
@@ -66,21 +172,134 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
-    public Set<String> getEnabledDimensions() {
-        Set<String> dimensions = new HashSet<>();
-        for (var config : ModConfig.SERVER.parseDimensionConfigs()) {
-            dimensions.add(config.dimension());
+    public UpdateMode getIncrementalUpdateMode() {
+        return ModConfig.SERVER.incrementalUpdateMode.get();
+    }
+
+    @Override
+    public int getIncrementalUpdateIntervalTicks() {
+        return ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+    }
+
+    @Override
+    public int getScheduledUpdateHour() {
+        return ModConfig.SERVER.scheduledUpdateHour.get();
+    }
+
+    @Override
+    public int getScheduledUpdateMinute() {
+        return ModConfig.SERVER.scheduledUpdateMinute.get();
+    }
+
+    // ===== 文件路径 =====
+
+    @Override
+    public Path getServerMapCacheDir() {
+        if (server != null) {
+            Path worldPath = server.getWorldPath(LevelResource.LEVEL_DATA_FILE).getParent();
+            return worldPath.resolve("server_map_cache");
         }
-        return dimensions;
+        return Path.of("server_map_cache");
     }
 
     @Override
-    public void clearBlockColorCache() {
-        BlockColorMapper.clearCache();
+    public Path getClientXaeroWorldMapDir() {
+        try {
+            // 使用 XaeroMapIntegrator 获取当前服务器目录
+            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+            if (serverDir != null) {
+                return serverDir;
+            }
+
+            // 回退：返回默认 Xaero 目录
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.gameDirectory != null) {
+                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
+        }
+        return null;
     }
 
     @Override
-    public void clearBlockPropertyCache() {
-        BlockPropertyResolver.clearCache();
+    public String getCurrentServerDirectoryName() {
+        try {
+            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+            if (serverDir != null) {
+                return serverDir.getFileName().toString();
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Failed to get server directory name: {}", e.getMessage());
+        }
+        return "Multiplayer_Server";
+    }
+
+    // ===== 日志 =====
+
+    @Override
+    public Logger getLogger() {
+        return LOGGER;
+    }
+
+    // ===== 工具方法 =====
+
+    @Override
+    public boolean matchesBlockPattern(String blockName, String pattern) {
+        String name = blockName.toLowerCase();
+        return name.endsWith(pattern.toLowerCase()) || name.contains(pattern.toLowerCase());
+    }
+
+    @Override
+    public Map<String, String> parseBlockProperties(String blockStateString) {
+        Map<String, String> props = new HashMap<>();
+
+        int bracketStart = blockStateString.indexOf('[');
+        int bracketEnd = blockStateString.lastIndexOf(']');
+
+        if (bracketStart >= 0 && bracketEnd > bracketStart) {
+            String propsStr = blockStateString.substring(bracketStart + 1, bracketEnd);
+            String[] pairs = propsStr.split(",");
+
+            for (String pair : pairs) {
+                String[] kv = pair.split("=");
+                if (kv.length == 2) {
+                    props.put(kv[0].trim(), kv[1].trim());
+                }
+            }
+        }
+
+        return props;
+    }
+
+    @Override
+    public void recordUpdatedRegions(Set<RegionCoord> regions) {
+        try {
+            // 转换 Platform.RegionCoord 到 XaeroMapIntegrator.RegionCoord
+            Set<com.mapsyncer.client.XaeroMapIntegrator.RegionCoord> xaeroRegions = new HashSet<>();
+            for (RegionCoord coord : regions) {
+                xaeroRegions.add(new com.mapsyncer.client.XaeroMapIntegrator.RegionCoord(
+                    coord.x(), coord.z(), coord.caveLayer()
+                ));
+            }
+            com.mapsyncer.client.XaeroMapIntegrator.recordUpdatedRegionCoords(xaeroRegions);
+            LOGGER.debug("Recorded {} updated regions via XaeroMapIntegrator", regions.size());
+        } catch (Exception e) {
+            LOGGER.warn("Failed to record updated regions: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 清除方块属性缓存
+     */
+    public static void clearBlockPropertiesCache() {
+        blockPropertiesCache.clear();
+    }
+
+    /**
+     * 获取缓存大小
+     */
+    public static int getCacheSize() {
+        return blockPropertiesCache.size();
     }
 }
