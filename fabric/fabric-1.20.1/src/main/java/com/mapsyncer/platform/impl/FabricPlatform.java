@@ -27,7 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabric 1.20 平台实现
+ * Fabric 1.20.1 平台实现
  *
  * 实现 Platform 接口，适配 Fabric 1.20.1 的 API。
  */
@@ -51,7 +51,7 @@ public class FabricPlatform implements Platform {
 
     @Override
     public String getMinecraftVersion() {
-        return "1.20.x";
+        return "1.20.1";
     }
 
     @Override

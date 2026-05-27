@@ -15,8 +15,8 @@
   },
   "mixins": [],
   "depends": {
-    "fabricloader": ">=${loader_version}",
-    "minecraft": "~${minecraft_version}",
+    "fabricloader": ">=0.15.11",
+    "minecraft": ">=1.20.1 <1.20.2",
     "java": ">=17",
     "fabric-api": "*"
   },
