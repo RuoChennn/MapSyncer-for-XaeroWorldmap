@@ -452,207 +452,69 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded"); return; }
 
         currentDimension = dimRegions.dimension();
-        // 获取完整的维度 ID（包含 namespace，如 "twilightforest:twilight_forest"）
-        // 用于 Xaero 目录映射，确保新格式路径能正确转换为 namespace$path 格式
         String fullDimId = dimRegions.dimension().location().toString();
-        // 获取维度 path 部分（不含 namespace，如 "twilight_forest"）
-        // 用于配置查找，因为配置可能只使用 path 部分
         String dimPath = dimRegions.dimension().location().getPath();
 
-        // 从配置获取维度扫描配置（使用 path 部分，因为配置可能不含 namespace）
         DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
-        // 获取 Xaero 格式的目录名（使用完整维度 ID，确保新格式路径正确转换）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
-
-        // 获取 MCA 文件存放目录（1.21+ 自动检测路径）
         Path regionDir = RegionScanner.getRegionDir(level);
-
-        // 计算输出目录（包含 caves/<layer> 子目录）
-        Path baseOutputDir = CACHE_DIR.resolve(xaeroDimName);
-        Path outputDir;
-        if (caveLayer == Integer.MAX_VALUE) {
-            // 地表模式：直接在维度目录
-            outputDir = baseOutputDir;
-        } else {
-            // 洞穴模式：存放到 caves/<layer> 子目录
-            outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
-        }
+        Path outputDir = getOutputDir(CACHE_DIR.resolve(xaeroDimName), caveLayer);
 
         try { Files.createDirectories(outputDir); } catch (IOException e) {
             LOGGER.error("Failed to create output directory: {}", outputDir, e);
             return;
         }
 
-        // 检查 region 目录是否存在
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", xaeroDimName);
             return;
         }
 
-        // 从运行时获取准确的维度类型信息
         DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
         LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
             dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
             dimTypeInfo.minY(), dimTypeInfo.height());
 
-        // 根据配置选择光照模式和洞穴参数
-        LightMode lightMode;
-        CaveModeParams caveParams;
-        if (scanMode == ScanMode.CAVE) {
-            lightMode = LightMode.CAVE;
-            int caveDepth = scanConfig.getCaveDepth(dimTypeInfo.minY());
-            caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
-            LOGGER.info("Dimension {}: using CAVE mode with caveStart={}, caveLayer={}, caveDepth={}",
-                xaeroDimName, scanConfig.caveStart(), caveLayer, caveDepth);
-        } else {
-            lightMode = LightMode.SURFACE;
-            caveParams = CaveModeParams.NONE;
-            LOGGER.info("Dimension {}: using SURFACE mode", xaeroDimName);
-        }
+        LightMode lightMode = scanMode == ScanMode.CAVE ? LightMode.CAVE : LightMode.SURFACE;
+        CaveModeParams caveParams = scanMode == ScanMode.CAVE
+            ? new CaveModeParams(scanConfig.caveStart(), scanConfig.getCaveDepth(dimTypeInfo.minY()))
+            : CaveModeParams.NONE;
 
-        // 使用时间戳缓存检测需要更新的区域
         McaTimestampCache mcaCache = getTimestampCache();
         GenerationCache genCache = GenerationCache.getInstance(CACHE_DIR);
         List<RegionCoords> needsUpdate = force ? dimRegions.regions() : mcaCache.scanAndUpdate(dimPath, regionDir);
-
         List<RegionCoords> regions = dimRegions.regions();
+
         LOGGER.info("Dimension {}: {} total regions, {} need update (force={})", dimPath, regions.size(), needsUpdate.size(), force);
 
-        // 使用线程安全的集合和原子计数器
         ConcurrentLinkedQueue<RegionCoords> failedRegions = new ConcurrentLinkedQueue<>();
-        processedCountAtomic.set(0);  // 重置计数
-        skippedCount = 0;  // 重置跳过计数
-        long generationTimeSeconds = System.currentTimeMillis() / 1000;  // Unified generation timestamp (seconds)
+        processedCountAtomic.set(0);
+        skippedCount = 0;
+        long generationTimeSeconds = System.currentTimeMillis() / 1000;
 
-        // 获取并发线程池
         ExecutorService executor = getOrCreateExecutor();
-        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
 
-        // 并发转换需要更新的区域
-        // MCA 解析和转换是纯文件 IO 操作，不依赖 Minecraft API，可安全并发执行
-        for (RegionCoords coords : needsUpdate) {
-            // 检查是否在区域列表中
-            if (!regions.contains(coords)) {
-                continue;
-            }
+        // 第一轮：并发转换时间戳变化的区域
+        List<java.util.concurrent.Future<?>> futures = submitConversionTasks(
+            executor, needsUpdate, regions, regionDir, outputDir, xaeroDimName, dimPath,
+            dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+            generationTimeSeconds, failedRegions, true);
+        waitForCompletion(futures, "Region conversion");
 
-            // 提交转换任务到线程池
-            java.util.concurrent.Future<?> future = executor.submit(() -> {
-                Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
-
-                // 使用独立解析器直接读取 MCA 文件（使用维度类型信息）
-                ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
-
-                if (converted != null) {
-                    try {
-                        Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
-                        mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                        // Update generation cache with timestamp and hash
-                        String relativePath;
-                        if (caveLayer == Integer.MAX_VALUE) {
-                            relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
-                        } else {
-                            relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
-                        }
-                        genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
-                    } catch (IOException e) {
-                        LOGGER.error("Failed to write region file", e);
-                        failedRegions.add(coords);
-                        return;
-                    }
-                    int currentProcessed = processedCountAtomic.incrementAndGet();
-                    LOGGER.info("Converted region ({}, {}): {}/{}", coords.x(), coords.z(), currentProcessed, needsUpdate.size());
-                } else {
-                    failedRegions.add(coords);
-                }
-            });
-            futures.add(future);
-        }
-
-        // 等待所有转换任务完成
-        for (java.util.concurrent.Future<?> future : futures) {
-            try {
-                future.get(60, TimeUnit.SECONDS);  // 单个任务最多等待 60 秒
-            } catch (java.util.concurrent.TimeoutException e) {
-                LOGGER.warn("Region conversion task timeout");
-            } catch (ExecutionException e) {
-                LOGGER.error("Region conversion task failed: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
-            } catch (InterruptedException e) {
-                LOGGER.error("Region conversion task interrupted", e);
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        // 非 force 模式下，也处理尚未生成过的区域（新增区域）
+        // 第二轮：处理新增区域（非 force 模式）
         if (!force) {
-            futures.clear();
-            for (RegionCoords coords : regions) {
-                if (needsUpdate.contains(coords)) continue;  // 已处理
-
-                // 检查输出文件是否存在
-                if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
-                    // 文件存在且时间戳未更新，跳过
-                    processedCountAtomic.incrementAndGet();
-                    skippedCount++;
-                    LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
-                    continue;
-                }
-
-                // 提交新区域转换任务到线程池
-                java.util.concurrent.Future<?> future = executor.submit(() -> {
-                    Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
-
-                    ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                        mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
-
-                    if (converted != null) {
-                        try {
-                            Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
-                            mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-                            String relativePath;
-                            if (caveLayer == Integer.MAX_VALUE) {
-                                relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
-                            } else {
-                                relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
-                            }
-                            genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
-                        } catch (IOException e) {
-                            LOGGER.error("Failed to write region file", e);
-                            failedRegions.add(coords);
-                            return;
-                        }
-                        int currentProcessed = processedCountAtomic.incrementAndGet();
-                        LOGGER.info("Generated new region ({}, {}): {}/{}", coords.x(), coords.z(), currentProcessed, totalCount);
-                    } else {
-                        failedRegions.add(coords);
-                    }
-                });
-                futures.add(future);
-            }
-
-            // 等待新区域转换任务完成
-            for (java.util.concurrent.Future<?> future : futures) {
-                try {
-                    future.get(60, TimeUnit.SECONDS);
-                } catch (ExecutionException e) {
-                    LOGGER.error("New region conversion task failed: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
-                } catch (InterruptedException e) {
-                    LOGGER.error("New region conversion task interrupted", e);
-                    Thread.currentThread().interrupt();
-                } catch (java.util.concurrent.TimeoutException e) {
-                    LOGGER.warn("New region conversion task timeout");
-                }
-            }
+            futures = submitNewRegionTasks(
+                executor, regions, needsUpdate, regionDir, outputDir, xaeroDimName, dimPath,
+                dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                generationTimeSeconds, failedRegions);
+            waitForCompletion(futures, "New region conversion");
         }
 
-        // 更新 processedCount 以兼容旧代码
         processedCount = processedCountAtomic.get();
 
-        // 重试失败的区域
         if (!failedRegions.isEmpty()) {
             LOGGER.warn("Failed to convert {} regions", failedRegions.size());
             for (RegionCoords coords : failedRegions) {
@@ -660,17 +522,205 @@ public class ConversionOrchestrator {
             }
         }
 
-        // 输出汇总信息
         LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA), {} failed",
             dimPath, regions.size(), processedCount - skippedCount, skippedCount, dimRegions.skippedEmptyCount(), failedRegions.size());
 
-        // 记录已完成的维度友好名称（用于全量生成完成提示）
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension());
         completedDimensions.add(friendlyName);
 
-        // 保存时间戳缓存
         mcaCache.saveCache();
         genCache.save();
+    }
+
+    /**
+     * 获取输出目录（根据洞穴层决定路径）
+     *
+     * @param baseOutputDir 基础输出目录
+     * @param caveLayer 洞穴层号（地表层使用 Integer.MAX_VALUE）
+     * @return 输出目录路径
+     */
+    private static Path getOutputDir(Path baseOutputDir, int caveLayer) {
+        if (caveLayer == Integer.MAX_VALUE) {
+            return baseOutputDir;
+        } else {
+            return baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
+        }
+    }
+
+    /**
+     * 提交批量区域转换任务
+     *
+     * @param executor 线程池
+     * @param coordsToProcess 待处理的区域坐标列表
+     * @param allRegions 所有区域列表（用于检查）
+     * @param regionDir MCA 文件目录
+     * @param outputDir 输出目录
+     * @param xaeroDimName Xaero 格式维度名
+     * @param dimPath 维度路径
+     * @param dimTypeInfo 维度类型信息
+     * @param lightMode 光照模式
+     * @param caveParams 洞穴参数
+     * @param caveLayer 洞穴层号
+     * @param mcaCache 时间戳缓存
+     * @param genCache 生成缓存
+     * @param generationTimeSeconds 生成时间戳
+     * @param failedRegions 失败区域队列
+     * @param logProgress 是否记录进度日志
+     * @return 任务 Future 列表
+     */
+    private static List<java.util.concurrent.Future<?>> submitConversionTasks(
+            ExecutorService executor, List<RegionCoords> coordsToProcess, List<RegionCoords> allRegions,
+            Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
+            DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
+            McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
+            ConcurrentLinkedQueue<RegionCoords> failedRegions, boolean logProgress) {
+
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+
+        for (RegionCoords coords : coordsToProcess) {
+            if (!allRegions.contains(coords)) continue;
+
+            java.util.concurrent.Future<?> future = executor.submit(() ->
+                convertSingleRegion(coords, regionDir, outputDir, xaeroDimName, dimPath,
+                    dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                    generationTimeSeconds, failedRegions, logProgress, "Converted")
+            );
+            futures.add(future);
+        }
+
+        return futures;
+    }
+
+    /**
+     * 提交新增区域转换任务
+     *
+     * 检查输出文件是否存在，不存在则转换。
+     *
+     * @param executor 线程池
+     * @param allRegions 所有区域列表
+     * @param processedRegions 已处理的区域列表
+     * @param regionDir MCA 文件目录
+     * @param outputDir 输出目录
+     * @param xaeroDimName Xaero 格式维度名
+     * @param dimPath 维度路径
+     * @param dimTypeInfo 维度类型信息
+     * @param lightMode 光照模式
+     * @param caveParams 洞穴参数
+     * @param caveLayer 洞穴层号
+     * @param mcaCache 时间戳缓存
+     * @param genCache 生成缓存
+     * @param generationTimeSeconds 生成时间戳
+     * @param failedRegions 失败区域队列
+     * @return 任务 Future 列表
+     */
+    private static List<java.util.concurrent.Future<?>> submitNewRegionTasks(
+            ExecutorService executor, List<RegionCoords> allRegions, List<RegionCoords> processedRegions,
+            Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
+            DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
+            McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
+            ConcurrentLinkedQueue<RegionCoords> failedRegions) {
+
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+
+        for (RegionCoords coords : allRegions) {
+            if (processedRegions.contains(coords)) continue;
+
+            if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
+                processedCountAtomic.incrementAndGet();
+                skippedCount++;
+                LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
+                continue;
+            }
+
+            java.util.concurrent.Future<?> future = executor.submit(() ->
+                convertSingleRegion(coords, regionDir, outputDir, xaeroDimName, dimPath,
+                    dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                    generationTimeSeconds, failedRegions, true, "Generated new")
+            );
+            futures.add(future);
+        }
+
+        return futures;
+    }
+
+    /**
+     * 转换单个区域
+     *
+     * 读取 MCA 文件、转换、写入 Xaero 格式、更新缓存。
+     *
+     * @param coords 区域坐标
+     * @param regionDir MCA 文件目录
+     * @param outputDir 输出目录
+     * @param xaeroDimName Xaero 格式维度名
+     * @param dimPath 维度路径
+     * @param dimTypeInfo 维度类型信息
+     * @param lightMode 光照模式
+     * @param caveParams 洞穴参数
+     * @param caveLayer 洞穴层号
+     * @param mcaCache 时间戳缓存
+     * @param genCache 生成缓存
+     * @param generationTimeSeconds 生成时间戳
+     * @param failedRegions 失败区域队列
+     * @param logProgress 是否记录进度日志
+     * @param logPrefix 日志前缀
+     */
+    private static void convertSingleRegion(
+            RegionCoords coords, Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
+            DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
+            McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
+            ConcurrentLinkedQueue<RegionCoords> failedRegions, boolean logProgress, String logPrefix) {
+
+        Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
+
+        ConvertedRegion converted = RegionConverterStandalone.convertRegion(
+            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+
+        if (converted == null) {
+            failedRegions.add(coords);
+            return;
+        }
+
+        try {
+            Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
+            mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
+
+            String relativePath = caveLayer == Integer.MAX_VALUE
+                ? xaeroDimName + "/" + coords.x() + "_" + coords.z()
+                : xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
+
+            genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
+
+        } catch (IOException e) {
+            LOGGER.error("Failed to write region file", e);
+            failedRegions.add(coords);
+            return;
+        }
+
+        if (logProgress) {
+            int currentProcessed = processedCountAtomic.incrementAndGet();
+            LOGGER.info("{} region ({}, {}): {}/{}", logPrefix, coords.x(), coords.z(), currentProcessed, totalCount);
+        }
+    }
+
+    /**
+     * 等待所有任务完成
+     *
+     * @param futures 任务 Future 列表
+     * @param taskName 任务名称（用于日志）
+     */
+    private static void waitForCompletion(List<java.util.concurrent.Future<?>> futures, String taskName) {
+        for (java.util.concurrent.Future<?> future : futures) {
+            try {
+                future.get(60, TimeUnit.SECONDS);
+            } catch (java.util.concurrent.TimeoutException e) {
+                LOGGER.warn("{} task timeout", taskName);
+            } catch (ExecutionException e) {
+                LOGGER.error("{} task failed: {}", taskName, e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+            } catch (InterruptedException e) {
+                LOGGER.error("{} task interrupted", taskName, e);
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     /**
