@@ -23,6 +23,7 @@ include 'core'              // 纯 Java 核心（MCA/NBT/工具类）
 include 'platform-api'      // 平台抽象接口
 
 // NeoForge 平台
+include 'neoforge:neoforge-1.20.1'
 include 'neoforge:neoforge-1.21'
 include 'neoforge:neoforge-26'
 
