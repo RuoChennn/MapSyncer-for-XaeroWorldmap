@@ -1,5 +1,5 @@
 plugins {
-    id 'net.neoforged.moddev' version '2.0.61-beta'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
 version = mod_version + '-neoforge-1.21.11'
@@ -19,8 +19,8 @@ repositories {
 }
 
 neoForge {
-    // NeoForge 21.11.x for Minecraft 1.21.11
-    version = "21.11.77"
+    // NeoForge 21.11.x for Minecraft 1.21.x
+    version = "21.11.42"
 
     runs {
         client {
@@ -40,6 +40,9 @@ neoForge {
         }
     }
 }
+
+// 引用 minecraft-common 源码目录（全版本共享的 MC API 代码）
+sourceSets.main.java.srcDir '../../minecraft-common/src/main/java'
 
 dependencies {
     implementation project(':core')

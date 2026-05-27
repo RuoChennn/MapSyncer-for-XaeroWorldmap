@@ -22,9 +22,16 @@ rootProject.name = mod_id
 include 'core'              // 纯 Java 核心（MCA/NBT/工具类）
 include 'platform-api'      // 平台抽象接口
 
+// Minecraft 版本模块（NEW）
+include 'minecraft-common'  // 全版本共享的 MC API 代码
+include 'minecraft-1.20'    // MC 1.20.x 版本特定代码
+include 'minecraft-1.21'    // MC 1.21.x 版本特定代码
+include 'minecraft-26'      // MC 26.x 版本特定代码
+
 // NeoForge 平台
-include 'neoforge:neoforge-1.20.1'
-include 'neoforge:neoforge-1.20.4'
+// NeoForge 从 MC 1.20.2 开始支持，版本号 20.2.x/20.3.x/20.4.x/21.x
+// NeoForge 1.20.4 需要 NeoGradle 6.x，与 Gradle 8.5 有兼容性问题
+// include 'neoforge:neoforge-1.20.4'  // 暂时跳过
 include 'neoforge:neoforge-1.21.1'
 include 'neoforge:neoforge-1.21.11'
 // neoforge-26.1 可能需要 Java 25，暂未安装

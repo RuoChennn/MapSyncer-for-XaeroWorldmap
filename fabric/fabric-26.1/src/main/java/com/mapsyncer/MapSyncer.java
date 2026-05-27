@@ -11,6 +11,7 @@ import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.ServerSyncHandler;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -57,6 +58,10 @@ public class MapSyncer implements ModInitializer {
         platform = new FabricPlatform();
         PlatformManager.initialize(platform);
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
+
+        // 初始化 DimensionPathMapping（26.1+ 使用新格式）
+        DimensionPathMapping.getInstance().initialize(26);
+        LOGGER.info("DimensionPathMapping initialized for version 26+");
 
         // 初始化 NetworkManager（Fabric 网络实现）
         networkHandler = new FabricNetworkHandler();

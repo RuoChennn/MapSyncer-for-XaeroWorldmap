@@ -43,7 +43,6 @@ import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
 import net.minecraft.world.level.block.TallGrassBlock;
 import net.minecraft.world.level.block.TallSeagrassBlock;
-import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.block.TorchflowerCropBlock;
 import net.minecraft.world.level.block.TwistingVinesBlock;
 import net.minecraft.world.level.block.TwistingVinesPlantBlock;
@@ -209,7 +208,7 @@ public class BlockPropertyResolver {
      */
     private static BlockProperties resolveProperties(String blockName) {
         try {
-            ResourceLocation location = ResourceLocation.parse(blockName);
+            ResourceLocation location = new ResourceLocation(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(location);
 
             if (blockOpt.isEmpty()) {

@@ -13,6 +13,7 @@ import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.ServerSyncHandler;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -50,6 +51,10 @@ public class MapSyncer {
         // 初始化 Platform（NeoForge 26.x 实现）
         PlatformManager.initialize(new NeoForge26Platform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
+
+        // 初始化 DimensionPathMapping（26.1+ 使用新格式）
+        DimensionPathMapping.getInstance().initialize(26);
+        LOGGER.info("DimensionPathMapping initialized for version 26+");
 
         // 初始化 NetworkManager（NeoForge 网络实现）
         networkHandler = new NeoForgeNetworkHandler();

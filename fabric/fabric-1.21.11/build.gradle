@@ -31,6 +31,9 @@ repositories {
     maven { url = 'https://maven.terraformersmc.com/releases/' }
 }
 
+// 引用 minecraft-common 源码目录（全版本共享的 MC API 代码）
+sourceSets.main.java.srcDir '../../minecraft-common/src/main/java'
+
 dependencies {
     minecraft "com.mojang:minecraft:1.21.11"
     mappings "net.fabricmc:intermediary:1.21.11:v2"

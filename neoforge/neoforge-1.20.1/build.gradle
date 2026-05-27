@@ -1,5 +1,5 @@
 plugins {
-    id 'net.neoforged.moddev' version '2.0.61-beta'
+    id 'net.neoforged.gradle' version '6.0.21'
 }
 
 version = mod_version + '-neoforge-1.20.1'
@@ -18,34 +18,52 @@ repositories {
     maven { url = 'https://maven.aliyun.com/repository/public' }
 }
 
-neoForge {
-    // NeoForge 43.x for Minecraft 1.20.1
-    version = "43.1.0"
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
 
     runs {
-        client {
-            client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        configureEach {
+            workingDirectory project.file('run')
+            property 'neoforge.logging.markers', 'REGISTRIES'
+            property 'neoforge.logging.console.level', 'debug'
         }
-        server {
-            server()
-            programArgument '--nogui'
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
-        }
-    }
 
-    mods {
-        "${mod_id}" {
-            sourceSet sourceSets.main
+        client {
+            property 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+
+        server {
+            property 'neoforge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
         }
     }
 }
 
+// 引用 minecraft-common 源码目录（全版本共享的 MC API 代码）
+sourceSets.main.java.srcDir '../../minecraft-common/src/main/java'
+
 dependencies {
+    // NeoForge 47.x for Minecraft 1.20.1
+    minecraft "net.neoforged:neoforge:47.1.106"
+
+    // 依赖核心模块
     implementation project(':core')
     implementation project(':platform-api')
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        register('neoforge201MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
 }

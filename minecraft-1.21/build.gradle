@@ -1,0 +1,29 @@
+plugins {
+    id 'java-library'
+}
+
+group = mod_group_id
+version = mod_version
+
+// minecraft-1.21 模块：MC 1.21.x 版本特定代码
+// 此模块暂无源码，不独立编译
+// 当有版本特定代码时，将在此目录创建并启用编译
+
+// 禁用所有编译任务
+tasks.withType(JavaCompile).configureEach {
+    enabled = false
+}
+
+// 禁用 jar 任务
+tasks.named('jar').configure {
+    enabled = false
+}
+
+// 禁用 classes 任务
+tasks.named('classes').configure {
+    enabled = false
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}

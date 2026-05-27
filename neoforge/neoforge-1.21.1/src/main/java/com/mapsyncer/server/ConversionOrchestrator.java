@@ -846,9 +846,6 @@ public class ConversionOrchestrator {
         } catch (RuntimeException e) {
             LOGGER.error("Runtime error saving chunks for incremental scan: {}", e.getMessage());
             return;
-        } catch (IOException e) {
-            LOGGER.error("IO error saving chunks for incremental scan: {}", e.getMessage());
-            return;
         }
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);

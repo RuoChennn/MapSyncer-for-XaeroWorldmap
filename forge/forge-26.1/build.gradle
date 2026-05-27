@@ -43,6 +43,9 @@ minecraft {
     }
 }
 
+// 引用 minecraft-common 源码目录（全版本共享的 MC API 代码）
+sourceSets.main.java.srcDir '../../minecraft-common/src/main/java'
+
 dependencies {
     // Minecraft Forge 26.1 (Forge 56.x for MC 1.21.4)
     minecraft "net.minecraftforge:forge:1.21.4-56.0.6"

@@ -12,6 +12,7 @@ import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.ServerSyncHandler;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -48,6 +49,10 @@ public class MapSyncer {
         // 初始化 Platform（Forge 1.21.1 实现）
         PlatformManager.initialize(new ForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
+
+        // 初始化 DimensionPathMapping（1.21.X 使用传统格式）
+        DimensionPathMapping.getInstance().initialize(21);
+        LOGGER.info("DimensionPathMapping initialized for version 1.21.X");
 
         // 注册配置文件（Forge 1.21.1 使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);

@@ -116,20 +116,22 @@ public class MapPacketReceiver {
      * @param event 注册数据包处理器事件
      */
     public static void register(final Object event) {
-        NetworkManager.getHandler().registerHandlers(event);
+        NetworkManager.registerHandlers(event);
 
         // 注册同步响应处理器
-        NetworkManager.getHandler().registerSyncResponseHandler(
+        @SuppressWarnings("unchecked")
+        var handler = (com.mapsyncer.network.NetworkHandler<Object, Object>) NetworkManager.getHandler();
+        handler.registerSyncResponseHandler(
             (payload, context) -> handleSyncResponse(payload, context)
         );
 
         // 注册进度更新处理器
-        NetworkManager.getHandler().registerSyncProgressHandler(
+        handler.registerSyncProgressHandler(
             (payload, context) -> handleProgressUpdate(payload, context)
         );
 
         // 注册服务端已安装通知处理器
-        NetworkManager.getHandler().registerServerInstalledHandler(
+        handler.registerServerInstalledHandler(
             (payload, context) -> {
                 serverInstalled = true;
                 serverVersion = payload.version();
