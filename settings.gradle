@@ -27,7 +27,7 @@ include 'neoforge:neoforge-1.21'
 
 // Forge 平台
 include 'forge:forge-1.20'
-// include 'forge:forge-1.21' // Forge 1.21 API 适配待完成（配置系统等）
+// include 'forge:forge-1.21' // Forge 1.21 事件/API 系统需要研究正确包名
 
 // Fabric 平台（待专门适配 Fabric API 和 Yarn mappings）
 // include 'fabric:fabric-1.20'

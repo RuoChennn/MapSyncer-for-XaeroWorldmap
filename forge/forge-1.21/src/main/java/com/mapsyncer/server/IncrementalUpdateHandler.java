@@ -6,7 +6,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.EventBusSubscriber;
-import net.minecraftforge.event.tick.ServerTickEvent;
+import net.minecraftforge.event.TickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -122,10 +122,13 @@ public class IncrementalUpdateHandler {
      * 每个服务器tick都会调用此方法，根据配置的更新模式
      * 检查是否需要执行增量扫描。
      *
-     * @param event 服务器Tick后事件
+     * @param event 服务器Tick事件
      */
     @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Post event) {
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        // 只在 END 阶段执行
+        if (event.phase != TickEvent.Phase.END) return;
+
         IncrementalUpdateHandler handler = getInstance();
         if (!handler.running || handler.server == null) return;
 

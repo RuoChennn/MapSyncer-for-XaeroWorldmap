@@ -35,12 +35,12 @@ public class ClientJoinHandler {
      * @param event 玩家登录服务器事件
      */
     @SubscribeEvent
-    public static void onPlayerLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+    public static void onPlayerLoggedIn(ClientPlayerNetworkEvent.PlayerLoggedInEvent event) {
         LOGGER.info("Player logging in to server, checking sync state...");
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
-            LOGGER.warn("Player is null during LoggingIn event");
+            LOGGER.warn("Player is null during LoggedIn event");
             return;
         }
 

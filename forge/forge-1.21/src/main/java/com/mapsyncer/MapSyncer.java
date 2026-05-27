@@ -21,16 +21,17 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.network.event.RegisterPayloadHandlersEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * MapSyncer模组的主类 - Forge 1.21 版本
+ *
+ * Forge 1.21 使用 ChannelBuilder API 进行网络注册，
+ * 网络层在 ForgeNetworkHandler 的静态初始化中完成注册。
  */
 @Mod(MapSyncer.MOD_ID)
 public class MapSyncer {
@@ -47,22 +48,18 @@ public class MapSyncer {
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
         // 初始化 NetworkManager（Forge 1.21 实现）
+        // 网络注册在 ForgeNetworkHandler 的静态初始化中完成
         NetworkManager.initialize(new ForgeNetworkHandler());
         LOGGER.info("NetworkManager initialized for Forge 1.21");
 
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
 
-        // 注册网络包处理器
-        modBus.addListener((RegisterPayloadHandlersEvent event) -> {
-            NetworkManager.getHandler().registerHandlers(event);
-        });
-
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            modBus.addListener(MapPacketReceiver::register);
+            MapPacketReceiver.register();
             MinecraftForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode, Forge 1.21)");
         } else {
-            modBus.addListener(ServerSyncHandler::register);
+            ServerSyncHandler.register();
             MinecraftForge.EVENT_BUS.register(this);
             LOGGER.info("MapSyncer initialized (server mode, Forge 1.21)");
         }
