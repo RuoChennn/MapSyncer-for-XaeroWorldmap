@@ -246,7 +246,7 @@ public class DimensionPathMapping {
      * @return 文件系统目录名
      */
     public String getFolderName(ResourceKey<Level> dimensionKey) {
-        return getFolderName(dimensionKey.location().toString());
+        return getFolderName(dimensionKey.identifier().toString());
     }
 
     /**
@@ -423,7 +423,7 @@ public class DimensionPathMapping {
      * @return 标准化后的维度名称
      */
     public String getFriendlyName(ResourceKey<Level> dimensionKey) {
-        return getFriendlyName(dimensionKey.location().getPath());
+        return getFriendlyName(dimensionKey.identifier().getPath());
     }
 
     // ========== 辅助方法 ==========

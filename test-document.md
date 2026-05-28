@@ -3,7 +3,7 @@
 本文档用于记录 MapSyncer for XaeroWorldmap 模组的功能测试结果。
 
 **测试环境要求**：
-- Minecraft 1.21.X + NeoForge
+- Minecraft 1.21.11 + Fabric
 - Xaero's World Map mod（最低版本 1.37.0）
 - 服务端和客户端均安装 MapSyncer
 
@@ -151,7 +151,7 @@
 | 项目 | 信息 |
 |------|------|
 | Minecraft 版本 | |
-| NeoForge 版本 | |
+| Fabric Loader 版本 | |
 | Xaero's World Map 版本 | |
 | MapSyncer 版本 | |
 | 服务端类型 | |
@@ -557,7 +557,7 @@
 | 项目 | 信息 |
 |------|------|
 | Minecraft 版本 | |
-| NeoForge 版本 | |
+| Fabric Loader 版本 | |
 | Xaero's World Map 版本 | |
 | MapSyncer 版本 | |
 | 服务端类型 | |

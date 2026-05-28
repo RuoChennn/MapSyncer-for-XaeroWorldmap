@@ -3,20 +3,20 @@ package com.mapsyncer.util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.BlockModelPart;
+import net.minecraft.client.renderer.block.model.BlockStateModel;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +25,7 @@ import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.awt.image.Raster;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -296,7 +297,7 @@ import java.util.concurrent.ConcurrentHashMap;
         }
 
         // 第一层：尝试纹理颜色提取（仅客户端）
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (FabricLoader.getInstance().getEnvironmentType() == net.fabricmc.api.EnvType.CLIENT) {
             int textureColor = tryGetTextureColor(state, blockName);
             if (textureColor != -1) {
                 LOGGER.debug("Using texture color for {}: {}", blockName, Integer.toHexString(textureColor));
@@ -334,7 +335,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
         // 尝试获取方块并使用 BlockState
         try {
-            ResourceLocation location = ResourceLocation.parse(blockName);
+            Identifier location = Identifier.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(location);
 
             if (blockOpt.isPresent()) {
@@ -365,24 +366,28 @@ import java.util.concurrent.ConcurrentHashMap;
             }
 
             BlockModelShaper bms = mc.getBlockRenderer().getBlockModelShaper();
-            BakedModel model = bms.getBlockModel(state);
+            BlockStateModel model = bms.getBlockModel(state);
 
             if (model == null) {
                 return -1;
             }
 
-            // 尝试获取 UP 方向的 quads
-            List<BakedQuad> upQuads = model.getQuads(state, Direction.UP, mc.level.random);
-
+            // 尝试获取 UP 方向的 quads（通过 BlockModelPart）
             TextureAtlasSprite texture;
             int tintIndex = -1;
 
-            if (upQuads != null && !upQuads.isEmpty()) {
-                texture = upQuads.get(0).getSprite();
-                tintIndex = upQuads.get(0).getTintIndex();
+            List<BlockModelPart> parts = model.collectParts(mc.level.random);
+            List<BakedQuad> upQuads = new ArrayList<>();
+            for (BlockModelPart part : parts) {
+                upQuads.addAll(part.getQuads(Direction.UP));
+            }
+
+            if (!upQuads.isEmpty()) {
+                texture = upQuads.get(0).sprite();
+                tintIndex = upQuads.get(0).tintIndex();
             } else {
                 // 使用 particle 纹理
-                texture = model.getParticleIcon();
+                texture = model.particleIcon();
                 tintIndex = 0;
             }
 
@@ -426,7 +431,7 @@ import java.util.concurrent.ConcurrentHashMap;
                 args = new String[]{"minecraft", args[0]};
             }
 
-            ResourceLocation location = ResourceLocation.fromNamespaceAndPath(args[0], "textures/" + args[1]);
+            Identifier location = Identifier.fromNamespaceAndPath(args[0], "textures/" + args[1]);
 
             var resource = mc.getResourceManager().getResource(location).orElse(null);
             if (resource == null) {
@@ -803,7 +808,7 @@ import java.util.concurrent.ConcurrentHashMap;
          * @return -64（占位实现）
          */
         @Override
-        public int getMinBuildHeight() {
+        public int getMinY() {
             return -64;
         }
     }

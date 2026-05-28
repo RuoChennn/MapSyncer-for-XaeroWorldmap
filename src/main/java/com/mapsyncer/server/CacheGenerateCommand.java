@@ -17,6 +17,8 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.level.Level;
 
 import java.util.List;
@@ -44,7 +46,7 @@ public class CacheGenerateCommand {
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mapsyncer")
-                .requires(source -> source.hasPermission(4))
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.OWNERS)))
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
                         .executes(CacheGenerateCommand::showHelp))
@@ -122,7 +124,7 @@ public class CacheGenerateCommand {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
-        String dimensionId = dimension.location().toString();
+        String dimensionId = dimension.identifier().toString();
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_dim", friendlyName), false);
 
@@ -151,7 +153,7 @@ public class CacheGenerateCommand {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
-        String dimensionId = dimension.location().toString();
+        String dimensionId = dimension.identifier().toString();
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_force", friendlyName), false);
 
@@ -211,7 +213,7 @@ public class CacheGenerateCommand {
      */
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
         IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
-        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
+        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode;
 
         // 构建完整状态消息
         String genStatus;
@@ -229,15 +231,15 @@ public class CacheGenerateCommand {
         if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
             incStatus = "增量更新未启用";
         } else if (mode == UpdateMode.TICK) {
-            int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+            int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks;
             int remainingTicks = interval - handler.getTickCounter();
             int remainingSeconds = remainingTicks / 20;
             int minutes = remainingSeconds / 60;
             int seconds = remainingSeconds % 60;
             incStatus = String.format("增量更新TICK模式，下次 %d分%d秒后", minutes, seconds);
         } else if (mode == UpdateMode.SCHEDULED) {
-            int hour = ModConfig.SERVER.scheduledUpdateHour.get();
-            int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
+            int hour = ModConfig.SERVER.scheduledUpdateHour;
+            int minute = ModConfig.SERVER.scheduledUpdateMinute;
             incStatus = String.format("增量更新定时模式，每日 %02d:%02d", hour, minute);
         } else {
             incStatus = "增量更新未启用";
@@ -275,7 +277,7 @@ public class CacheGenerateCommand {
      * @return 命令执行结果
      */
     private static int setIncrementalOff(CommandContext<CommandSourceStack> ctx) {
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.DISABLED);
+        ModConfig.SERVER.incrementalUpdateMode = UpdateMode.DISABLED;
         saveConfig();
         IncrementalUpdateHandler.getInstance().stop();
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_disabled"), false);
@@ -291,10 +293,10 @@ public class CacheGenerateCommand {
      * @return 命令执行结果
      */
     private static int setIncrementalTick(CommandContext<CommandSourceStack> ctx) {
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
+        ModConfig.SERVER.incrementalUpdateMode = UpdateMode.TICK;
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+        int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks;
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_tick_set", interval, interval / 20.0f), false);
         return Command.SINGLE_SUCCESS;
     }
@@ -307,8 +309,8 @@ public class CacheGenerateCommand {
      */
     private static int setIncrementalTickInterval(CommandContext<CommandSourceStack> ctx) {
         int interval = IntegerArgumentType.getInteger(ctx, "interval");
-        ModConfig.SERVER.incrementalUpdateIntervalTicks.set(interval);
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
+        ModConfig.SERVER.incrementalUpdateIntervalTicks = interval;
+        ModConfig.SERVER.incrementalUpdateMode = UpdateMode.TICK;
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_tick_interval", interval, interval / 20.0f), false);
@@ -324,11 +326,11 @@ public class CacheGenerateCommand {
      * @return 命令执行结果
      */
     private static int setIncrementalScheduled(CommandContext<CommandSourceStack> ctx) {
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
+        ModConfig.SERVER.incrementalUpdateMode = UpdateMode.SCHEDULED;
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        int hour = ModConfig.SERVER.scheduledUpdateHour.get();
-        int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
+        int hour = ModConfig.SERVER.scheduledUpdateHour;
+        int minute = ModConfig.SERVER.scheduledUpdateMinute;
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
     }
@@ -341,11 +343,11 @@ public class CacheGenerateCommand {
      */
     private static int setScheduledTimeDefaultMinute(CommandContext<CommandSourceStack> ctx) {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
-        ModConfig.SERVER.scheduledUpdateHour.set(hour);
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
+        ModConfig.SERVER.scheduledUpdateHour = hour;
+        ModConfig.SERVER.incrementalUpdateMode = UpdateMode.SCHEDULED;
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
+        int minute = ModConfig.SERVER.scheduledUpdateMinute;
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
     }
@@ -359,9 +361,9 @@ public class CacheGenerateCommand {
     private static int setScheduledTime(CommandContext<CommandSourceStack> ctx) {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
         int minute = IntegerArgumentType.getInteger(ctx, "minute");
-        ModConfig.SERVER.scheduledUpdateHour.set(hour);
-        ModConfig.SERVER.scheduledUpdateMinute.set(minute);
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
+        ModConfig.SERVER.scheduledUpdateHour = hour;
+        ModConfig.SERVER.scheduledUpdateMinute = minute;
+        ModConfig.SERVER.incrementalUpdateMode = UpdateMode.SCHEDULED;
         saveConfig();
         IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
@@ -372,6 +374,6 @@ public class CacheGenerateCommand {
      * 保存配置文件
      */
     private static void saveConfig() {
-        ModConfig.SERVER_SPEC.save();
+        ModConfig.save();
     }
 }

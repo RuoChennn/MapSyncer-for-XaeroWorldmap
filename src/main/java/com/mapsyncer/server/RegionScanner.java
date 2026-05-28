@@ -70,7 +70,7 @@ public class RegionScanner {
     public static List<DimensionRegions> scanAllDimensions(MinecraftServer server) {
         List<DimensionNames> dimNames = new ArrayList<>();
         for (ServerLevel level : server.getAllLevels()) {
-            String dimId = level.dimension().location().getPath();
+            String dimId = level.dimension().identifier().getPath();
             if (!dimNames.stream().anyMatch(d -> d.name().equals(dimId))) {
                 dimNames.add(new DimensionNames(dimId, level.dimension()));
             }
@@ -115,7 +115,7 @@ public class RegionScanner {
             worldRoot = worldRoot.toRealPath();
 
             DimensionPathMapping mapping = DimensionPathMapping.getInstance();
-            String dimId = level.dimension().location().toString();
+            String dimId = level.dimension().identifier().toString();
 
             // 使用统一的检测方法（优先新格式，回退传统格式）
             Path regionDir = mapping.detectRegionDir(worldRoot, dimId);
@@ -143,7 +143,7 @@ public class RegionScanner {
      */
     private static RegionScanResult scanRegionDir(Path worldRoot, net.minecraft.resources.ResourceKey<Level> dimensionKey) {
         DimensionPathMapping mapping = DimensionPathMapping.getInstance();
-        String dimId = dimensionKey.location().toString();
+        String dimId = dimensionKey.identifier().toString();
 
         // 使用统一的检测方法
         Path regionDir = mapping.detectRegionDir(worldRoot, dimId);

@@ -1,6 +1,6 @@
 # MapSyncer-for-XaeroWorldmap
 
-一个完全由AI编写的 Minecraft NeoForge 1.21.X 模组，用于将服务端已探索的区域地图数据同步到客户端的 Xaero's World Map。
+一个完全由AI编写的 Minecraft Fabric 1.21.11 模组，用于将服务端已探索的区域地图数据同步到客户端的 Xaero's World Map。
 
 > **适用场景**：玩家首次进入已开放很久的服务器，或服务器已使用 Chunky 预生成地图，需要将地图同步给玩家，减少重复跑图的时间成本。支持增量更新，持续获取最新的服务器地图。
 
@@ -18,8 +18,9 @@
 
 | 环境 | 要求 |
 |------|------|
-| Minecraft | 1.21.X (1.21, 1.21.1) |
-| NeoForge | 21.0+ |
+| Minecraft | 1.21.11 |
+| Fabric Loader | 0.19.0+ |
+| Fabric API | 0.141.4+ |
 | Java | 21 |
 | 客户端额外 | Xaero's World Map 1.40.11+ |
 | 服务端 | 无需安装 Xaero，可独立运行 |
@@ -43,7 +44,7 @@
 
 ## 配置
 
-`config/mapsyncer-server.toml`：
+`config/mapsyncer.json`：
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|

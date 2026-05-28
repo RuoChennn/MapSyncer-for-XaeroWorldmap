@@ -2,15 +2,10 @@ pluginManagement {
     repositories {
         mavenLocal()
         gradlePluginPortal()
-        maven { url = 'https://maven.neoforged.net/releases' }
+        maven { url = 'https://maven.fabricmc.net/' }
         // Aliyun mirror for better access in China
         maven { url = 'https://maven.aliyun.com/repository/public' }
     }
-}
-
-plugins {
-    // Removed foojay-resolver-convention to avoid network issues
-    // Using local Java 21 installation instead
 }
 
 rootProject.name = mod_id

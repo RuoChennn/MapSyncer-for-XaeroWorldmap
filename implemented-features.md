@@ -8,7 +8,7 @@
 
 ## 一、核心功能
 
-MapSyncer 是 Minecraft NeoForge 1.21.X 模组，将服务端已探索区域同步到客户端 Xaero's World Map。
+MapSyncer 是 Minecraft Fabric 1.21.11 模组，将服务端已探索区域同步到客户端 Xaero's World Map。
 
 **适用场景**: 玩家首次进入已开放服务器，或服务器已用 Chunky 预生成地图。
 
@@ -71,7 +71,7 @@ MapSyncer 是 Minecraft NeoForge 1.21.X 模组，将服务端已探索区域同�
 
 ## 五、配置系统
 
-### mapsyncer-common.toml
+### config/mapsyncer.json
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -80,7 +80,7 @@ MapSyncer 是 Minecraft NeoForge 1.21.X 模组，将服务端已探索区域同�
 | `enableResumeSync` | true | 断点续传 |
 | `maxConcurrentRegions` | 4 | 并发转换数 |
 
-### mapsyncer-server.toml
+### 服务端配置（同上文件）
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -90,11 +90,16 @@ MapSyncer 是 Minecraft NeoForge 1.21.X 模组，将服务端已探索区域同�
 
 ### 维度扫描配置
 
-```toml
-[[dimension_scan.dimension_configs]]
-    dimension = "minecraft:the_nether"
-    scan_mode = "CAVE"
-    cave_start = 120
+```json
+{
+  "dimensionConfigs": [
+    {
+      "dimension": "minecraft:the_nether",
+      "scanMode": "CAVE",
+      "caveStart": 120
+    }
+  ]
+}
 ```
 
 ---
@@ -195,6 +200,6 @@ MapSyncer 是 Minecraft NeoForge 1.21.X 模组，将服务端已探索区域同�
 
 ---
 
-**文档版本**: 5.0
-**最后更新**: 2026-05-24
-**模组版本**: v1.0.1
+**文档版本**: 6.0
+**最后更新**: 2026-05-28
+**模组版本**: v1.1.0

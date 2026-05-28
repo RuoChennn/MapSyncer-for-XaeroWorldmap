@@ -12,7 +12,7 @@ import com.mapsyncer.server.RegionScanner.DimensionRegions;
 import com.mapsyncer.server.RegionScanner.RegionCoords;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -228,7 +228,7 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
 
         // 强制生成前先清除该维度的缓存目录
-        String fullDimId = dimKey.location().toString(); // 完整维度 ID（包含 namespace）
+        String fullDimId = dimKey.identifier().toString(); // 完整维度 ID（包含 namespace）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path dimCacheDir = CACHE_DIR.resolve(xaeroDimName);
         clearDimensionCache(dimCacheDir);
@@ -291,7 +291,7 @@ public class ConversionOrchestrator {
         // 提前检查 MCA 文件是否存在
         Path mcaPath = checkMcaFileExists(server, dimension, regionX, regionZ);
         if (mcaPath == null) {
-            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.location().getPath());
+            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.identifier().getPath());
             return SingleRegionResult.REGION_NOT_FOUND;
         }
 
@@ -310,8 +310,8 @@ public class ConversionOrchestrator {
         }
 
         // 使用完整维度 ID 作为缓存 key（确保新格式路径正确转换）
-        String fullDimId = dimension.location().toString();
-        String dimPath = dimension.location().getPath(); // 用于配置查找
+        String fullDimId = dimension.identifier().toString();
+        String dimPath = dimension.identifier().getPath(); // 用于配置查找
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
@@ -401,10 +401,10 @@ public class ConversionOrchestrator {
         currentDimension = dimRegions.dimension();
         // 获取完整的维度 ID（包含 namespace，如 "twilightforest:twilight_forest"）
         // 用于 Xaero 目录映射，确保新格式路径能正确转换为 namespace$path 格式
-        String fullDimId = dimRegions.dimension().location().toString();
+        String fullDimId = dimRegions.dimension().identifier().toString();
         // 获取维度 path 部分（不含 namespace，如 "twilight_forest"）
         // 用于配置查找，因为配置可能只使用 path 部分
-        String dimPath = dimRegions.dimension().location().getPath();
+        String dimPath = dimRegions.dimension().identifier().getPath();
 
         // 从配置获取维度扫描配置（使用 path 部分，因为配置可能不含 namespace）
         DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
@@ -661,12 +661,12 @@ public class ConversionOrchestrator {
                 return Level.END;
         }
 
-        // 尝试解析为 ResourceLocation 并查找维度
+        // 尝试解析为 Identifier 并查找维度
         try {
-            ResourceLocation location = ResourceLocation.parse(id);
+            Identifier location = Identifier.parse(id);
             // 遍历所有已加载的维度查找匹配
             for (ServerLevel level : server.getAllLevels()) {
-                ResourceLocation dimLocation = level.dimension().location();
+                Identifier dimLocation = level.dimension().identifier();
                 if (dimLocation.equals(location) ||
                     dimLocation.getPath().equals(id) ||
                     dimLocation.toString().equals(id)) {
@@ -715,8 +715,8 @@ public class ConversionOrchestrator {
             if (level == null) continue;
 
             // 获取完整维度 ID（包含 namespace，用于 Xaero 目录映射）
-            String fullDimId = dimRegions.dimension().location().toString();
-            String dimPath = dimRegions.dimension().location().getPath(); // 用于配置查找
+            String fullDimId = dimRegions.dimension().identifier().toString();
+            String dimPath = dimRegions.dimension().identifier().getPath(); // 用于配置查找
 
             // 从配置获取维度扫描配置
             DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);

@@ -10,7 +10,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
-import net.neoforged.neoforge.common.ModConfigSpec.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -108,8 +107,7 @@ public class DimensionRegistry {
         mapping.scanAndRegisterDimensions(worldRoot);
 
         // 获取当前配置列表
-        ConfigValue<List<? extends String>> configValue = ModConfig.SERVER.dimensionConfigs;
-        List<? extends String> currentConfigs = configValue.get();
+        List<String> currentConfigs = new ArrayList<>(ModConfig.SERVER.dimensionConfigs);
 
         // 解析为 DimensionScanConfig 对象便于匹配
         Set<String> configuredDimensions = new HashSet<>();
@@ -123,7 +121,7 @@ public class DimensionRegistry {
         Set<String> newDimensions = new LinkedHashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
             ResourceKey<Level> dimKey = level.dimension();
-            String dimId = dimKey.location().toString();
+            String dimId = dimKey.identifier().toString();
 
             String normalizedId = normalizeDimensionId(dimId);
 
@@ -176,10 +174,10 @@ public class DimensionRegistry {
         }
 
         // 更新配置值
-        configValue.set(updatedConfigs);
+        ModConfig.SERVER.dimensionConfigs = updatedConfigs;
 
         // 保存配置文件
-        ModConfig.SERVER_SPEC.save();
+        ModConfig.save();
 
         hasRegistered = true;
         LOGGER.info("Dimension registration completed: {} new dimensions added, total {} dimensions configured",
@@ -214,7 +212,7 @@ public class DimensionRegistry {
      */
     private static ServerLevel getLevelForDimension(MinecraftServer server, String dimId) {
         for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().toString().equals(dimId)) {
+            if (level.dimension().identifier().toString().equals(dimId)) {
                 return level;
             }
         }

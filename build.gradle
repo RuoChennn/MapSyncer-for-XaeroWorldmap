@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.61-beta'
+    id 'fabric-loom' version '1.13.6'
 }
 
 version = mod_version
@@ -16,49 +16,45 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 // Configure repositories with mirrors for better access in China
 repositories {
     mavenCentral()
-    // NeoForge Maven - primary
-    maven { url = 'https://maven.neoforged.net/releases' }
-    // Backup mirrors (may help with network issues)
     maven { url = 'https://maven.aliyun.com/repository/public' }
 }
 
-neoForge {
-    version = neo_version
-
+loom {
     runs {
         client {
             client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
-            systemProperty 'mixin.env.remapRefMap', 'true'
-            systemProperty 'mixin.env.refMapRemapping', 'true'
+            name = "Minecraft Client"
         }
         server {
             server()
-            programArgument '--nogui'
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            name = "Minecraft Server"
+            programArgs '--nogui'
         }
     }
+}
 
-    mods {
-        "${mod_id}" {
-            sourceSet sourceSets.main
-        }
-    }
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
 sourceSets.main.resources.srcDir 'src/generated/resources'
 
 // No compile-time dependency on Xaero's World Map
 // All Xaero integration is done via reflection at runtime
-// - Server: Independent, reads xaeromap.txt file and writes Xaero-compatible format
-// - Client: Requires Xaero's World Map to be installed for map display integration
-
-dependencies {
-    // No dependencies required - Xaero integration uses reflection
-}
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
 }
 
 publishing {
