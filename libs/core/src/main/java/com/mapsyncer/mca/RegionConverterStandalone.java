@@ -282,7 +282,8 @@ public class RegionConverterStandalone {
             int worldY = sectionBaseY + ly;
             if (worldY < scanBottomY) break;
 
-            if (blockLookup.isWaterloggedSurface(singleState.name(), singleState.properties())) {
+            if (blockLookup.isWaterloggedSurface(singleState.name(), singleState.properties())
+                && !blockLookup.shouldOverlay(singleState.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
                 byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
                 addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
@@ -339,7 +340,8 @@ public class RegionConverterStandalone {
                 continue;
             }
 
-            if (blockLookup.isWaterloggedSurface(state.name(), state.properties())) {
+            if (blockLookup.isWaterloggedSurface(state.name(), state.properties())
+                && !blockLookup.shouldOverlay(state.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
                 byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
                 addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
@@ -350,6 +352,19 @@ public class RegionConverterStandalone {
             }
 
             if (blockLookup.isTranslucentFluid(state.name())) {
+                int opacity = blockLookup.getLightBlock(state.name());
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
+                if (highestBlockY < 0) highestBlockY = worldY;
+                continue;
+            }
+
+            // 水logged 透明方块（海草、海带等）：先添加水 overlay，再添加方块 overlay
+            // 匹配 Xaero 的 fluid-state-first 处理顺序
+            if (state.isWaterlogged() && blockLookup.shouldOverlay(state.name())) {
+                int waterOpacity = blockLookup.getLightBlock("minecraft:water");
+                byte waterLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, "minecraft:water", worldY, waterOpacity, waterLight, blockLookup);
                 int opacity = blockLookup.getLightBlock(state.name());
                 byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
                 addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
