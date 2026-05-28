@@ -589,9 +589,22 @@ public class ServerSyncHandlerLogic {
         // 流式处理：只收集路径信息，不读取数据
         List<RegionSyncInfo> regionsToSync = new ArrayList<>();
 
+        // 诊断日志：记录关键变量以排查同步计数问题
+        Path absCacheDir = cacheDir.toAbsolutePath().normalize();
+        LOGGER.info("[DIAG] cacheDir={}, absCacheDir={}, serverCache.size={}, clientMeta.size={}, requestedDimensions={}",
+                cacheDir, absCacheDir, serverCache.size(), clientMeta.size(), requestedDimensions);
+
         try (Stream<Path> stream = Files.walk(cacheDir)) {
-            stream.filter(p -> p.toString().endsWith(".zip"))
-                    .forEach(zipPath -> {
+            List<Path> allZips = stream.filter(p -> p.toString().endsWith(".zip")).toList();
+            LOGGER.info("[DIAG] Files.walk(cacheDir) returned {} zip files", allZips.size());
+
+            // 对比绝对路径遍历结果
+            try (Stream<Path> absStream = Files.walk(absCacheDir)) {
+                long absCount = absStream.filter(p -> p.toString().endsWith(".zip")).count();
+                LOGGER.info("[DIAG] Files.walk(absCacheDir) returned {} zip files", absCount);
+            }
+
+            allZips.forEach(zipPath -> {
                         String relativePath = cacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
 
@@ -641,6 +654,10 @@ public class ServerSyncHandlerLogic {
                                 }
                             }
                         }
+
+                        LOGGER.debug("[DIAG] {} serverMeta={}, clientMeta={}, shouldSync={}",
+                                normalizedPath, serverMeta != null ? "yes" : "null",
+                                clientMetaEntry != null ? "yes" : "null", shouldSync);
 
                         if (shouldSync) {
                             // 解析路径信息，但不读取数据
