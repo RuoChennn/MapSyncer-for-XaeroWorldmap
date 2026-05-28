@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.Properties;
 
+import com.mapsyncer.config.DimensionScanConfig;
+import com.mapsyncer.config.ScanMode;
+
 /**
  * Mod 配置类 - Fabric 版本
  *
@@ -250,66 +253,6 @@ public class ModConfig {
             builder.setSavingRunnable(this::save);
 
             return builder.build();
-        }
-    }
-
-    /**
-     * 扫描模式枚举
-     *
-     * <p>定义维度地图的扫描方式</p>
-     */
-    public enum ScanMode {
-        /**
-         * 地表模式：从高度图向下扫描
-         */
-        SURFACE,
-
-        /**
-         * 洞穴模式：从固定高度向下扫描
-         */
-        CAVE
-    }
-
-    /**
-     * 维度扫描配置记录
-     *
-     * @param dimension 维度 ID
-     * @param scanMode 扫描模式
-     * @param caveStart 洞穴起始高度
-     * @param dimTypeInfo 维度类型信息
-     */
-    public record DimensionScanConfig(
-        String dimension,
-        ScanMode scanMode,
-        int caveStart,
-        DimensionTypeInfo dimTypeInfo
-    ) {
-        public DimensionScanConfig(String dimension, ScanMode scanMode, int caveStart) {
-            this(dimension, scanMode, caveStart, null);
-        }
-
-        public int getCaveLayer() {
-            if (scanMode == ScanMode.SURFACE) {
-                return Integer.MAX_VALUE;
-            }
-            if (caveStart == Integer.MAX_VALUE || caveStart == Integer.MIN_VALUE) {
-                return caveStart;
-            }
-            return caveStart >> 4;
-        }
-
-        public int getCaveDepth(int minBuildHeight) {
-            if (scanMode == ScanMode.SURFACE) {
-                return 0;
-            }
-            return Math.max(30, caveStart - minBuildHeight);
-        }
-
-        public DimensionTypeInfo getDimensionTypeInfo() {
-            if (dimTypeInfo != null) {
-                return dimTypeInfo;
-            }
-            return DimensionTypeInfo.fromDimensionId(dimension);
         }
     }
 

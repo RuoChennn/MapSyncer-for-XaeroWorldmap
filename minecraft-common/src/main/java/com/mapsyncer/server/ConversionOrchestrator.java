@@ -1,8 +1,8 @@
 package com.mapsyncer.server;
 
-import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.config.ModConfig.DimensionScanConfig;
-import com.mapsyncer.config.ModConfig.ScanMode;
+import com.mapsyncer.config.DimensionScanConfig;
+import com.mapsyncer.config.ScanMode;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.config.TimeoutConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.mca.LightMode;
@@ -109,7 +109,7 @@ public class ConversionOrchestrator {
      */
     private static ExecutorService getOrCreateExecutor() {
         if (conversionExecutor == null || conversionExecutor.isShutdown()) {
-            int maxConcurrent = ModConfig.SERVER().getMaxConcurrentRegions();
+            int maxConcurrent = PlatformManager.getPlatform().getMaxConcurrentRegions();
             conversionExecutor = Executors.newFixedThreadPool(maxConcurrent,
                 new NamedThreadFactory("mapsyncer-converter"));
             LOGGER.info("Created conversion thread pool with {} threads", maxConcurrent);
@@ -368,7 +368,7 @@ public class ConversionOrchestrator {
         String dimPath = dimension.location().getPath(); // 用于配置查找
 
         // 从配置获取维度扫描配置
-        DimensionScanConfig scanConfig = ModConfig.SERVER().getConfigForDimension(dimPath);
+        DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
@@ -456,7 +456,7 @@ public class ConversionOrchestrator {
         String fullDimId = dimRegions.dimension().location().toString();
         String dimPath = dimRegions.dimension().location().getPath();
 
-        DimensionScanConfig scanConfig = ModConfig.SERVER().getConfigForDimension(dimPath);
+        DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
@@ -863,7 +863,7 @@ public class ConversionOrchestrator {
             String dimPath = dimRegions.dimension().location().getPath(); // 用于配置查找
 
             // 从配置获取维度扫描配置
-            DimensionScanConfig scanConfig = ModConfig.SERVER().getConfigForDimension(dimPath);
+            DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             ScanMode scanMode = scanConfig.scanMode();
             int caveLayer = scanConfig.getCaveLayer();
 

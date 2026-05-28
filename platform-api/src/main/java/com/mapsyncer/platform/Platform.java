@@ -1,5 +1,6 @@
 package com.mapsyncer.platform;
 
+import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import org.slf4j.Logger;
 
@@ -91,6 +92,14 @@ public interface Platform {
     // ===== 配置系统 =====
 
     /**
+     * 获取维度扫描配置
+     *
+     * @param dimensionPath 维度路径（如 "the_nether" 或 "minecraft:the_nether"）
+     * @return 维度扫描配置
+     */
+    DimensionScanConfig getConfigForDimension(String dimensionPath);
+
+    /**
      * 获取同步速度限制（KB/s）
      */
     int getSyncSpeedLimitKBps();
@@ -109,6 +118,13 @@ public interface Platform {
      * 获取是否启用调试日志
      */
     boolean isDebugLoggingEnabled();
+
+    /**
+     * 获取客户端哈希计算线程数
+     *
+     * @return 线程数
+     */
+    int getClientHashThreads();
 
     /**
      * 获取增量更新模式
@@ -154,6 +170,27 @@ public interface Platform {
      * 保存配置到文件
      */
     void saveConfig();
+
+    /**
+     * 获取维度配置列表（原始字符串格式）
+     *
+     * @return 维度配置字符串列表
+     */
+    java.util.List<String> getDimensionConfigs();
+
+    /**
+     * 设置维度配置列表（原始字符串格式）
+     *
+     * @param configs 维度配置字符串列表
+     */
+    void setDimensionConfigs(java.util.List<String> configs);
+
+    /**
+     * 解析维度配置列表为 DimensionScanConfig 对象
+     *
+     * @return 解析后的维度扫描配置列表
+     */
+    java.util.List<DimensionScanConfig> parseDimensionConfigs();
 
     // ===== 文件路径 =====
 

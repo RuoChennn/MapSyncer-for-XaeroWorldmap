@@ -205,7 +205,7 @@ public class MapSyncerCommand {
     }
 
     private static int clearSyncState(CommandContext<CommandSourceStack> context) {
-        ClientJoinHandler.clearSyncState();
+        SyncResumeHelper.clearSyncState();
         return Command.SINGLE_SUCCESS;
     }
 

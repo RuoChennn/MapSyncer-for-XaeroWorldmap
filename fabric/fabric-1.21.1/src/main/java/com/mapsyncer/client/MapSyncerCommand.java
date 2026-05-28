@@ -194,7 +194,7 @@ public class MapSyncerCommand {
     }
 
     private static int clearSyncState(CommandContext<FabricClientCommandSource> context) {
-        ClientJoinHandler.clearSyncState();
+        SyncResumeHelper.clearSyncState();
         return Command.SINGLE_SUCCESS;
     }
 

@@ -1,5 +1,6 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.ChatUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
@@ -14,16 +15,14 @@ import java.nio.file.Path;
 /**
  * 客户端玩家加入事件处理器 - 检测未完成的同步并提示断点续传
  *
- * 注意：Fabric 版本的事件注册在 MapSyncerClient 中使用 ClientPlayConnectionEvents。
+ * 核心逻辑在公共模块，平台特定的事件注册由各平台子类/调用方处理。
  */
-public class ClientJoinHandler {
+public class SyncResumeHelper {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ClientJoinHandler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SyncResumeHelper.class);
 
     /**
-     * 玩家登录服务器事件处理（客户端）
-     *
-     * 由 MapSyncerClient 通过 ClientPlayConnectionEvents.JOIN 调用。
+     * 玩家登录服务器时调用（由平台特定事件处理器调用）
      */
     public static void onPlayerLoggingIn() {
         LOGGER.info("Player logging in to server, checking sync state...");
@@ -35,23 +34,25 @@ public class ClientJoinHandler {
         }
 
         // 使用异步线程延迟检测，避免阻塞主线程
-        new Thread(() -> {
+        Thread resumeCheckThread = new Thread(() -> {
             try {
                 Thread.sleep(1000); // 等待1秒让 Xaero 目录初始化
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             }
-            // 在主线程执行检查
+            // 在主线程执行检查（因为涉及 Minecraft API）
             mc.execute(() -> checkInterruptedSync(mc));
-        }, "mapsyncer-resume-check").start();
+        }, "mapsyncer-resume-check");
+        resumeCheckThread.setDaemon(true);
+        resumeCheckThread.start();
     }
 
     /**
      * 检测上次同步是否未完成
      */
     private static void checkInterruptedSync(Minecraft mc) {
-        Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+        Path serverDir = PlatformManager.getPlatform().getClientXaeroWorldMapDir();
         if (serverDir == null || !serverDir.toFile().exists()) {
             LOGGER.info("Server directory not found, skip sync state check");
             return;
@@ -66,6 +67,7 @@ public class ClientJoinHandler {
             return;
         }
 
+        // 检查缓存文件是否存在（不存在说明从未同步过）
         if (!tsCache.cacheFileExists()) {
             LOGGER.info("Cache file not found, never synced before");
             return;
@@ -75,6 +77,7 @@ public class ClientJoinHandler {
         String syncCommand = tsCache.getSyncCommand();
         LOGGER.info("Loaded sync state: {}, command: {}", syncState, syncCommand);
 
+        // 检查是否需要断点续传（状态为 in_progress）
         if (tsCache.needsResume()) {
             LOGGER.info("Found unfinished sync, showing prompt");
 
@@ -125,7 +128,7 @@ public class ClientJoinHandler {
      */
     public static void clearSyncState() {
         Minecraft mc = Minecraft.getInstance();
-        Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+        Path serverDir = PlatformManager.getPlatform().getClientXaeroWorldMapDir();
         if (serverDir == null || !serverDir.toFile().exists()) return;
 
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);

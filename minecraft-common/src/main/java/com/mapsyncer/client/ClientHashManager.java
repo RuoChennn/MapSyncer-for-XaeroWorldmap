@@ -1,7 +1,7 @@
 package com.mapsyncer.client;
 
-import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
 import org.slf4j.Logger;
@@ -12,9 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Stream;
@@ -39,7 +37,7 @@ import java.util.stream.Stream;
  *
  * <p>线程配置：</p>
  * <ul>
- *   <li>线程数通过客户端配置 ModConfig.CLIENT.getHashThreads() 控制</li>
+ *   <li>线程数通过客户端配置 ModConfig.CLIENT 控制</li>
  *   <li>默认使用 JVM 可用处理器数的一半</li>
  *   <li>可在游戏内通过配置界面调整</li>
  * </ul>
@@ -54,6 +52,26 @@ public class ClientHashManager {
     /** 当前 pool 使用的线程数（用于检测配置更改） */
     private static volatile int currentPoolThreads;
 
+    /** 默认线程数（可用处理器数的一半） */
+    private static final int DEFAULT_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+
+    /**
+     * 获取配置的哈希计算线程数。
+     *
+     * <p>如果客户端配置未初始化，使用默认值。</p>
+     *
+     * @return 线程数
+     */
+    private static int getConfiguredThreads() {
+        try {
+            return PlatformManager.getPlatform().getClientHashThreads();
+        } catch (Exception e) {
+            // 配置未初始化或平台未就绪，使用默认值
+            LOGGER.debug("ClientConfig not initialized, using default threads: {}", DEFAULT_THREADS);
+            return DEFAULT_THREADS;
+        }
+    }
+
     /**
      * 获取共享的 ForkJoinPool。
      *
@@ -63,7 +81,7 @@ public class ClientHashManager {
      * @return 共享的 ForkJoinPool
      */
     private static ForkJoinPool getSharedPool() {
-        int configuredThreads = ModConfig.CLIENT.getHashThreads();
+        int configuredThreads = getConfiguredThreads();
 
         // 如果 pool 未创建或配置已更改，重建 pool
         if (sharedPool == null || sharedPool.isShutdown() || currentPoolThreads != configuredThreads) {

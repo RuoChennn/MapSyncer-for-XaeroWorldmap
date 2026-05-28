@@ -5,6 +5,7 @@ import com.mapsyncer.platform.BlockProperties;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.server.BlockPropertyResolver;
 import com.mapsyncer.util.BlockColorMapper;
@@ -164,6 +165,11 @@ public class NeoForgePlatform implements Platform {
     }
 
     @Override
+    public int getClientHashThreads() {
+        return ModConfig.CLIENT.getHashThreads();
+    }
+
+    @Override
     public UpdateMode getIncrementalUpdateMode() {
         return ModConfig.SERVER.incrementalUpdateMode.get();
     }
@@ -206,6 +212,26 @@ public class NeoForgePlatform implements Platform {
     @Override
     public void saveConfig() {
         // NeoForge 自动管理配置持久化，无需手动保存
+    }
+
+    @Override
+    public java.util.List<String> getDimensionConfigs() {
+        return new java.util.ArrayList<>(ModConfig.SERVER.dimensionConfigs.get());
+    }
+
+    @Override
+    public void setDimensionConfigs(java.util.List<String> configs) {
+        ModConfig.SERVER.dimensionConfigs.set(configs);
+    }
+
+    @Override
+    public java.util.List<DimensionScanConfig> parseDimensionConfigs() {
+        return ModConfig.SERVER.parseDimensionConfigs();
+    }
+
+    @Override
+    public DimensionScanConfig getConfigForDimension(String dimensionPath) {
+        return ModConfig.SERVER.getConfigForDimension(dimensionPath);
     }
 
     // ===== 文件路径 =====

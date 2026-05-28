@@ -1,5 +1,6 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.BlockProperties;
@@ -215,6 +216,26 @@ public class FabricPlatform implements Platform {
     @Override
     public void saveConfig() {
         ModConfig.SERVER().save();
+    }
+
+    @Override
+    public java.util.List<String> getDimensionConfigs() {
+        return ModConfig.SERVER().getDimensionConfigs();
+    }
+
+    @Override
+    public void setDimensionConfigs(java.util.List<String> configs) {
+        ModConfig.SERVER().setDimensionConfigs(configs);
+    }
+
+    @Override
+    public java.util.List<DimensionScanConfig> parseDimensionConfigs() {
+        return ModConfig.SERVER().parseDimensionConfigs();
+    }
+
+    @Override
+    public DimensionScanConfig getConfigForDimension(String dimensionPath) {
+        return ModConfig.SERVER().getConfigForDimension(dimensionPath);
     }
 
     // ===== 文件路径 =====

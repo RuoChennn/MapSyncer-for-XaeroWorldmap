@@ -1,5 +1,6 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.BlockProperties;
@@ -170,6 +171,11 @@ public class ForgePlatform implements Platform {
     }
 
     @Override
+    public int getClientHashThreads() {
+        return ModConfig.CLIENT.getHashThreads();
+    }
+
+    @Override
     public UpdateMode getIncrementalUpdateMode() {
         return ModConfig.SERVER.incrementalUpdateMode.get();
     }
@@ -212,6 +218,26 @@ public class ForgePlatform implements Platform {
     @Override
     public void saveConfig() {
         // Forge 自动管理配置持久化，无需手动保存
+    }
+
+    @Override
+    public java.util.List<String> getDimensionConfigs() {
+        return new java.util.ArrayList<>(ModConfig.SERVER.dimensionConfigs.get());
+    }
+
+    @Override
+    public void setDimensionConfigs(java.util.List<String> configs) {
+        ModConfig.SERVER.dimensionConfigs.set(configs);
+    }
+
+    @Override
+    public java.util.List<DimensionScanConfig> parseDimensionConfigs() {
+        return ModConfig.SERVER.parseDimensionConfigs();
+    }
+
+    @Override
+    public DimensionScanConfig getConfigForDimension(String dimensionPath) {
+        return ModConfig.SERVER.getConfigForDimension(dimensionPath);
     }
 
     // ===== 文件路径 =====
