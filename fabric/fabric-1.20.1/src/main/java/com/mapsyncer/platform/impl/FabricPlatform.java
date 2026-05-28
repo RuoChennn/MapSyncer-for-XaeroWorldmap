@@ -191,6 +191,31 @@ public class FabricPlatform implements Platform {
         return ModConfig.SERVER.scheduledUpdateMinute.get();
     }
 
+    @Override
+    public void setIncrementalUpdateMode(UpdateMode mode) {
+        ModConfig.SERVER().setIncrementalUpdateMode(mode);
+    }
+
+    @Override
+    public void setIncrementalUpdateIntervalTicks(int interval) {
+        ModConfig.SERVER().setIncrementalUpdateIntervalTicks(interval);
+    }
+
+    @Override
+    public void setScheduledUpdateHour(int hour) {
+        ModConfig.SERVER().setScheduledUpdateHour(hour);
+    }
+
+    @Override
+    public void setScheduledUpdateMinute(int minute) {
+        ModConfig.SERVER().setScheduledUpdateMinute(minute);
+    }
+
+    @Override
+    public void saveConfig() {
+        ModConfig.SERVER().save();
+    }
+
     // ===== 文件路径 =====
 
     @Override

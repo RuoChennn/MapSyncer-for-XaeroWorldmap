@@ -5,12 +5,9 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mapsyncer.config.ModConfig;
-import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
-import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.commands.CommandSourceStack;
@@ -75,105 +72,62 @@ public class CacheGenerateCommand {
     }
 
     private static int showHelp(CommandContext<CommandSourceStack> ctx) {
-        ctx.getSource().sendSuccess(() -> ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.generate"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.generate_dim"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.generate_region"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.generate_force"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.status"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_off"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_tick"), false);
-        ctx.getSource().sendSuccess(() -> ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"), false);
+        CacheCommandHandler.showHelp(component -> ctx.getSource().sendSuccess(() -> component, false));
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 生成所有维度的地图缓存
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
         MinecraftServer server = ctx.getSource().getServer();
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_full"), false);
 
-        Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateAll(server);
-            String dimList = String.join(", ", ConversionOrchestrator.getCompletedDimensions());
+        CacheCommandHandler.generateAll(server, () -> {
+            String dimList = String.join(", ", CacheCommandHandler.getCompletedDimensions());
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.full_complete",
-                    ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getCompletedDimensions().size(),
+                    CacheCommandHandler.getProcessedCount(),
+                    CacheCommandHandler.getTotalCount(),
+                    CacheCommandHandler.getCompletedDimensions().size(),
                     dimList), false);
-        }, "xaero-map-generator");
-        worker.start();
+        });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 生成指定维度的地图缓存
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     * @throws CommandSyntaxException 如果维度参数解析失败
-     */
     private static int generateDimension(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
-        String dimensionId = dimension.location().toString();
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
+        String dimensionId = CacheCommandHandler.getDimensionId(dimension);
+        String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_dim", friendlyName), false);
 
-        Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateDimension(server, dimensionId);
+        CacheCommandHandler.generateDimension(server, dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.dim_complete",
-                    ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getUpdatedCount()), false);
-        }, "xaero-map-generator");
-        worker.start();
+                    CacheCommandHandler.getProcessedCount(),
+                    CacheCommandHandler.getTotalCount(),
+                    CacheCommandHandler.getUpdatedCount()), false);
+        });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 强制重新生成指定维度的地图缓存
-     *
-     * 清除维度缓存目录后重新生成所有区域。
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     * @throws CommandSyntaxException 如果维度参数解析失败
-     */
     private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
-        String dimensionId = dimension.location().toString();
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
+        String dimensionId = CacheCommandHandler.getDimensionId(dimension);
+        String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_force", friendlyName), false);
 
-        Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateDimensionForce(server, dimensionId);
+        CacheCommandHandler.generateDimensionForce(server, dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.force_complete",
-                    ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getUpdatedCount()), false);
-        }, "xaero-map-generator");
-        worker.start();
+                    CacheCommandHandler.getProcessedCount(),
+                    CacheCommandHandler.getTotalCount(),
+                    CacheCommandHandler.getUpdatedCount()), false);
+        });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 生成单个区域的地图缓存
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     * @throws CommandSyntaxException 如果参数解析失败
-     */
     private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
@@ -181,84 +135,42 @@ public class CacheGenerateCommand {
         int z = IntegerArgumentType.getInteger(ctx, "z");
         MinecraftServer server = ctx.getSource().getServer();
 
-        if (ConversionOrchestrator.checkMcaFileExists(server, dimension, x, z) == null) {
-            String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
+        if (!CacheCommandHandler.checkRegionExists(server, dimension, x, z)) {
+            String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
             ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.region_not_found", x, z, friendlyName));
             return 0;
         }
 
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimension);
+        String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.command.generating_region", x, z, friendlyName), false);
 
-        Thread worker = new Thread(() -> {
-            SingleRegionResult result = ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);
+        CacheCommandHandler.generateSingleRegion(server, dimension, x, z, result -> {
             if (result == SingleRegionResult.SUCCESS) {
                 ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.region_converted"), false);
             } else if (result == SingleRegionResult.CONVERSION_FAILED) {
                 ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.region_conversion_failed", x, z));
             }
-        }, "xaero-map-generator");
-        worker.start();
+        });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 显示当前生成状态、增量更新状态和缓存统计（合并为一行）
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
-        IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
-        UpdateMode mode = ModConfig.SERVER.incrementalUpdateMode.get();
+        String genStatus = CacheCommandHandler.getGenerationStatus();
+        String incStatus = CacheCommandHandler.getIncrementalStatus();
 
-        // 构建完整状态消息
-        String genStatus;
-        String incStatus;
-
-        if (ConversionOrchestrator.isRunning()) {
-            genStatus = String.format("转换进行中：%d/%d 个区域 - %s",
-                    ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getStatus());
-        } else {
-            genStatus = "无转换任务";
-        }
-
-        if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
-            incStatus = "增量更新未启用";
-        } else if (mode == UpdateMode.TICK) {
-            int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
-            int remainingTicks = interval - handler.getTickCounter();
-            int remainingSeconds = remainingTicks / 20;
-            int minutes = remainingSeconds / 60;
-            int seconds = remainingSeconds % 60;
-            incStatus = String.format("增量更新TICK模式，下次 %d分%d秒后", minutes, seconds);
-        } else if (mode == UpdateMode.SCHEDULED) {
-            int hour = ModConfig.SERVER.scheduledUpdateHour.get();
-            int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
-            incStatus = String.format("增量更新定时模式，每日 %02d:%02d", hour, minute);
-        } else {
-            incStatus = "增量更新未启用";
-        }
-
-        // 合并为一行显示
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.combined", genStatus, incStatus), false);
 
-        // 显示缓存统计（总计一行，每个维度单独一行）
-        List<DimensionCacheStats> cacheStats = ConversionOrchestrator.getCacheStats();
+        List<DimensionCacheStats> cacheStats = CacheCommandHandler.getCacheStats();
         if (!cacheStats.isEmpty()) {
             int totalDims = cacheStats.size();
             int totalRegions = cacheStats.stream().mapToInt(DimensionCacheStats::regionCount).sum();
             long totalSize = cacheStats.stream().mapToLong(DimensionCacheStats::sizeBytes).sum();
             double totalSizeMB = totalSize / (1024.0 * 1024.0);
 
-            // 总计一行
             ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_total",
                     totalDims, totalRegions, totalSizeMB), false);
 
-            // 每个维度单独一行
             for (DimensionCacheStats stat : cacheStats) {
                 ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_dim",
                         stat.dimension(), stat.regionCount(), stat.sizeMB()), false);
@@ -268,110 +180,47 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 禁用增量更新
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int setIncrementalOff(CommandContext<CommandSourceStack> ctx) {
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.DISABLED);
-        saveConfig();
-        IncrementalUpdateHandler.getInstance().stop();
+        CacheCommandHandler.disableIncremental();
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_disabled"), false);
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 设置TICK模式增量更新
-     *
-     * 使用配置中默认的tick间隔。
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int setIncrementalTick(CommandContext<CommandSourceStack> ctx) {
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
-        saveConfig();
-        IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        int interval = ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+        CacheCommandHandler.setIncrementalTick(ctx.getSource().getServer());
+        int interval = CacheCommandHandler.getIncrementalUpdateIntervalTicks();
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_tick_set", interval, interval / 20.0f), false);
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 设置TICK模式增量更新并指定间隔
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int setIncrementalTickInterval(CommandContext<CommandSourceStack> ctx) {
         int interval = IntegerArgumentType.getInteger(ctx, "interval");
-        ModConfig.SERVER.incrementalUpdateIntervalTicks.set(interval);
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.TICK);
-        saveConfig();
-        IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
+        CacheCommandHandler.setIncrementalTick(ctx.getSource().getServer(), interval);
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_tick_interval", interval, interval / 20.0f), false);
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 设置SCHEDULED模式增量更新
-     *
-     * 使用配置中默认的计划时间。
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int setIncrementalScheduled(CommandContext<CommandSourceStack> ctx) {
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
-        saveConfig();
-        IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        int hour = ModConfig.SERVER.scheduledUpdateHour.get();
-        int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
+        CacheCommandHandler.setIncrementalScheduled(ctx.getSource().getServer());
+        int hour = CacheCommandHandler.getScheduledUpdateHour();
+        int minute = CacheCommandHandler.getScheduledUpdateMinute();
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 设置SCHEDULED模式并指定小时（使用默认分钟）
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int setScheduledTimeDefaultMinute(CommandContext<CommandSourceStack> ctx) {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
-        ModConfig.SERVER.scheduledUpdateHour.set(hour);
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
-        saveConfig();
-        IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
-        int minute = ModConfig.SERVER.scheduledUpdateMinute.get();
+        CacheCommandHandler.setScheduledTime(ctx.getSource().getServer(), hour);
+        int minute = CacheCommandHandler.getScheduledUpdateMinute();
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
     }
 
-    /**
-     * 设置SCHEDULED模式并指定完整时间
-     *
-     * @param ctx 命令上下文
-     * @return 命令执行结果
-     */
     private static int setScheduledTime(CommandContext<CommandSourceStack> ctx) {
         int hour = IntegerArgumentType.getInteger(ctx, "hour");
         int minute = IntegerArgumentType.getInteger(ctx, "minute");
-        ModConfig.SERVER.scheduledUpdateHour.set(hour);
-        ModConfig.SERVER.scheduledUpdateMinute.set(minute);
-        ModConfig.SERVER.incrementalUpdateMode.set(UpdateMode.SCHEDULED);
-        saveConfig();
-        IncrementalUpdateHandler.getInstance().start(ctx.getSource().getServer());
+        CacheCommandHandler.setScheduledTime(ctx.getSource().getServer(), hour, minute);
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
-    }
-
-    /**
-     * 保存配置文件
-     */
-    private static void saveConfig() {
-        ModConfig.SERVER_SPEC.save();
     }
 }

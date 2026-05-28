@@ -183,6 +183,31 @@ public class NeoForgePlatform implements Platform {
         return ModConfig.SERVER.scheduledUpdateMinute.get();
     }
 
+    @Override
+    public void setIncrementalUpdateMode(UpdateMode mode) {
+        ModConfig.SERVER.incrementalUpdateMode.set(mode);
+    }
+
+    @Override
+    public void setIncrementalUpdateIntervalTicks(int interval) {
+        ModConfig.SERVER.incrementalUpdateIntervalTicks.set(interval);
+    }
+
+    @Override
+    public void setScheduledUpdateHour(int hour) {
+        ModConfig.SERVER.scheduledUpdateHour.set(hour);
+    }
+
+    @Override
+    public void setScheduledUpdateMinute(int minute) {
+        ModConfig.SERVER.scheduledUpdateMinute.set(minute);
+    }
+
+    @Override
+    public void saveConfig() {
+        // NeoForge 自动管理配置持久化，无需手动保存
+    }
+
     // ===== 文件路径 =====
 
     @Override

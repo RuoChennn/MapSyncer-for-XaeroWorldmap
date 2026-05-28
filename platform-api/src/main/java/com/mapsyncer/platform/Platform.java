@@ -130,6 +130,31 @@ public interface Platform {
      */
     int getScheduledUpdateMinute();
 
+    /**
+     * 设置增量更新模式
+     */
+    void setIncrementalUpdateMode(UpdateMode mode);
+
+    /**
+     * 设置增量更新间隔（ticks）
+     */
+    void setIncrementalUpdateIntervalTicks(int interval);
+
+    /**
+     * 设置定时更新小时
+     */
+    void setScheduledUpdateHour(int hour);
+
+    /**
+     * 设置定时更新分钟
+     */
+    void setScheduledUpdateMinute(int minute);
+
+    /**
+     * 保存配置到文件
+     */
+    void saveConfig();
+
     // ===== 文件路径 =====
 
     /**
