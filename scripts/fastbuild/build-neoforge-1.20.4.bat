@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0..\.."
 echo Building: NeoForge 1.20.4
-call gradlew.bat :platforms:neoforge:1.20.4:build -x test
+call gradlew.bat :platforms:neoforge:1.20.4:clean :platforms:neoforge:1.20.4:build -x test
 if %errorlevel% neq 0 (
     echo Build failed!
     pause

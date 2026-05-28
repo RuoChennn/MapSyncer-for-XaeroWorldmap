@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0..\.."
 echo Building: Forge 1.20.4
-call gradlew.bat :platforms:forge:1.20.4:build -x test
+call gradlew.bat :platforms:forge:1.20.4:clean :platforms:forge:1.20.4:build -x test
 if %errorlevel% neq 0 (
     echo Build failed!
     pause

@@ -5,7 +5,7 @@ echo   MapSyncer - Build All Versions
 echo ========================================
 echo.
 
-call gradlew.bat build -x test --parallel
+call gradlew.bat clean build -x test --parallel
 if %errorlevel% neq 0 (
     echo Build failed!
     pause
