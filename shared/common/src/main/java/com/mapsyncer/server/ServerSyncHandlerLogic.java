@@ -589,13 +589,10 @@ public class ServerSyncHandlerLogic {
         // 流式处理：只收集路径信息，不读取数据
         List<RegionSyncInfo> regionsToSync = new ArrayList<>();
 
-        // 转为绝对路径后再遍历，避免 Windows 上中文工作目录 + 相对路径导致 Files.walk 返回重复条目
-        Path absoluteCacheDir = cacheDir.toAbsolutePath().normalize();
-
-        try (Stream<Path> stream = Files.walk(absoluteCacheDir)) {
+        try (Stream<Path> stream = Files.walk(cacheDir)) {
             stream.filter(p -> p.toString().endsWith(".zip"))
                     .forEach(zipPath -> {
-                        String relativePath = absoluteCacheDir.relativize(zipPath).toString();
+                        String relativePath = cacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
 
                         String[] parts = normalizedPath.split("[/\\\\]");
