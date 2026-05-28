@@ -1,0 +1,75 @@
+plugins {
+    id 'fabric-loom' version '1.7-SNAPSHOT'
+}
+
+version = mod_version + '-fabric-1.21.1'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Fabric 1.21.1 需要 Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    // Cloth Config
+    maven { url = 'https://maven.shedaniel.me/' }
+    // Mod Menu (optional)
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+// 引用 shared/common 源码目录（全版本共享的 MC API 代码）
+sourceSets.main.java.srcDir '../../../shared/common/src/main/java'
+// 引用 shared/mc-1.21 源码目录（1.21.x 版本共享代码）
+sourceSets.main.java.srcDir '../../../shared/mc-1.21/src/main/java'
+
+dependencies {
+    // Minecraft and Fabric 1.21.1
+    minecraft "com.mojang:minecraft:1.21.1"
+    // 使用 official mappings (Mojmap) 以保持与其他平台一致
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:0.15.11"
+
+    // Fabric API for 1.21.1 (includes networking-api-v1 transitively)
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.107.0+1.21.1"
+
+    // Cloth Config (for configuration)
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:15.0.127"
+
+    // 依赖核心模块
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", "1.21.1"
+    inputs.property "loader_version", "0.15.11"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": "1.21.1",
+                "loader_version": "0.15.11"
+    }
+}
+
+publishing {
+    publications {
+        register('fabric121MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

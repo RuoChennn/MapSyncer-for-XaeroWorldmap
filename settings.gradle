@@ -18,37 +18,39 @@ plugins {
 
 rootProject.name = mod_id
 
-// 核心模块（平台无关）
-include 'core'              // 纯 Java 核心（MCA/NBT/工具类）
-include 'platform-api'      // 平台抽象接口
+// ── 抽象库层（平台无关，编译为独立 JAR）──
+include 'libs:core'             // 纯 Java 核心（MCA/NBT/工具类）
+include 'libs:platform-api'     // 平台抽象接口
 
-// Minecraft 版本模块（NEW）
-include 'minecraft-common'  // 全版本共享的 MC API 代码
-include 'minecraft-1.20'    // MC 1.20.x 版本特定代码
-include 'minecraft-1.21'    // MC 1.21.x 版本特定代码
-include 'minecraft-26'      // MC 26.x 版本特定代码
+// ── 源码复用层（不独立编译，由平台模块通过 sourceSet 引用）──
+include 'shared:common'         // 全版本共享的 MC API 代码
+include 'shared:mc-1.20'        // MC 1.20.x 版本特定代码
+include 'shared:mc-1.21'        // MC 1.21.x 版本特定代码
+include 'shared:mc-26'          // MC 26.x 版本特定代码（暂无源码）
+
+// ── 平台实现层（编译产出最终 mod JAR）──
 
 // NeoForge 平台
 // NeoForge 从 MC 1.20.2 开始支持，版本号 20.2.x/20.3.x/20.4.x/21.x
 // NeoForge 1.20.4 需要 NeoGradle 6.x，与 Gradle 8.5 有兼容性问题
-// include 'neoforge:neoforge-1.20.4'  // 暂时跳过
-include 'neoforge:neoforge-1.21.1'
-include 'neoforge:neoforge-1.21.11'
+// include 'platforms:neoforge:1.20.4'  // 暂时跳过
+include 'platforms:neoforge:1.21.1'
+include 'platforms:neoforge:1.21.11'
 // neoforge-26.1 可能需要 Java 25，暂未安装
-// include 'neoforge:neoforge-26.1'
+// include 'platforms:neoforge:26.1'
 
 // Forge 平台
-include 'forge:forge-1.20.1'
-include 'forge:forge-1.20.4'
-include 'forge:forge-1.21.1'
+include 'platforms:forge:1.20.1'
+include 'platforms:forge:1.20.4'
+include 'platforms:forge:1.21.1'
 // forge-1.21.11 和 forge-26.1 - Forge 可能不支持这些新版本
-// include 'forge:forge-1.21.11'
-// include 'forge:forge-26.1'
+// include 'platforms:forge:1.21.11'
+// include 'platforms:forge:26.1'
 
 // Fabric 平台
-include 'fabric:fabric-1.20.1'
-include 'fabric:fabric-1.20.4'
-include 'fabric:fabric-1.21.1'
+include 'platforms:fabric:1.20.1'
+include 'platforms:fabric:1.20.4'
+include 'platforms:fabric:1.21.1'
 // fabric-1.21.11 和 fabric-26.1 需要 Gradle 9.x + Loom 1.16，暂时排除
-// include 'fabric:fabric-1.21.11'
-// include 'fabric:fabric-26.1'
+// include 'platforms:fabric:1.21.11'
+// include 'platforms:fabric:26.1'

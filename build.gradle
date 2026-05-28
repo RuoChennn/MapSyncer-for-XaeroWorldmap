@@ -23,16 +23,16 @@ tasks.withType(JavaCompile).configureEach {
 // 构建所有子项目（使用 afterEvaluate 确保子项目已配置）
 afterEvaluate {
     task buildAll {
-        dependsOn ':core:build'
-        dependsOn ':platform-api:build'
-        dependsOn ':neoforge:neoforge-1.21.1:build'
-        dependsOn ':neoforge:neoforge-1.21.11:build'
-        dependsOn ':forge:forge-1.20.1:build'
-        dependsOn ':forge:forge-1.20.4:build'
-        dependsOn ':forge:forge-1.21.1:build'
-        dependsOn ':fabric:fabric-1.20.1:build'
-        dependsOn ':fabric:fabric-1.20.4:build'
-        dependsOn ':fabric:fabric-1.21.1:build'
+        dependsOn ':libs:core:build'
+        dependsOn ':libs:platform-api:build'
+        dependsOn ':platforms:neoforge:1.21.1:build'
+        dependsOn ':platforms:neoforge:1.21.11:build'
+        dependsOn ':platforms:forge:1.20.1:build'
+        dependsOn ':platforms:forge:1.20.4:build'
+        dependsOn ':platforms:forge:1.21.1:build'
+        dependsOn ':platforms:fabric:1.20.1:build'
+        dependsOn ':platforms:fabric:1.20.4:build'
+        dependsOn ':platforms:fabric:1.21.1:build'
         finalizedBy 'collectJars'
     }
 }
