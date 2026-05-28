@@ -586,26 +586,21 @@ public class ServerSyncHandlerLogic {
         }
 
         // Compare server cache with client metadata to find differences
-        // 流式处理：只收集路径信息，不读取数据
+        // 先收集所有 zip 路径再遍历，避免 Files.walk lazy stream 在遍历过程中
+        // relativize 路径时因目录树仍在迭代导致路径表示不一致（同一文件出现两次）
         List<RegionSyncInfo> regionsToSync = new ArrayList<>();
 
-        // 诊断日志：记录关键变量以排查同步计数问题
         Path absCacheDir = cacheDir.toAbsolutePath().normalize();
-        LOGGER.info("[DIAG] cacheDir={}, absCacheDir={}, serverCache.size={}, clientMeta.size={}, requestedDimensions={}",
-                cacheDir, absCacheDir, serverCache.size(), clientMeta.size(), requestedDimensions);
+        List<Path> allZipPaths;
+        try (Stream<Path> stream = Files.walk(absCacheDir)) {
+            allZipPaths = stream.filter(p -> p.toString().endsWith(".zip")).toList();
+        } catch (IOException e) {
+            LOGGER.error("Failed to walk cache directory", e);
+            allZipPaths = List.of();
+        }
 
-        try (Stream<Path> stream = Files.walk(cacheDir)) {
-            List<Path> allZips = stream.filter(p -> p.toString().endsWith(".zip")).toList();
-            LOGGER.info("[DIAG] Files.walk(cacheDir) returned {} zip files", allZips.size());
-
-            // 对比绝对路径遍历结果
-            try (Stream<Path> absStream = Files.walk(absCacheDir)) {
-                long absCount = absStream.filter(p -> p.toString().endsWith(".zip")).count();
-                LOGGER.info("[DIAG] Files.walk(absCacheDir) returned {} zip files", absCount);
-            }
-
-            allZips.forEach(zipPath -> {
-                        String relativePath = cacheDir.relativize(zipPath).toString();
+        allZipPaths.forEach(zipPath -> {
+                        String relativePath = absCacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
 
                         String[] parts = normalizedPath.split("[/\\\\]");
@@ -655,10 +650,6 @@ public class ServerSyncHandlerLogic {
                             }
                         }
 
-                        LOGGER.debug("[DIAG] {} serverMeta={}, clientMeta={}, shouldSync={}",
-                                normalizedPath, serverMeta != null ? "yes" : "null",
-                                clientMetaEntry != null ? "yes" : "null", shouldSync);
-
                         if (shouldSync) {
                             // 解析路径信息，但不读取数据
                             RegionSyncInfo info = parseRegionInfo(zipPath, normalizedPath, timestamp);
@@ -667,9 +658,6 @@ public class ServerSyncHandlerLogic {
                             }
                         }
                     });
-        } catch (IOException e) {
-            LOGGER.error("Failed to walk cache directory", e);
-        }
 
         // Count hash matches and timestamp skips
         for (Map.Entry<String, RegionMeta> entry : serverCache.entrySet()) {
