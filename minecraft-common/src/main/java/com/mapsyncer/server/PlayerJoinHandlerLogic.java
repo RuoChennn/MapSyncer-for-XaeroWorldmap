@@ -58,7 +58,7 @@ public class PlayerJoinHandlerLogic {
      * @param playerId 玩家UUID
      */
     public static void onPlayerLeave(UUID playerId) {
-        ServerSyncHandler.onPlayerDisconnect(playerId);
+        ServerSyncHandlerLogic.onPlayerDisconnect(playerId);
     }
 
     /**
@@ -84,7 +84,7 @@ public class PlayerJoinHandlerLogic {
         ClientHashManager.shutdown();
 
         // Clear sync tracking data
-        ServerSyncHandler.cleanup();
+        ServerSyncHandlerLogic.cleanup();
 
         LOGGER.info("Singleton cache cleanup completed");
     }
@@ -113,7 +113,7 @@ public class PlayerJoinHandlerLogic {
         }
 
         // 检查并清理离线玩家的残留状态
-        ServerSyncHandler.cleanupOfflinePlayers(onlinePlayerIds);
+        ServerSyncHandlerLogic.cleanupOfflinePlayers(onlinePlayerIds);
     }
 
     /**
