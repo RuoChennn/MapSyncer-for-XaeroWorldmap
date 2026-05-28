@@ -9,6 +9,7 @@ import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.ClientPacketDistributor;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -81,7 +82,7 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
 
     @Override
     public void sendToServer(SyncRequestPayload payload) {
-        PacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeSyncRequestPayload(payload));
+        ClientPacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeSyncRequestPayload(payload));
     }
 
     @Override

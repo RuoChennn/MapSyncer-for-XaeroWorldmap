@@ -48,9 +48,11 @@ neoForge {
 
 sourceSets.main.resources.srcDir 'src/generated/resources'
 
-// 引用 shared/common 源码目录（全版本共享的 MC API 代码）
-// shared/common 不独立编译，由平台模块提供 Minecraft 依赖
+// 引用 shared 源码目录
+// shared/common — 纯 Java 代码（无 MC API 依赖）
+// shared/mc-1.21 — MC 1.21.x 版本特定代码
 sourceSets.main.java.srcDir '../../../shared/common/src/main/java'
+sourceSets.main.java.srcDir '../../../shared/mc-1.21/src/main/java'
 sourceSets.main.resources.srcDir '../../../shared/common/src/main/resources'
 
 dependencies {

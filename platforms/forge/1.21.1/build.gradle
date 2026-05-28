@@ -44,8 +44,9 @@ minecraft {
     }
 }
 
-// 引用 shared/common 源码目录（全版本共享的 MC API 代码）
+// 引用 shared 源码目录
 sourceSets.main.java.srcDir '../../../shared/common/src/main/java'
+sourceSets.main.java.srcDir '../../../shared/mc-1.21/src/main/java'
 sourceSets.main.resources.srcDir '../../../shared/common/src/main/resources'
 
 dependencies {

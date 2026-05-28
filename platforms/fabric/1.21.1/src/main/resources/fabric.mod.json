@@ -5,7 +5,11 @@
   "name": "MapSyncer",
   "description": "Syncs server-side explored areas to client's Xaero World Map",
   "authors": ["Ruo_Chen"],
-  "contact": {},
+  "contact": {
+    "homepage": "https://github.com/RuoChennn/MapSyncer-for-XaeroWorldmap",
+    "sources": "https://github.com/RuoChennn/MapSyncer-for-XaeroWorldmap",
+    "issues": "https://github.com/RuoChennn/MapSyncer-for-XaeroWorldmap/issues"
+  },
   "license": "MIT",
   "icon": "assets/mapsyncer/icon.png",
   "environment": "*",
@@ -15,7 +19,7 @@
   },
   "mixins": [],
   "depends": {
-    "fabricloader": ">=0.15.11",
+    "fabricloader": ">=0.19.2",
     "minecraft": ">=1.21.1 <1.21.2",
     "java": ">=21",
     "fabric-api": "*"

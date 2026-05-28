@@ -5,7 +5,7 @@ plugins {
 group = mod_group_id
 version = mod_version
 
-// shared/mc-26 模块：MC 26.x 版本特定的 MC API 源码
+// shared/mc-1.21 模块：MC 1.21.x 版本特定的 MC API 源码
 // 此模块不独立编译，仅作为源码仓库
 // 各平台模块通过 sourceSet 引用此模块的源码，由平台模块提供 Minecraft 依赖
 
@@ -31,7 +31,7 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.9'
 }
 
-// MC 26.x 需要 Java 25
+// 让 IDE 能识别此模块为 Java 模块
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
 }

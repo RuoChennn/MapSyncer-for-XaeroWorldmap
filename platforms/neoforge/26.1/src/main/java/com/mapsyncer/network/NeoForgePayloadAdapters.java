@@ -10,7 +10,7 @@ import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,7 +29,7 @@ public class NeoForgePayloadAdapters {
 
     public record NeoForgeSyncRequestPayload(SyncRequestPayload data) implements CustomPacketPayload {
         public static final Type<NeoForgeSyncRequestPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_REQUEST_ID));
+            new Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_REQUEST_ID));
 
         public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncRequestPayload> STREAM_CODEC =
             StreamCodec.of(NeoForgeSyncRequestPayload::encode, NeoForgeSyncRequestPayload::decode);
@@ -65,7 +65,7 @@ public class NeoForgePayloadAdapters {
 
     public record NeoForgeSyncResponsePayload(SyncResponsePayload data) implements CustomPacketPayload {
         public static final Type<NeoForgeSyncResponsePayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_RESPONSE_ID));
+            new Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_RESPONSE_ID));
 
         public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncResponsePayload> STREAM_CODEC =
             StreamCodec.of(NeoForgeSyncResponsePayload::encode, NeoForgeSyncResponsePayload::decode);
@@ -102,7 +102,7 @@ public class NeoForgePayloadAdapters {
 
     public record NeoForgeSyncProgressPayload(SyncProgressPayload data) implements CustomPacketPayload {
         public static final Type<NeoForgeSyncProgressPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_PROGRESS_ID));
+            new Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_PROGRESS_ID));
 
         public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncProgressPayload> STREAM_CODEC =
             StreamCodec.of(NeoForgeSyncProgressPayload::encode, NeoForgeSyncProgressPayload::decode);
@@ -127,7 +127,7 @@ public class NeoForgePayloadAdapters {
 
     public record NeoForgeServerInstalledPayload(ServerInstalledPayload data) implements CustomPacketPayload {
         public static final Type<NeoForgeServerInstalledPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SERVER_INSTALLED_ID));
+            new Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SERVER_INSTALLED_ID));
 
         public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeServerInstalledPayload> STREAM_CODEC =
             StreamCodec.of(NeoForgeServerInstalledPayload::encode, NeoForgeServerInstalledPayload::decode);

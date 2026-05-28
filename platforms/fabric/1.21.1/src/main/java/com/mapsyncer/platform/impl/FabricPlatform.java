@@ -10,7 +10,6 @@ import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.BlockPropertyResolver;
 import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -261,17 +260,17 @@ public class FabricPlatform implements Platform {
     @Override
     public Path getClientXaeroWorldMapDir() {
         try {
-            // 使用 XaeroMapIntegrator 获取当前服务器目录
-            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
-            if (serverDir != null) {
-                return serverDir;
+            // 使用 XaeroMapIntegrator 获取当前服务器目录（这是客户端方法，需要在客户端环境中调用）
+            if (isClientEnvironment()) {
+                Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+                if (serverDir != null) {
+                    return serverDir;
+                }
             }
 
-            // 回退：返回默认 Xaero 目录
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.gameDirectory != null) {
-                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
-            }
+            // 回退：返回默认 Xaero 目录（基于当前工作目录）
+            Path gameDir = Path.of(System.getProperty("user.dir"));
+            return gameDir.resolve("xaero").resolve("world-map");
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
         }
@@ -281,9 +280,12 @@ public class FabricPlatform implements Platform {
     @Override
     public String getCurrentServerDirectoryName() {
         try {
-            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
-            if (serverDir != null) {
-                return serverDir.getFileName().toString();
+            // 使用 XaeroMapIntegrator 获取当前服务器目录（这是客户端方法，需要在客户端环境中调用）
+            if (isClientEnvironment()) {
+                Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+                if (serverDir != null) {
+                    return serverDir.getFileName().toString();
+                }
             }
         } catch (Exception e) {
             LOGGER.debug("Failed to get server directory name: {}", e.getMessage());

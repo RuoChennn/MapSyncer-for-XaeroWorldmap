@@ -2,11 +2,6 @@ package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.UpdateMode;
-import me.shedaniel.clothconfig2.api.ConfigBuilder;
-import me.shedaniel.clothconfig2.api.ConfigCategory;
-import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,36 +218,6 @@ public class ModConfig {
         public void setHashThreads(int value) {
             int maxThreads = Runtime.getRuntime().availableProcessors();
             hashThreads = Math.max(1, Math.min(maxThreads, value));
-        }
-
-        /**
-         * 创建 Cloth Config 配置界面
-         *
-         * @param parentScreen 父屏幕
-         * @return 配置屏幕
-         */
-        public Screen createConfigScreen(Screen parentScreen) {
-            ConfigBuilder builder = ConfigBuilder.create()
-                .setParentScreen(parentScreen)
-                .setTitle(Component.translatable("title.mapsyncer.client_config"));
-
-            ConfigEntryBuilder entryBuilder = builder.entryBuilder();
-
-            // 客户端设置类别
-            ConfigCategory client = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.client"));
-
-            int maxThreads = Runtime.getRuntime().availableProcessors();
-            int defaultThreads = Math.max(1, maxThreads / 2);
-
-            client.addEntry(entryBuilder.startIntSlider(
-                    Component.translatable("option.mapsyncer.hash_threads"), hashThreads, 1, maxThreads)
-                .setDefaultValue(defaultThreads)
-                .setSaveConsumer(value -> hashThreads = value)
-                .build());
-
-            builder.setSavingRunnable(this::save);
-
-            return builder.build();
         }
     }
 
@@ -597,84 +562,6 @@ public class ModConfig {
             // 未匹配则返回默认配置
             DimensionTypeInfo inferredDimType = DimensionTypeInfo.fromDimensionId(dimensionPath);
             return new DimensionScanConfig(dimensionPath, defaultScanMode, defaultCaveStart, inferredDimType);
-        }
-
-        /**
-         * 创建 Cloth Config 配置界面
-         *
-         * @param parentScreen 父屏幕
-         * @return 配置屏幕
-         */
-        public Screen createConfigScreen(Screen parentScreen) {
-            ConfigBuilder builder = ConfigBuilder.create()
-                .setParentScreen(parentScreen)
-                .setTitle(Component.translatable("title.mapsyncer.config"));
-
-            ConfigEntryBuilder entryBuilder = builder.entryBuilder();
-
-            // 通用设置类别
-            ConfigCategory general = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.general"));
-
-            general.addEntry(entryBuilder.startBooleanToggle(
-                    Component.translatable("option.mapsyncer.debug"), enableDebugLogging)
-                .setDefaultValue(false)
-                .setSaveConsumer(value -> enableDebugLogging = value)
-                .build());
-
-            general.addEntry(entryBuilder.startIntSlider(
-                    Component.translatable("option.mapsyncer.concurrent_regions"), maxConcurrentRegions, 1, 16)
-                .setDefaultValue(4)
-                .setSaveConsumer(value -> maxConcurrentRegions = value)
-                .build());
-
-            general.addEntry(entryBuilder.startIntField(
-                    Component.translatable("option.mapsyncer.packet_size"), maxSyncPacketSize)
-                .setDefaultValue(262144)
-                .setMin(65536)
-                .setMax(1048576)
-                .setSaveConsumer(value -> maxSyncPacketSize = value)
-                .build());
-
-            general.addEntry(entryBuilder.startIntField(
-                    Component.translatable("option.mapsyncer.speed_limit"), syncSpeedLimitKBps)
-                .setDefaultValue(1024)
-                .setMin(0)
-                .setMax(10240)
-                .setSaveConsumer(value -> syncSpeedLimitKBps = value)
-                .build());
-
-            // 增量更新设置类别
-            ConfigCategory incremental = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.incremental"));
-
-            incremental.addEntry(entryBuilder.startSelector(
-                    Component.translatable("option.mapsyncer.update_mode"),
-                    UpdateMode.values(),
-                    incrementalUpdateMode)
-                .setDefaultValue(UpdateMode.DISABLED)
-                .setSaveConsumer(value -> incrementalUpdateMode = value)
-                .build());
-
-            incremental.addEntry(entryBuilder.startIntSlider(
-                    Component.translatable("option.mapsyncer.interval_ticks"), incrementalUpdateIntervalTicks, 20, 72000)
-                .setDefaultValue(200)
-                .setSaveConsumer(value -> incrementalUpdateIntervalTicks = value)
-                .build());
-
-            incremental.addEntry(entryBuilder.startIntSlider(
-                    Component.translatable("option.mapsyncer.scheduled_hour"), scheduledUpdateHour, 0, 23)
-                .setDefaultValue(4)
-                .setSaveConsumer(value -> scheduledUpdateHour = value)
-                .build());
-
-            incremental.addEntry(entryBuilder.startIntSlider(
-                    Component.translatable("option.mapsyncer.scheduled_minute"), scheduledUpdateMinute, 0, 59)
-                .setDefaultValue(0)
-                .setSaveConsumer(value -> scheduledUpdateMinute = value)
-                .build());
-
-            builder.setSavingRunnable(this::save);
-
-            return builder.build();
         }
     }
 }
