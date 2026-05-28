@@ -28,9 +28,10 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
-    @Override
-    public void registerHandlers(Object event) {
-        // 注册 Payload 类型到 PayloadTypeRegistry
+    /**
+     * 注册 Payload 类型到 PayloadTypeRegistry
+     */
+    private void registerPayloadTypes() {
         PayloadTypeRegistry.playC2S().register(
                 FabricPayloadAdapters.SYNC_REQUEST_TYPE,
                 FabricPayloadAdapters.SYNC_REQUEST_CODEC
@@ -47,6 +48,12 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
                 FabricPayloadAdapters.SERVER_INSTALLED_TYPE,
                 FabricPayloadAdapters.SERVER_INSTALLED_CODEC
         );
+    }
+
+    @Override
+    public void registerHandlers(Object event) {
+        // 注册 Payload 类型
+        registerPayloadTypes();
 
         // 注册服务端接收器
         ServerPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_REQUEST_TYPE, (wrapper, context) -> {
@@ -60,6 +67,9 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
      * 注册客户端接收器（在客户端初始化时调用）
      */
     public void registerClientHandlers() {
+        // 确保 payload 类型已注册（客户端可能在服务端之前初始化）
+        registerPayloadTypes();
+
         ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_RESPONSE_TYPE, (wrapper, context) -> {
             if (syncResponseHandler != null) {
                 syncResponseHandler.accept(wrapper.payload(), new PayloadContext(context));
