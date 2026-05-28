@@ -42,6 +42,9 @@ dependencies {
     // 依赖核心模块
     implementation project(':libs:core')
     implementation project(':libs:platform-api')
+    // include 会将依赖打包到 JAR 中
+    include project(':libs:core')
+    include project(':libs:platform-api')
 }
 
 tasks.withType(JavaCompile).configureEach {
