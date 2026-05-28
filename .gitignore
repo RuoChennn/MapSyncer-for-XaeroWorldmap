@@ -3,6 +3,9 @@
 build/
 out/
 
+# Build outputs
+output/
+
 # IDE
 .idea/
 *.iml

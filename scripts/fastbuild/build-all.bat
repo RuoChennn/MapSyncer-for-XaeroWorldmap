@@ -9,6 +9,6 @@ call gradlew.bat build -x test --parallel collectJars
 
 echo.
 echo ========================================
-echo   Build Complete! Output: build\lib\
+echo   Build Complete! Output: output\
 echo ========================================
 pause

@@ -37,11 +37,11 @@ afterEvaluate {
     }
 }
 
-// 将所有子项目的构建产物统一收集到根目录 build/lib
+// 将所有子项目的构建产物统一收集到根目录 output
 tasks.register('collectJars', Copy) {
-    description = '将所有子项目 JAR 收集到 build/lib'
+    description = '将所有子项目 JAR 收集到 output 目录'
     group = 'distribution'
-    into layout.buildDirectory.dir('lib')
+    into layout.projectDirectory.dir('output')
     subprojects { sub ->
         def jarTask = sub.tasks.findByName('jar')
         if (jarTask != null) {
