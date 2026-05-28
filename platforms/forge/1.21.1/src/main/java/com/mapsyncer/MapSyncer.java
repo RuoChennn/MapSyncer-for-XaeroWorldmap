@@ -1,6 +1,7 @@
 package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
+import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.impl.ForgeNetworkHandler;
@@ -13,6 +14,7 @@ import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandlerLogic;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -50,6 +52,10 @@ public class MapSyncer {
         PlatformManager.initialize(new ForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
+        // 初始化 DimensionPathMapping（1.21.X 使用传统格式）
+        DimensionPathMapping.getInstance().initialize(21);
+        LOGGER.info("DimensionPathMapping initialized for version 1.21.X");
+
         // 注册配置文件（Forge 1.21.1 使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
@@ -79,7 +85,9 @@ public class MapSyncer {
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
             MapPacketReceiver.resetServerStatus();
             MapPacketReceiver.clearSyncData();
-            LOGGER.info("Client disconnected from server, reset server status");
+            // 关闭进度追踪器的线程池，释放资源
+            SyncProgressTracker.shutdown();
+            LOGGER.info("Client disconnected from server, reset server status and cleaned up resources");
         }
     }
 
