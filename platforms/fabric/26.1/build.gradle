@@ -23,6 +23,10 @@ loom {
     }
 }
 
+// 引用 shared/common 源码目录（全版本共享的 MC API 代码）
+sourceSets.main.java.srcDir '../../../shared/common/src/main/java'
+sourceSets.main.resources.srcDir '../../../shared/common/src/main/resources'
+
 repositories {
     mavenCentral()
     maven { url = 'https://maven.fabricmc.net/' }

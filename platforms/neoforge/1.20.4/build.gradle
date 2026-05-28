@@ -41,6 +41,7 @@ minecraft {
 
 // 引用 minecraft-common 源码目录（全版本共享的 MC API 代码）
 sourceSets.main.java.srcDir '../../../shared/common/src/main/java'
+sourceSets.main.resources.srcDir '../../../shared/common/src/main/resources'
 
 dependencies {
     // NeoForge 20.4.x for Minecraft 1.20.4
