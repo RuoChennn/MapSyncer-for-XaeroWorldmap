@@ -101,7 +101,7 @@ public class DimensionPathMapping {
         VANILLA_NEW_FORMAT.put("the_nether", "dimensions/minecraft/the_nether");
         VANILLA_NEW_FORMAT.put("the_end", "dimensions/minecraft/the_end");
 
-        // Xaero 目录映射 - 原版维度（固定格式，与版本无关）
+        // Xaero 目录映射 - 原版维度（有待验证是否与版本无关）
         VANILLA_XAERO_MAPPINGS.put("overworld", "null");
         VANILLA_XAERO_MAPPINGS.put("the_nether", "DIM-1");
         VANILLA_XAERO_MAPPINGS.put("the_end", "DIM1");

@@ -1,6 +1,7 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.config.CacheConfig;
+import com.mapsyncer.mca.BlockPropertyLookup;
 import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -75,6 +76,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * 支持原版方块和mod方块的自动识别，使用缓存提高查询效率。
  */
 public class BlockPropertyResolver {
+
+    /** BlockPropertyLookup 适配器实例，供 core 模块的 RegionConverterStandalone 使用 */
+    public static final BlockPropertyLookup INSTANCE = new BlockPropertyLookup() {
+        @Override public boolean isWater(String name) { return BlockPropertyResolver.isWater(name); }
+        @Override public boolean isTransparent(String name) { return BlockPropertyResolver.isTransparent(name); }
+        @Override public boolean isInvisible(String name) { return BlockPropertyResolver.isInvisible(name); }
+        @Override public boolean shouldOverlay(String name) { return BlockPropertyResolver.shouldOverlay(name); }
+        @Override public boolean hasVanillaColor(String name) { return BlockPropertyResolver.hasVanillaColor(name); }
+        @Override public boolean isGrassBlock(String name) { return BlockPropertyResolver.isGrassBlock(name); }
+        @Override public boolean isGlowing(String name) { return BlockPropertyResolver.isGlowing(name); }
+        @Override public boolean isTranslucentFluid(String name) { return BlockPropertyResolver.isTranslucentFluid(name); }
+        @Override public boolean isWaterloggedSurface(String name, Map<String, String> props) { return BlockPropertyResolver.isWaterloggedSurface(name, props); }
+        @Override public int getLightBlock(String name) { return BlockPropertyResolver.getLightBlock(name); }
+    };
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockPropertyResolver.class);
 

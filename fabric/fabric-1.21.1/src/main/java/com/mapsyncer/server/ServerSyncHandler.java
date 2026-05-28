@@ -71,7 +71,7 @@ public class ServerSyncHandler {
      * @return 最大单包大小（字节）
      */
     private static int getMaxPacketSize() {
-        int configValue = ModConfig.SERVER.maxSyncPacketSize.get();
+        int configValue = ModConfig.SERVER().getMaxSyncPacketSize();
         return Math.min(configValue, MAX_PACKET_SIZE_LIMIT);
     }
 
@@ -83,7 +83,7 @@ public class ServerSyncHandler {
      * @return 批次累积阈值（字节）
      */
     private static int getBatchThreshold() {
-        int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
+        int limitKBps = ModConfig.SERVER().getSyncSpeedLimitKBps();
         if (limitKBps <= 0) {
             // 无限速：使用最大包大小
             return getMaxPacketSize();
@@ -338,7 +338,7 @@ public class ServerSyncHandler {
      * @return true 表示速度限制完成，false 表示玩家已掉线应中断同步
      */
     private static boolean applySpeedLimit(int bytesSent, ServerPlayer player, UUID playerId) {
-        int limitKBps = ModConfig.SERVER.syncSpeedLimitKBps.get();
+        int limitKBps = ModConfig.SERVER().getSyncSpeedLimitKBps();
         if (limitKBps <= 0) return true; // No limit
 
         // 获取或初始化限速周期状态

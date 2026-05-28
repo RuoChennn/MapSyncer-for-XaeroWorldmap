@@ -153,42 +153,42 @@ public class FabricPlatform implements Platform {
 
     @Override
     public int getSyncSpeedLimitKBps() {
-        return ModConfig.SERVER.syncSpeedLimitKBps.get();
+        return ModConfig.SERVER().getSyncSpeedLimitKBps();
     }
 
     @Override
     public int getMaxSyncPacketSize() {
-        return ModConfig.SERVER.maxSyncPacketSize.get();
+        return ModConfig.SERVER().getMaxSyncPacketSize();
     }
 
     @Override
     public int getMaxConcurrentRegions() {
-        return ModConfig.SERVER.maxConcurrentRegions.get();
+        return ModConfig.SERVER().getMaxConcurrentRegions();
     }
 
     @Override
     public boolean isDebugLoggingEnabled() {
-        return ModConfig.SERVER.enableDebugLogging.get();
+        return ModConfig.SERVER().getEnableDebugLogging();
     }
 
     @Override
     public UpdateMode getIncrementalUpdateMode() {
-        return ModConfig.SERVER.incrementalUpdateMode.get();
+        return ModConfig.SERVER().getIncrementalUpdateMode();
     }
 
     @Override
     public int getIncrementalUpdateIntervalTicks() {
-        return ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+        return ModConfig.SERVER().getIncrementalUpdateIntervalTicks();
     }
 
     @Override
     public int getScheduledUpdateHour() {
-        return ModConfig.SERVER.scheduledUpdateHour.get();
+        return ModConfig.SERVER().getScheduledUpdateHour();
     }
 
     @Override
     public int getScheduledUpdateMinute() {
-        return ModConfig.SERVER.scheduledUpdateMinute.get();
+        return ModConfig.SERVER().getScheduledUpdateMinute();
     }
 
     // ===== 文件路径 =====

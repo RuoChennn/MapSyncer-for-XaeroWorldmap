@@ -109,7 +109,7 @@ public class ConversionOrchestrator {
      */
     private static ExecutorService getOrCreateExecutor() {
         if (conversionExecutor == null || conversionExecutor.isShutdown()) {
-            int maxConcurrent = ModConfig.SERVER.maxConcurrentRegions.get();
+            int maxConcurrent = ModConfig.SERVER().getMaxConcurrentRegions();
             conversionExecutor = Executors.newFixedThreadPool(maxConcurrent,
                 new NamedThreadFactory("mapsyncer-converter"));
             LOGGER.info("Created conversion thread pool with {} threads", maxConcurrent);
@@ -368,7 +368,7 @@ public class ConversionOrchestrator {
         String dimPath = dimension.location().getPath(); // 用于配置查找
 
         // 从配置获取维度扫描配置
-        DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+        DimensionScanConfig scanConfig = ModConfig.SERVER().getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
@@ -418,7 +418,7 @@ public class ConversionOrchestrator {
         try {
             Files.createDirectories(outputDir);
             ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams);
+                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
             if (converted != null) {
                 XaeroWriter.writeRegionFile(outputDir, converted);
                 processedCount = 1;
@@ -456,7 +456,7 @@ public class ConversionOrchestrator {
         String fullDimId = dimRegions.dimension().location().toString();
         String dimPath = dimRegions.dimension().location().getPath();
 
-        DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+        DimensionScanConfig scanConfig = ModConfig.SERVER().getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
         int caveLayer = scanConfig.getCaveLayer();
 
@@ -674,7 +674,7 @@ public class ConversionOrchestrator {
         Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
         ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
 
         if (converted == null) {
             failedRegions.add(coords);
@@ -846,9 +846,6 @@ public class ConversionOrchestrator {
         } catch (RuntimeException e) {
             LOGGER.error("Runtime error saving chunks for incremental scan: {}", e.getMessage());
             return;
-        } catch (IOException e) {
-            LOGGER.error("IO error saving chunks for incremental scan: {}", e.getMessage());
-            return;
         }
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
@@ -866,7 +863,7 @@ public class ConversionOrchestrator {
             String dimPath = dimRegions.dimension().location().getPath(); // 用于配置查找
 
             // 从配置获取维度扫描配置
-            DimensionScanConfig scanConfig = ModConfig.SERVER.getConfigForDimension(dimPath);
+            DimensionScanConfig scanConfig = ModConfig.SERVER().getConfigForDimension(dimPath);
             ScanMode scanMode = scanConfig.scanMode();
             int caveLayer = scanConfig.getCaveLayer();
 
@@ -924,7 +921,7 @@ public class ConversionOrchestrator {
                 if (!Files.exists(mcaPath)) continue;
 
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
 
                 if (converted != null) {
                     try {

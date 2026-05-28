@@ -59,7 +59,6 @@ public class ForgePlatform implements Platform {
     @Override
     public String getPlatformName() {
         return "Forge 1.21.1";
-        return "Forge 1.21";
     }
 
     // ===== 方块属性 =====

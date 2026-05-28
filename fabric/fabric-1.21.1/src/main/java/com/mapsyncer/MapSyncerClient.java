@@ -43,7 +43,7 @@ public class MapSyncerClient implements ClientModInitializer {
             MapPacketReceiver.register();
         });
 
-        ClientPlayConnectionEvents.DISJOIN.register((handler, client) -> {
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             LOGGER.info("Client disconnected from server, resetting state...");
             // 重置服务端安装状态
             MapPacketReceiver.resetServerStatus();

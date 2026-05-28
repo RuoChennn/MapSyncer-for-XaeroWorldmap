@@ -24,6 +24,8 @@ repositories {
 
 // 引用 minecraft-common 源码目录（全版本共享的 MC API 代码）
 sourceSets.main.java.srcDir '../../minecraft-common/src/main/java'
+// 引用 minecraft-1.21 源码目录（1.21.x 版本共享代码）
+sourceSets.main.java.srcDir '../../minecraft-1.21/src/main/java'
 
 dependencies {
     // Minecraft and Fabric 1.21.1
@@ -32,7 +34,7 @@ dependencies {
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:0.15.11"
 
-    // Fabric API for 1.21.1
+    // Fabric API for 1.21.1 (includes networking-api-v1 transitively)
     modImplementation "net.fabricmc.fabric-api:fabric-api:0.107.0+1.21.1"
 
     // Cloth Config (for configuration)

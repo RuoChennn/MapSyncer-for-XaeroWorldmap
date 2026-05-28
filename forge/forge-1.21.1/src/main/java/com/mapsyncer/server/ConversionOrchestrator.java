@@ -418,7 +418,7 @@ public class ConversionOrchestrator {
         try {
             Files.createDirectories(outputDir);
             ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams);
+                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
             if (converted != null) {
                 XaeroWriter.writeRegionFile(outputDir, converted);
                 processedCount = 1;
@@ -674,7 +674,7 @@ public class ConversionOrchestrator {
         Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
         ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
 
         if (converted == null) {
             failedRegions.add(coords);
@@ -846,9 +846,6 @@ public class ConversionOrchestrator {
         } catch (RuntimeException e) {
             LOGGER.error("Runtime error saving chunks for incremental scan: {}", e.getMessage());
             return;
-        } catch (IOException e) {
-            LOGGER.error("IO error saving chunks for incremental scan: {}", e.getMessage());
-            return;
         }
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
@@ -924,7 +921,7 @@ public class ConversionOrchestrator {
                 if (!Files.exists(mcaPath)) continue;
 
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
 
                 if (converted != null) {
                     try {

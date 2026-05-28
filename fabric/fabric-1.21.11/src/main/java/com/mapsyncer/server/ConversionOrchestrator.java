@@ -4,6 +4,7 @@ import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.config.ModConfig.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig.ScanMode;
 import com.mapsyncer.config.TimeoutConfig;
+import com.mapsyncer.mca.BlockPropertyLookup;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.RegionConverterStandalone;
@@ -50,6 +51,19 @@ import java.util.stream.Stream;
 public class ConversionOrchestrator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ConversionOrchestrator.class);
+
+    private static final BlockPropertyLookup BLOCK_LOOKUP = new BlockPropertyLookup() {
+        @Override public boolean isWater(String name) { return BlockPropertyResolver.isWater(name); }
+        @Override public boolean isTransparent(String name) { return BlockPropertyResolver.isTransparent(name); }
+        @Override public boolean isInvisible(String name) { return BlockPropertyResolver.isInvisible(name); }
+        @Override public boolean shouldOverlay(String name) { return BlockPropertyResolver.shouldOverlay(name); }
+        @Override public boolean hasVanillaColor(String name) { return BlockPropertyResolver.hasVanillaColor(name); }
+        @Override public boolean isGrassBlock(String name) { return BlockPropertyResolver.isGrassBlock(name); }
+        @Override public boolean isGlowing(String name) { return BlockPropertyResolver.isGlowing(name); }
+        @Override public boolean isTranslucentFluid(String name) { return BlockPropertyResolver.isTranslucentFluid(name); }
+        @Override public boolean isWaterloggedSurface(String name, java.util.Map<String, String> props) { return BlockPropertyResolver.isWaterloggedSurface(name, props); }
+        @Override public int getLightBlock(String name) { return BlockPropertyResolver.getLightBlock(name); }
+    };
 
     /** 并发转换线程池 */
     private static volatile ExecutorService conversionExecutor = null;
@@ -418,7 +432,7 @@ public class ConversionOrchestrator {
         try {
             Files.createDirectories(outputDir);
             ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams);
+                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams, BLOCK_LOOKUP);
             if (converted != null) {
                 XaeroWriter.writeRegionFile(outputDir, converted);
                 processedCount = 1;
@@ -674,7 +688,7 @@ public class ConversionOrchestrator {
         Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
         ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BLOCK_LOOKUP);
 
         if (converted == null) {
             failedRegions.add(coords);
@@ -924,7 +938,7 @@ public class ConversionOrchestrator {
                 if (!Files.exists(mcaPath)) continue;
 
                 ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams);
+                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BLOCK_LOOKUP);
 
                 if (converted != null) {
                     try {

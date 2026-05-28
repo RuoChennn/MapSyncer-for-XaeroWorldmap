@@ -13,7 +13,8 @@ import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.commands.CommandSourceStack;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -43,26 +44,26 @@ public class MapSyncerCommand {
     /**
      * 注册客户端命令
      */
-    public static void registerClientCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+    public static void registerClientCommands(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
-                net.minecraft.commands.Commands.literal("mapsyncer")
+                ClientCommandManager.literal("mapsyncer")
                         .executes(MapSyncerCommand::showHelp)
-                        .then(net.minecraft.commands.Commands.literal("help")
+                        .then(ClientCommandManager.literal("help")
                                 .executes(MapSyncerCommand::showHelp))
-                        .then(net.minecraft.commands.Commands.literal("sync")
+                        .then(ClientCommandManager.literal("sync")
                                 .executes(MapSyncerCommand::executeSyncCurrentDim)
-                                .then(net.minecraft.commands.Commands.literal("all")
+                                .then(ClientCommandManager.literal("all")
                                         .executes(MapSyncerCommand::executeSyncAll))
-                                .then(net.minecraft.commands.Commands.argument("dimension", StringArgumentType.greedyString())
+                                .then(ClientCommandManager.argument("dimension", StringArgumentType.greedyString())
                                         .suggests(MapSyncerCommand::suggestDimensions)
                                         .executes(MapSyncerCommand::executeSyncDimension)))
-                        .then(net.minecraft.commands.Commands.literal("clearstate")
+                        .then(ClientCommandManager.literal("clearstate")
                                 .requires(source -> false)
                                 .executes(MapSyncerCommand::clearSyncState))
         );
     }
 
-    private static int showHelp(CommandContext<CommandSourceStack> context) {
+    private static int showHelp(CommandContext<FabricClientCommandSource> context) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
@@ -72,22 +73,10 @@ public class MapSyncerCommand {
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_all"), false);
         mc.player.displayClientMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"), false);
 
-        if (context.getSource().hasPermission(4)) {
-            mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_region"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_force"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.status"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick"), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"), false);
-        }
-
         return Command.SINGLE_SUCCESS;
     }
 
-    private static CompletableFuture<Suggestions> suggestDimensions(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+    private static CompletableFuture<Suggestions> suggestDimensions(CommandContext<FabricClientCommandSource> context, SuggestionsBuilder builder) {
         builder.suggest("overworld");
         builder.suggest("the_nether");
         builder.suggest("the_end");
@@ -166,7 +155,7 @@ public class MapSyncerCommand {
         return dirName;
     }
 
-    private static int executeSyncDimension(CommandContext<CommandSourceStack> context) {
+    private static int executeSyncDimension(CommandContext<FabricClientCommandSource> context) {
         String dimInput = StringArgumentType.getString(context, "dimension");
 
         if ("all".equalsIgnoreCase(dimInput)) {
@@ -183,7 +172,7 @@ public class MapSyncerCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int executeSyncAll(CommandContext<CommandSourceStack> context) {
+    private static int executeSyncAll(CommandContext<FabricClientCommandSource> context) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
@@ -192,7 +181,7 @@ public class MapSyncerCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int executeSyncCurrentDim(CommandContext<CommandSourceStack> context) {
+    private static int executeSyncCurrentDim(CommandContext<FabricClientCommandSource> context) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return 0;
 
@@ -204,7 +193,7 @@ public class MapSyncerCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int clearSyncState(CommandContext<CommandSourceStack> context) {
+    private static int clearSyncState(CommandContext<FabricClientCommandSource> context) {
         ClientJoinHandler.clearSyncState();
         return Command.SINGLE_SUCCESS;
     }

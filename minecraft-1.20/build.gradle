@@ -5,9 +5,9 @@ plugins {
 group = mod_group_id
 version = mod_version
 
-// minecraft-1.20 模块：MC 1.20.x 版本特定代码
-// 此模块暂无源码，不独立编译
-// 当有版本特定代码时，将在此目录创建并启用编译
+// minecraft-1.20 模块：MC 1.20.x 版本共享代码
+// 此模块不独立编译，仅作为源码仓库
+// 各 1.20.x 平台模块通过 sourceSet 引用此模块的源码，由平台模块提供 Minecraft 依赖
 
 // 禁用所有编译任务
 tasks.withType(JavaCompile).configureEach {
@@ -24,6 +24,14 @@ tasks.named('classes').configure {
     enabled = false
 }
 
+// 声明依赖关系（供 IDE 识别），不实际编译
+dependencies {
+    implementation project(':core')
+    implementation project(':platform-api')
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+}
+
+// 让 IDE 能识别此模块为 Java 模块
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(17)
 }

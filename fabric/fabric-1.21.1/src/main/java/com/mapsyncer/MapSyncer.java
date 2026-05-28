@@ -71,7 +71,7 @@ public class MapSyncer implements ModInitializer {
         });
 
         // 注册服务端网络接收器
-        ServerSyncHandler.register();
+        ServerSyncHandler.register(null);
 
         LOGGER.info("MapSyncer initialized (Fabric 1.21), version: {}", VERSION);
     }
@@ -126,13 +126,12 @@ public class MapSyncer implements ModInitializer {
         });
 
         // 玩家离开时
-        ServerPlayConnectionEvents.DISJOIN.register((handler, server) -> {
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             com.mapsyncer.server.PlayerJoinHandler.onPlayerLeave(handler.player.getUUID());
         });
 
-        // 服务端 Tick 事件
+        // 服务端 Tick 事件（IncrementalUpdateHandler 已在 static 块中注册）
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            IncrementalUpdateHandler.onServerTick(server);
             com.mapsyncer.server.PlayerJoinHandler.onServerTick(server);
         });
     }

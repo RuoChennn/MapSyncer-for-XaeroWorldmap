@@ -5,9 +5,9 @@ echo "  MapSyncer - Build All Versions"
 echo "========================================"
 echo
 
-./gradlew build -x test --parallel
+./gradlew build -x test --parallel collectJars
 
 echo
 echo "========================================"
-echo "  Build Complete!"
+echo "  Build Complete! Output: build/lib/"
 echo "========================================"

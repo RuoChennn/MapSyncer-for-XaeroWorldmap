@@ -25,6 +25,28 @@ afterEvaluate {
     task buildAll {
         dependsOn ':core:build'
         dependsOn ':platform-api:build'
-        dependsOn ':neoforge-1.21:build'
+        dependsOn ':neoforge:neoforge-1.21.1:build'
+        dependsOn ':neoforge:neoforge-1.21.11:build'
+        dependsOn ':forge:forge-1.20.1:build'
+        dependsOn ':forge:forge-1.20.4:build'
+        dependsOn ':forge:forge-1.21.1:build'
+        dependsOn ':fabric:fabric-1.20.1:build'
+        dependsOn ':fabric:fabric-1.20.4:build'
+        dependsOn ':fabric:fabric-1.21.1:build'
+        finalizedBy 'collectJars'
+    }
+}
+
+// 将所有子项目的构建产物统一收集到根目录 build/lib
+tasks.register('collectJars', Copy) {
+    description = '将所有子项目 JAR 收集到 build/lib'
+    group = 'distribution'
+    into layout.buildDirectory.dir('lib')
+    subprojects { sub ->
+        def jarTask = sub.tasks.findByName('jar')
+        if (jarTask != null) {
+            dependsOn jarTask
+            from jarTask
+        }
     }
 }

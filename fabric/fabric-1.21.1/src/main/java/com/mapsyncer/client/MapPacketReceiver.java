@@ -127,7 +127,7 @@ public class MapPacketReceiver {
      * 处理同步请求、同步响应、进度更新和服务端已安装通知。
      */
     public static void register() {
-        NetworkHandler handler = NetworkManager.getHandler();
+        var handler = NetworkManager.getHandler();
 
         // 注册同步响应处理器（客户端接收服务端数据）
         handler.registerSyncResponseHandler(MapPacketReceiver::handleSyncResponse);

@@ -63,7 +63,7 @@ function Build-Module($target) {
         }
     }
 
-    $argsList = @($buildCmd, "--no-daemon")
+    $argsList = @($buildCmd, "collectJars", "--no-daemon")
     if ($NoTest) { $argsList += @("-x", "test") }
     if ($Clean) { $argsList = @("clean") + $argsList }
 
@@ -81,7 +81,10 @@ Write-Host "MapSyncer Build Script" -ForegroundColor Magenta
 Build-Module $Target
 Write-Host "Done!" -ForegroundColor Green
 
-# 显示 jar 文件
-Get-ChildItem -Path "${ProjectRoot}\*\build\libs\*.jar" -Recurse | ForEach-Object {
-    Write-Host $_.FullName -ForegroundColor White
+# 显示统一输出目录的 jar 文件
+$libDir = "${ProjectRoot}\build\lib"
+if (Test-Path $libDir) {
+    Get-ChildItem -Path "$libDir\*.jar" | ForEach-Object {
+        Write-Host $_.FullName -ForegroundColor White
+    }
 }

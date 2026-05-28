@@ -17,8 +17,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -299,7 +299,7 @@ import java.util.concurrent.ConcurrentHashMap;
         }
 
         // 第一层：尝试纹理颜色提取（仅客户端）
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             int textureColor = tryGetTextureColor(state, blockName);
             if (textureColor != -1) {
                 LOGGER.debug("Using texture color for {}: {}", blockName, Integer.toHexString(textureColor));
