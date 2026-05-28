@@ -12,7 +12,7 @@ import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
-import com.mapsyncer.server.ServerSyncHandler;
+import com.mapsyncer.server.ServerSyncHandlerLogic;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -67,6 +67,7 @@ public class MapSyncer {
         } else {
             // 服务端：注册网络处理器
             networkHandler.registerHandlers(null);
+            ServerSyncHandlerLogic.registerHandlers();
             MinecraftForge.EVENT_BUS.register(this);
             LOGGER.info("MapSyncer initialized (server mode, Forge 1.21.1)");
         }
