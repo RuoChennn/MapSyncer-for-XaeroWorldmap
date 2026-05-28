@@ -47,7 +47,7 @@ public class PlayerJoinHandlerLogic {
 
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {
-            IncrementalUpdateHandler.getInstance().start(server);
+            IncrementalUpdateHandlerLogic.getInstance().start(server);
         }
     }
 

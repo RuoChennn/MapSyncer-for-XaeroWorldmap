@@ -117,7 +117,7 @@ public class CacheCommandHandler {
     public static String getIncrementalStatus() {
         var platform = PlatformManager.getPlatform();
         UpdateMode mode = platform.getIncrementalUpdateMode();
-        IncrementalUpdateHandler handler = IncrementalUpdateHandler.getInstance();
+        IncrementalUpdateHandlerLogic handler = IncrementalUpdateHandlerLogic.getInstance();
 
         if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
             return "增量更新未启用";
@@ -180,7 +180,7 @@ public class CacheCommandHandler {
         var platform = PlatformManager.getPlatform();
         platform.setIncrementalUpdateMode(UpdateMode.DISABLED);
         platform.saveConfig();
-        IncrementalUpdateHandler.getInstance().stop();
+        IncrementalUpdateHandlerLogic.getInstance().stop();
     }
 
     /**
@@ -190,7 +190,7 @@ public class CacheCommandHandler {
         var platform = PlatformManager.getPlatform();
         platform.setIncrementalUpdateMode(UpdateMode.TICK);
         platform.saveConfig();
-        IncrementalUpdateHandler.getInstance().start(server);
+        IncrementalUpdateHandlerLogic.getInstance().start(server);
     }
 
     /**
@@ -201,7 +201,7 @@ public class CacheCommandHandler {
         platform.setIncrementalUpdateIntervalTicks(interval);
         platform.setIncrementalUpdateMode(UpdateMode.TICK);
         platform.saveConfig();
-        IncrementalUpdateHandler.getInstance().start(server);
+        IncrementalUpdateHandlerLogic.getInstance().start(server);
     }
 
     /**
@@ -211,7 +211,7 @@ public class CacheCommandHandler {
         var platform = PlatformManager.getPlatform();
         platform.setIncrementalUpdateMode(UpdateMode.SCHEDULED);
         platform.saveConfig();
-        IncrementalUpdateHandler.getInstance().start(server);
+        IncrementalUpdateHandlerLogic.getInstance().start(server);
     }
 
     /**
@@ -222,7 +222,7 @@ public class CacheCommandHandler {
         platform.setScheduledUpdateHour(hour);
         platform.setIncrementalUpdateMode(UpdateMode.SCHEDULED);
         platform.saveConfig();
-        IncrementalUpdateHandler.getInstance().start(server);
+        IncrementalUpdateHandlerLogic.getInstance().start(server);
     }
 
     /**
@@ -234,7 +234,7 @@ public class CacheCommandHandler {
         platform.setScheduledUpdateMinute(minute);
         platform.setIncrementalUpdateMode(UpdateMode.SCHEDULED);
         platform.saveConfig();
-        IncrementalUpdateHandler.getInstance().start(server);
+        IncrementalUpdateHandlerLogic.getInstance().start(server);
     }
 
     /**

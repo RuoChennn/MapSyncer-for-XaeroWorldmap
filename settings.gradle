@@ -24,9 +24,6 @@ include 'libs:platform-api'     // 平台抽象接口
 
 // ── 源码复用层（不独立编译，由平台模块通过 sourceSet 引用）──
 include 'shared:common'         // 全版本共享的 MC API 代码
-include 'shared:mc-1.20'        // MC 1.20.x 版本特定代码
-include 'shared:mc-1.21'        // MC 1.21.x 版本特定代码
-include 'shared:mc-26'          // MC 26.x 版本特定代码（暂无源码）
 
 // ── 平台实现层（编译产出最终 mod JAR）──
 
