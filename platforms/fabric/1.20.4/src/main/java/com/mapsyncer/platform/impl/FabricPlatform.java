@@ -65,6 +65,11 @@ public class FabricPlatform implements Platform {
         return "Fabric 1.20.4";
     }
 
+    @Override
+    public boolean isClientEnvironment() {
+        return net.fabricmc.loader.api.FabricLoader.getInstance().getEnvironmentType() == net.fabricmc.api.EnvType.CLIENT;
+    }
+
     // ===== 方块属性 =====
 
     @Override

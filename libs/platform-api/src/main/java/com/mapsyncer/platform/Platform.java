@@ -38,6 +38,13 @@ public interface Platform {
      */
     String getPlatformName();
 
+    /**
+     * 检查当前环境是否为客户端
+     *
+     * @return 如果是客户端环境返回 true
+     */
+    boolean isClientEnvironment();
+
     // ===== 方块属性 =====
 
     /**

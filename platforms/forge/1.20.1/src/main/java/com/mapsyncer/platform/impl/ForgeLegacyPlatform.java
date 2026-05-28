@@ -62,6 +62,11 @@ public class ForgeLegacyPlatform implements Platform {
         return "Forge 1.20.1";
     }
 
+    @Override
+    public boolean isClientEnvironment() {
+        return net.minecraftforge.fml.loading.FMLEnvironment.dist == net.minecraftforge.api.distmarker.Dist.CLIENT;
+    }
+
     // ===== 方块属性 =====
 
     @Override

@@ -2,10 +2,10 @@ package com.mapsyncer.util;
 
 import com.mapsyncer.config.CacheConfig;
 import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
+import com.mapsyncer.platform.PlatformManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
@@ -17,8 +17,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,17 +33,19 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
-     * 方块颜色映射器
-     * 参考 Xaero WorldMap 的颜色获取实现
-     * 支持原版方块、mod 方块和纹理颜色提取
-     *
-     * 使用四层颜色获取策略：
-     * 1. 纹理颜色提取（仅客户端可用）
-     * 2. MapColor API
-     * 3. 原版方块精确颜色
-     * 4. 启发式规则（基于方块名称模式）
-     */
-    public class BlockColorMapper {
+ * 方块颜色映射器
+ * 参考 Xaero WorldMap 的颜色获取实现
+ * 支持原版方块、mod 方块和纹理颜色提取
+ *
+ * 使用四层颜色获取策略：
+ * 1. 纹理颜色提取（仅客户端可用）
+ * 2. MapColor API
+ * 3. 原版方块精确颜色
+ * 4. 启发式规则（基于方块名称模式）
+ *
+ * 注意：此类包含所有平台共享的业务逻辑，通过 PlatformManager 访问平台特定功能。
+ */
+public class BlockColorMapper {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockColorMapper.class);
 
@@ -73,8 +73,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
     /**
      * 初始化启发式颜色模式规则
-     *
-     * @return void
      */
     private static void initPatternColors() {
         // 矿石类 - 金色
@@ -181,14 +179,9 @@ import java.util.concurrent.ConcurrentHashMap;
         patternColors.put("orchid", 0x3399FF);
 
         // 双层花 - 需要根据 half 属性处理
-        // 向日葵上半部分（花头）- 黄色
         patternColors.put("sunflower_upper", 0xFFD700);
-        // 向日葵下半部分（茎）- 绿色（已在 PLANT 覆盖）
-        // 玫瑰丛上半部分（花）- 红色
         patternColors.put("rose_bush_upper", 0xFF3333);
-        // 牡丹上半部分（花）- 粉色
         patternColors.put("peony_upper", 0xFFB6C1);
-        // 猪笼草上半部分（花）- 紫色
         patternColors.put("pitcher_plant_upper", 0x9932CC);
 
         // 羊毛类
@@ -299,7 +292,7 @@ import java.util.concurrent.ConcurrentHashMap;
         }
 
         // 第一层：尝试纹理颜色提取（仅客户端）
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (PlatformManager.getPlatform().isClientEnvironment()) {
             int textureColor = tryGetTextureColor(state, blockName);
             if (textureColor != -1) {
                 LOGGER.debug("Using texture color for {}: {}", blockName, Integer.toHexString(textureColor));
@@ -700,8 +693,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
     /**
      * 清除缓存
-     *
-     * @return void
      */
     public static void clearCache() {
         clearCachedColors = true;
@@ -733,7 +724,6 @@ import java.util.concurrent.ConcurrentHashMap;
      *
      * @param pattern 方块名称模式（如 "_ore"）
      * @param color 颜色值（RGB 格式）
-     * @return void
      */
     public static void addPatternColor(String pattern, int color) {
         patternColors.put(pattern.toLowerCase(), color);
@@ -743,7 +733,6 @@ import java.util.concurrent.ConcurrentHashMap;
      * 批量添加自定义颜色规则
      *
      * @param colors 颜色规则 Map（模式 -> 颜色值）
-     * @return void
      */
     public static void addPatternColors(Map<String, Integer> colors) {
         for (Map.Entry<String, Integer> entry : colors.entrySet()) {

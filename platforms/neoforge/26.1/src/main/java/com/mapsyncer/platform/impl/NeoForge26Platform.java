@@ -58,6 +58,11 @@ public class NeoForge26Platform implements Platform {
         return "NeoForge 26.1";
     }
 
+    @Override
+    public boolean isClientEnvironment() {
+        return net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT;
+    }
+
     // ===== 方块属性 =====
 
     @Override
