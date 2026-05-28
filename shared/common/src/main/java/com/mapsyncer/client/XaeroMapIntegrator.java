@@ -303,25 +303,40 @@ public class XaeroMapIntegrator {
                 int rx = XaeroReflectionHelper.getRegionX(region);
                 int rz = XaeroReflectionHelper.getRegionZ(region);
 
+                if (rx == -1 || rz == -1) {
+                    LOGGER.warn("无法获取区域坐标 (region={})", region);
+                    return 0;
+                }
+
                 RegionCoord coord = new RegionCoord(rx, rz);
 
                 // Only reset if this region is in our target set
                 if (regionsToReset.contains(coord)) {
                     byte currentLoadState = XaeroReflectionHelper.getLoadState(region);
 
+                    if (currentLoadState == -1) {
+                        LOGGER.warn("无法获取区域 ({}, {}) 的 loadState", rx, rz);
+                        return 0;
+                    }
+
                     if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_LOADED) {
                         // 记录原本已加载的 region，同步后使用 loadState=4
                         preUnloadedRegions.add(coord);
 
-                        XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
-                        count++;
-
-                        LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
+                        boolean success = XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
+                        if (success) {
+                            count++;
+                            LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
+                        } else {
+                            LOGGER.error("设置区域 ({}, {}) loadState 失败", rx, rz);
+                        }
                     } else if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_CLEARED) {
                         // 需要重载的状态也记录为已加载
                         preUnloadedRegions.add(coord);
-                        XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
-                        count++;
+                        boolean success = XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
+                        if (success) {
+                            count++;
+                        }
                     }
                 }
             } else if (XaeroReflectionHelper.isBranchLeveledRegion(region)) {
@@ -345,7 +360,7 @@ public class XaeroMapIntegrator {
                 }
             }
         } catch (Exception e) {
-            LOGGER.debug("Error in selective reset: {}", e.getMessage());
+            LOGGER.error("Error in selective reset: {}", e.getMessage(), e);
         }
         return count;
     }

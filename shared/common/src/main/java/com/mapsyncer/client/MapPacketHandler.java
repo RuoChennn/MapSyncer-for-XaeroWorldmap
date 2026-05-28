@@ -320,11 +320,29 @@ public class MapPacketHandler {
      * 初始化反射 API 缓存。
      */
     private static void initializeReflectionCache() {
-        if (XaeroReflectionHelper.isInitialized()) return;
+        if (XaeroReflectionHelper.isInitialized()) {
+            LOGGER.debug("反射缓存已初始化，跳过重复初始化");
+            return;
+        }
 
-        if (XaeroReflectionHelper.initialize()) {
-            XaeroReflectionHelper.setRegionDetectionComplete(true);
-            LOGGER.info("反射 API 缓存已初始化，regionDetectionComplete=true");
+        LOGGER.info("开始初始化反射 API 缓存...");
+        boolean initSuccess = XaeroReflectionHelper.initialize();
+
+        if (initSuccess) {
+            LOGGER.info("XaeroReflectionHelper 初始化成功");
+            boolean regionDetectSuccess = XaeroReflectionHelper.setRegionDetectionComplete(true);
+            if (regionDetectSuccess) {
+                LOGGER.info("regionDetectionComplete 设置为 true，反射功能就绪");
+            } else {
+                LOGGER.error("regionDetectionComplete 设置失败，getLeafMapRegion 可能会返回 null");
+            }
+        } else {
+            LOGGER.error("XaeroReflectionHelper 初始化失败！反射功能完全不可用");
+            LOGGER.error("可能原因：");
+            LOGGER.error("  1. Xaero's World Map 模组未安装");
+            LOGGER.error("  2. Xaero 版本与 MapSyncer 不兼容");
+            LOGGER.error("  3. 类加载器问题");
+            LOGGER.error("地图同步功能将无法正常工作，数据会写入文件但不会触发重新加载");
         }
     }
 
@@ -358,24 +376,38 @@ public class MapPacketHandler {
             LOGGER.info("Region ({}, {}) 属性: worldId={}, dimId={}, mwId={}, lastMwDir={}",
                 coord.x(), coord.z(), regionWorldId, regionDimId, regionMwId, lastMwDir);
 
-            // 准备区域加载
-            XaeroReflectionHelper.prepareRegionLoad(mapRegion);
+            // 准备区域加载（关键步骤）
+            boolean prepareSuccess = XaeroReflectionHelper.prepareRegionLoad(mapRegion);
+            if (!prepareSuccess) {
+                LOGGER.error("区域 ({}, {}) layer={} 准备加载失败，跳过此区域", coord.x(), coord.z(), caveLayer);
+                return;
+            }
 
             // 设置 loadState = LOAD_STATE_CLEARED（需要加载）
-            XaeroReflectionHelper.setLoadState(mapRegion, XaeroReflectionHelper.LOAD_STATE_CLEARED);
+            boolean setStateSuccess = XaeroReflectionHelper.setLoadState(mapRegion, XaeroReflectionHelper.LOAD_STATE_CLEARED);
+            if (!setStateSuccess) {
+                LOGGER.error("区域 ({}, {}) layer={} 设置 loadState 失败，跳过此区域", coord.x(), coord.z(), caveLayer);
+                return;
+            }
+
+            // 请求加载
+            String reason = inViewDistance ? "sync view" : "sync outside";
+            boolean loadSuccess = XaeroReflectionHelper.requestLoad(mapRegion, reason, true);
+            if (!loadSuccess) {
+                LOGGER.error("区域 ({}, {}) layer={} 请求加载失败", coord.x(), coord.z(), caveLayer);
+                return;
+            }
 
             if (inViewDistance) {
-                XaeroReflectionHelper.requestLoad(mapRegion, "sync view", true);
                 LOGGER.info("区域 ({}, {}) layer={} 视距内，插入队头优先加载", coord.x(), coord.z(), caveLayer);
             } else {
-                XaeroReflectionHelper.requestLoad(mapRegion, "sync outside", true);
                 LOGGER.info("区域 ({}, {}) layer={} 视距外，添加到加载队列", coord.x(), coord.z(), caveLayer);
             }
 
             loadedRegions.add(coord);
 
         } catch (Exception e) {
-            LOGGER.warn("立即加载区域 ({}, {}) layer={} 失败: {}", coord.x(), coord.z(), caveLayer, e.getMessage());
+            LOGGER.error("立即加载区域 ({}, {}) layer={} 失败: {}", coord.x(), coord.z(), caveLayer, e.getMessage(), e);
         }
     }
 

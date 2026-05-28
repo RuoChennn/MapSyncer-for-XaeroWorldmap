@@ -120,7 +120,10 @@ public final class XaeroReflectionHelper {
         if (initialized) return true;
 
         try {
+            LOGGER.info("开始初始化 Xaero 反射缓存...");
+
             // 加载 Xaero 类
+            LOGGER.debug("加载 Xaero 核心类...");
             worldMapSessionClass = Class.forName("xaero.map.WorldMapSession");
             mapProcessorClass = Class.forName("xaero.map.MapProcessor");
             mapSaveLoadClass = Class.forName("xaero.map.file.MapSaveLoad");
@@ -132,8 +135,10 @@ public final class XaeroReflectionHelper {
             mapLayerClass = Class.forName("xaero.map.region.MapLayer");
             leveledRegionManagerClass = Class.forName("xaero.map.region.LeveledRegionManager");
             branchLeveledRegionClass = Class.forName("xaero.map.region.BranchLeveledRegion");
+            LOGGER.info("成功加载 {} 个 Xaero 类", 11);
 
             // 缓存方法
+            LOGGER.debug("获取并缓存反射方法...");
             getCurrentSessionMethod = worldMapSessionClass.getMethod("getCurrentSession");
             getMapProcessorMethod = worldMapSessionClass.getMethod("getMapProcessor");
             getMapSaveLoadMethod = mapProcessorClass.getMethod("getMapSaveLoad");
@@ -147,8 +152,10 @@ public final class XaeroReflectionHelper {
             getLayeredMapRegionsMethod = mapDimensionClass.getMethod("getLayeredMapRegions");
             getLayerMethod = layeredRegionManagerClass.getMethod("getLayer", int.class);
             getMapRegionsMethod = mapLayerClass.getMethod("getMapRegions");
+            LOGGER.info("成功缓存 {} 个反射方法", 13);
 
             // 缓存字段
+            LOGGER.debug("获取并缓存反射字段...");
             loadStateField = mapRegionClass.getDeclaredField("loadState");
             loadStateField.setAccessible(true);
             shouldCacheField = leveledRegionClass.getDeclaredField("shouldCache");
@@ -159,27 +166,34 @@ public final class XaeroReflectionHelper {
             dimIdField.setAccessible(true);
             mwIdField = leveledRegionClass.getDeclaredField("mwId");
             mwIdField.setAccessible(true);
-            regionXField = mapRegionClass.getDeclaredField("regionX");
+            regionXField = leveledRegionClass.getDeclaredField("regionX");
             regionXField.setAccessible(true);
-            regionZField = mapRegionClass.getDeclaredField("regionZ");
+            regionZField = leveledRegionClass.getDeclaredField("regionZ");
             regionZField.setAccessible(true);
             regionTextureMapField = leveledRegionManagerClass.getDeclaredField("regionTextureMap");
             regionTextureMapField.setAccessible(true);
             childrenField = branchLeveledRegionClass.getDeclaredField("children");
             childrenField.setAccessible(true);
+            LOGGER.info("成功缓存 {} 个反射字段", 9);
 
             initialized = true;
             LOGGER.info("Xaero reflection helper initialized successfully");
             return true;
 
         } catch (ClassNotFoundException e) {
-            LOGGER.warn("Xaero's World Map not found, reflection disabled: {}", e.getMessage());
+            LOGGER.error("Xaero's World Map 未找到或类名不匹配，反射功能禁用: {}", e.getMessage());
+            LOGGER.error("请确保已安装 Xaero's World Map 模组");
             return false;
-        } catch (NoSuchMethodException | NoSuchFieldException e) {
-            LOGGER.error("Xaero API incompatible, reflection initialization failed: {}", e.getMessage());
+        } catch (NoSuchMethodException e) {
+            LOGGER.error("Xaero API 不兼容，方法签名变化: {}", e.getMessage());
+            LOGGER.error("可能原因：Xaero 版本过新或过旧，与当前 MapSyncer 版本不兼容");
+            return false;
+        } catch (NoSuchFieldException e) {
+            LOGGER.error("Xaero API 不兼容，字段不存在: {}", e.getMessage());
+            LOGGER.error("可能原因：Xaero 版本过新或过旧，与当前 MapSyncer 版本不兼容");
             return false;
         } catch (Exception e) {
-            LOGGER.error("Failed to initialize Xaero reflection helper", e);
+            LOGGER.error("❌ 初始化 Xaero reflection helper 失败", e);
             return false;
         }
     }
@@ -271,17 +285,27 @@ public final class XaeroReflectionHelper {
      * <p>关键设置，否则 getLeafMapRegion 会返回 null</p>
      *
      * @param value 标志值
+     * @return true 表示成功执行
      */
-    public static void setRegionDetectionComplete(boolean value) {
-        if (!initialized || setRegionDetectionCompleteMethod == null) return;
+    public static boolean setRegionDetectionComplete(boolean value) {
+        if (!initialized || setRegionDetectionCompleteMethod == null) {
+            LOGGER.warn("setRegionDetectionComplete 失败：反射未初始化或方法缓存为空 (initialized={}, method={})",
+                initialized, setRegionDetectionCompleteMethod != null);
+            return false;
+        }
 
         try {
             Object saveLoad = getMapSaveLoad();
-            if (saveLoad == null) return;
+            if (saveLoad == null) {
+                LOGGER.warn("setRegionDetectionComplete 失败：无法获取 MapSaveLoad 实例");
+                return false;
+            }
             setRegionDetectionCompleteMethod.invoke(saveLoad, value);
-            LOGGER.debug("Set regionDetectionComplete={}", value);
+            LOGGER.debug("setRegionDetectionComplete 设置为 {}", value);
+            return true;
         } catch (Exception e) {
-            LOGGER.warn("Failed to set regionDetectionComplete: {}", e.getMessage());
+            LOGGER.error("setRegionDetectionComplete 反射调用失败 (value={}): {}", value, e.getMessage(), e);
+            return false;
         }
     }
 
@@ -291,16 +315,27 @@ public final class XaeroReflectionHelper {
      * @param mapRegion MapRegion 实例
      * @param reason 加载原因（用于日志）
      * @param prioritize 是否优先加载（插入队头）
+     * @return true 表示成功执行
      */
-    public static void requestLoad(Object mapRegion, String reason, boolean prioritize) {
-        if (!initialized || requestLoadMethod == null) return;
+    public static boolean requestLoad(Object mapRegion, String reason, boolean prioritize) {
+        if (!initialized || requestLoadMethod == null) {
+            LOGGER.warn("requestLoad 失败：反射未初始化或方法缓存为空 (initialized={}, method={})",
+                initialized, requestLoadMethod != null);
+            return false;
+        }
 
         try {
             Object saveLoad = getMapSaveLoad();
-            if (saveLoad == null) return;
+            if (saveLoad == null) {
+                LOGGER.warn("requestLoad 失败：无法获取 MapSaveLoad 实例");
+                return false;
+            }
             requestLoadMethod.invoke(saveLoad, mapRegion, reason, prioritize);
+            LOGGER.debug("requestLoad 成功执行 (reason={}, prioritize={})", reason, prioritize);
+            return true;
         } catch (Exception e) {
-            LOGGER.warn("Failed to request load for region: {}", e.getMessage());
+            LOGGER.error("requestLoad 反射调用失败 (reason={}): {}", reason, e.getMessage(), e);
+            return false;
         }
     }
 
@@ -308,16 +343,27 @@ public final class XaeroReflectionHelper {
      * 取消区域刷新
      *
      * @param mapRegion MapRegion 实例
+     * @return true 表示成功执行
      */
-    public static void cancelRefresh(Object mapRegion) {
-        if (!initialized || cancelRefreshMethod == null) return;
+    public static boolean cancelRefresh(Object mapRegion) {
+        if (!initialized || cancelRefreshMethod == null) {
+            LOGGER.warn("cancelRefresh 失败：反射未初始化或方法缓存为空 (initialized={}, method={})",
+                initialized, cancelRefreshMethod != null);
+            return false;
+        }
 
         try {
             Object processor = getMapProcessor();
-            if (processor == null) return;
+            if (processor == null) {
+                LOGGER.warn("cancelRefresh 失败：无法获取 MapProcessor 实例");
+                return false;
+            }
             cancelRefreshMethod.invoke(mapRegion, processor);
+            LOGGER.debug("cancelRefresh 成功执行");
+            return true;
         } catch (Exception e) {
-            LOGGER.warn("Failed to cancel refresh for region: {}", e.getMessage());
+            LOGGER.error("cancelRefresh 反射调用失败: {}", e.getMessage(), e);
+            return false;
         }
     }
 
@@ -326,14 +372,22 @@ public final class XaeroReflectionHelper {
      *
      * @param mapRegion MapRegion 实例
      * @param state 状态值（使用 LOAD_STATE_* 常量）
+     * @return true 表示成功执行
      */
-    public static void setLoadState(Object mapRegion, byte state) {
-        if (!initialized || loadStateField == null) return;
+    public static boolean setLoadState(Object mapRegion, byte state) {
+        if (!initialized || loadStateField == null) {
+            LOGGER.warn("setLoadState 失败：反射未初始化或字段缓存为空 (initialized={}, field={})",
+                initialized, loadStateField != null);
+            return false;
+        }
 
         try {
             loadStateField.setByte(mapRegion, state);
+            LOGGER.debug("setLoadState 成功设置为 {}", state);
+            return true;
         } catch (Exception e) {
-            LOGGER.warn("Failed to set loadState: {}", e.getMessage());
+            LOGGER.error("setLoadState 反射调用失败 (state={}): {}", state, e.getMessage(), e);
+            return false;
         }
     }
 
@@ -342,14 +396,22 @@ public final class XaeroReflectionHelper {
      *
      * @param mapRegion MapRegion 实例
      * @param value 是否缓存
+     * @return true 表示成功执行
      */
-    public static void setShouldCache(Object mapRegion, boolean value) {
-        if (!initialized || shouldCacheField == null) return;
+    public static boolean setShouldCache(Object mapRegion, boolean value) {
+        if (!initialized || shouldCacheField == null) {
+            LOGGER.warn("setShouldCache 失败：反射未初始化或字段缓存为空 (initialized={}, field={})",
+                initialized, shouldCacheField != null);
+            return false;
+        }
 
         try {
             shouldCacheField.setBoolean(mapRegion, value);
+            LOGGER.debug("setShouldCache 成功设置为 {}", value);
+            return true;
         } catch (Exception e) {
-            LOGGER.warn("Failed to set shouldCache: {}", e.getMessage());
+            LOGGER.error("setShouldCache 反射调用失败 (value={}): {}", value, e.getMessage(), e);
+            return false;
         }
     }
 
@@ -359,14 +421,22 @@ public final class XaeroReflectionHelper {
      * <p>关键设置，否则加载时会跳过完整数据加载</p>
      *
      * @param mapRegion MapRegion 实例
+     * @return true 表示成功执行
      */
-    public static void setHasHadTerrain(Object mapRegion) {
-        if (!initialized || setHasHadTerrainMethod == null) return;
+    public static boolean setHasHadTerrain(Object mapRegion) {
+        if (!initialized || setHasHadTerrainMethod == null) {
+            LOGGER.warn("setHasHadTerrain 失败：反射未初始化或方法缓存为空 (initialized={}, method={})",
+                initialized, setHasHadTerrainMethod != null);
+            return false;
+        }
 
         try {
             setHasHadTerrainMethod.invoke(mapRegion);
+            LOGGER.debug("setHasHadTerrain 成功执行");
+            return true;
         } catch (Exception e) {
-            LOGGER.warn("Failed to set hasHadTerrain: {}", e.getMessage());
+            LOGGER.error("setHasHadTerrain 反射调用失败: {}", e.getMessage(), e);
+            return false;
         }
     }
 
@@ -449,11 +519,23 @@ public final class XaeroReflectionHelper {
      * <p>一次性完成所有准备工作：取消刷新、设置缓存标志、设置地形标志</p>
      *
      * @param mapRegion MapRegion 实例
+     * @return true 表示所有步骤都成功执行
      */
-    public static void prepareRegionLoad(Object mapRegion) {
-        cancelRefresh(mapRegion);
-        setShouldCache(mapRegion, true);
-        setHasHadTerrain(mapRegion);
+    public static boolean prepareRegionLoad(Object mapRegion) {
+        LOGGER.debug("开始准备区域加载 (region={})...", mapRegion);
+
+        boolean step1 = cancelRefresh(mapRegion);
+        boolean step2 = setShouldCache(mapRegion, true);
+        boolean step3 = setHasHadTerrain(mapRegion);
+
+        if (step1 && step2 && step3) {
+            LOGGER.debug("区域加载准备完成");
+            return true;
+        } else {
+            LOGGER.error("区域加载准备部分失败: cancelRefresh={}, setShouldCache={}, setHasHadTerrain={}",
+                step1, step2, step3);
+            return false;
+        }
     }
 
     // ========== MapWorld/MapDimension 相关方法 ==========
