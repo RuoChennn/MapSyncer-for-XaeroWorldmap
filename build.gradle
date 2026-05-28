@@ -42,22 +42,12 @@ tasks.register('collectJars', Copy) {
     description = '将所有子项目 JAR 收集到 output 目录'
     group = 'distribution'
     into layout.projectDirectory.dir('output')
-    // 从每个子项目的 build/libs 目录收集 JAR
+    // 从每个子项目的 build/libs 目录收集 JAR（不依赖构建任务）
     subprojects { sub ->
-        def jarTask = sub.tasks.findByName('jar')
-        if (jarTask != null) {
-            dependsOn jarTask
-            from(jarTask.outputs) {
-                include '*.jar'
-            }
-        }
-        // Fabric 使用 remapJar 生成最终 JAR
-        def remapJarTask = sub.tasks.findByName('remapJar')
-        if (remapJarTask != null) {
-            dependsOn remapJarTask
-            from(remapJarTask.outputs) {
-                include '*.jar'
-            }
+        from(sub.layout.buildDirectory.dir('libs')) {
+            include '*.jar'
         }
     }
+    // 排除 libs 模块的 JAR（不需要分发）
+    outputs.upToDateWhen { false }
 }
