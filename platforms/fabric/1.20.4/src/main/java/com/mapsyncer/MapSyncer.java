@@ -10,6 +10,7 @@ import com.mapsyncer.platform.impl.FabricPlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
+import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandler;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -99,7 +100,7 @@ public class MapSyncer implements ModInitializer {
             Platform platformImpl = PlatformManager.getPlatform();
             UpdateMode mode = platformImpl.getIncrementalUpdateMode();
             if (mode != UpdateMode.DISABLED) {
-                IncrementalUpdateHandler.getInstance().start(server);
+                IncrementalUpdateHandlerLogic.getInstance().start(server);
                 LOGGER.info("Incremental update handler started with mode: {}", mode);
             }
         });
@@ -109,7 +110,7 @@ public class MapSyncer implements ModInitializer {
             LOGGER.info("Server stopping, cleaning up MapSyncer...");
 
             // 停止增量更新处理器
-            IncrementalUpdateHandler.getInstance().stop();
+            IncrementalUpdateHandlerLogic.getInstance().stop();
 
             // 关闭转换线程池
             com.mapsyncer.server.ConversionOrchestrator.shutdownExecutor();
@@ -132,7 +133,7 @@ public class MapSyncer implements ModInitializer {
 
         // 服务端 Tick 事件
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            IncrementalUpdateHandler.onServerTick(server);
+            IncrementalUpdateHandlerLogic.onServerTick(server);
             com.mapsyncer.server.PlayerJoinHandler.onServerTick(server);
         });
     }

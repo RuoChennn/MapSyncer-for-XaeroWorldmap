@@ -10,6 +10,7 @@ import com.mapsyncer.platform.impl.ForgePlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
+import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandler;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
@@ -108,7 +109,7 @@ public class MapSyncer {
         Platform platformImpl = PlatformManager.getPlatform();
         UpdateMode mode = platformImpl.getIncrementalUpdateMode();
         if (mode != UpdateMode.DISABLED) {
-            IncrementalUpdateHandler.getInstance().start(server);
+            IncrementalUpdateHandlerLogic.getInstance().start(server);
             LOGGER.info("Incremental update handler started with mode: {}", mode);
         }
     }
@@ -121,7 +122,7 @@ public class MapSyncer {
         LOGGER.info("Server stopping, cleaning up MapSyncer...");
 
         // 停止增量更新处理器
-        IncrementalUpdateHandler.getInstance().stop();
+        IncrementalUpdateHandlerLogic.getInstance().stop();
 
         // 关闭转换线程池
         com.mapsyncer.server.ConversionOrchestrator.shutdownExecutor();

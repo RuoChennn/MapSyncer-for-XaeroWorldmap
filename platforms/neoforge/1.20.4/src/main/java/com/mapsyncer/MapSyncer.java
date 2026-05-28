@@ -12,6 +12,7 @@ import com.mapsyncer.platform.impl.NeoForgePlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
+import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandler;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -120,7 +121,7 @@ public class MapSyncer {
         Platform platform = PlatformManager.getPlatform();
         UpdateMode mode = platform.getIncrementalUpdateMode();
         if (mode != UpdateMode.DISABLED) {
-            IncrementalUpdateHandler.getInstance().start(event.getServer());
+            IncrementalUpdateHandlerLogic.getInstance().start(event.getServer());
         }
     }
 
@@ -133,7 +134,7 @@ public class MapSyncer {
      */
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        IncrementalUpdateHandler.getInstance().stop();
+        IncrementalUpdateHandlerLogic.getInstance().stop();
     }
 
     /**
