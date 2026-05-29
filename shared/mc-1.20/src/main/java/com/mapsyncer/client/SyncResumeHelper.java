@@ -101,15 +101,15 @@ public class SyncResumeHelper {
                 .withStyle(Style.EMPTY
                         .withColor(0x55FF55)
                         .withBold(true)
-                        .withClickEvent(new ClickEvent.RunCommand(command))
-                        .withHoverEvent(new HoverEvent.ShowText(
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("点击执行: " + command))));
 
         Component ignoreButton = Component.literal("[忽略]")
                 .withStyle(Style.EMPTY
                         .withColor(0xFFAA00)
-                        .withClickEvent(new ClickEvent.RunCommand("/mapsyncer clearstate"))
-                        .withHoverEvent(new HoverEvent.ShowText(
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/mapsyncer clearstate"))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("清除同步状态标记"))));
 
         Component message = ChatUtils.prefix()
@@ -120,7 +120,7 @@ public class SyncResumeHelper {
                 .append(Component.literal("或"))
                 .append(ignoreButton);
 
-        mc.player.sendSystemMessage(message);
+        mc.player.displayClientMessage(message, false);
     }
 
     /**
@@ -135,7 +135,7 @@ public class SyncResumeHelper {
         if (tsCache != null) {
             tsCache.clearSyncState();
             if (mc.player != null) {
-                mc.player.sendSystemMessage(ChatUtils.success("mapsyncer.sync.state_cleared"));
+                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.state_cleared"), false);
             }
         }
     }

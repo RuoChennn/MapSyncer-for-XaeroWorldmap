@@ -72,7 +72,7 @@ public class NeoForgePlatform implements Platform {
         }
 
         try {
-            ResourceLocation loc = ResourceLocation.parse(blockName);
+            ResourceLocation loc = new ResourceLocation(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {

@@ -4,11 +4,14 @@ import com.mapsyncer.config.CacheConfig;
 import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
 import com.mapsyncer.platform.PlatformManager;
 import net.minecraft.client.Minecraft;
-// MC 26.1: 渲染 API 重构，BakedModel/BlockModelShaper/BakedQuad 已移除
-// TODO: 适配新的 BlockModelSet/BlockModel API
+import net.minecraft.client.renderer.block.BlockModelShaper;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -327,7 +330,7 @@ public class BlockColorMapper {
 
         // 尝试获取方块并使用 BlockState
         try {
-            Identifier location = Identifier.parse(blockName);
+            ResourceLocation location = new ResourceLocation(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(location);
 
             if (blockOpt.isPresent()) {
@@ -351,11 +354,57 @@ public class BlockColorMapper {
      * @return 纹理颜色值，失败返回 -1
      */
     private static int tryGetTextureColor(BlockState state, String blockName) {
-        // MC 26.1: 渲染 API 重构，BakedModel/BlockModelShaper 已移除
-        // TODO: 适配新的 BlockModelSet/BlockModel API（net.minecraft.client.renderer.block.BlockModelSet）
-        // 新 API: mc.getBlockRenderer().getBlockModelSet().get(state) 返回 BlockModel
-        // BlockModel 是接口，不再有 getQuads/getParticleIcon 方法
-        LOGGER.debug("Texture color extraction not yet implemented for MC 26.1 (rendering API refactored)");
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getBlockRenderer() == null) {
+                return -1;
+            }
+
+            BlockModelShaper bms = mc.getBlockRenderer().getBlockModelShaper();
+            BakedModel model = bms.getBlockModel(state);
+
+            if (model == null) {
+                return -1;
+            }
+
+            // 尝试获取 UP 方向的 quads
+            List<BakedQuad> upQuads = model.getQuads(state, Direction.UP, mc.level.random);
+
+            TextureAtlasSprite texture;
+            int tintIndex = -1;
+
+            if (upQuads != null && !upQuads.isEmpty()) {
+                texture = upQuads.get(0).getSprite();
+                tintIndex = upQuads.get(0).getTintIndex();
+            } else {
+                // 使用 particle 纹理
+                texture = model.getParticleIcon();
+                tintIndex = 0;
+            }
+
+            if (texture == null) {
+                return -1;
+            }
+
+            // 从纹理名称提取颜色
+            String textureName = texture.contents().name().toString() + ".png";
+            Integer cachedColor = textureColorCache.get(textureName);
+
+            if (cachedColor != null) {
+                return cachedColor;
+            }
+
+            // 从纹理资源加载颜色
+            int color = extractColorFromTexture(textureName, mc);
+            if (color != -1) {
+                textureColorCache.put(textureName, color);
+                return color;
+            }
+
+        } catch (Exception e) {
+            LOGGER.debug("Failed to get texture color for {}: {}", blockName, e.getMessage());
+        }
+
         return -1;
     }
 
@@ -373,7 +422,7 @@ public class BlockColorMapper {
                 args = new String[]{"minecraft", args[0]};
             }
 
-            Identifier location = Identifier.fromNamespaceAndPath(args[0], "textures/" + args[1]);
+            ResourceLocation location = new ResourceLocation(args[0], "textures/" + args[1]);
 
             var resource = mc.getResourceManager().getResource(location).orElse(null);
             if (resource == null) {

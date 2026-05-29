@@ -72,7 +72,7 @@ public class DimensionRegistry {
         Set<String> newDimensions = new LinkedHashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
             ResourceKey<Level> dimKey = level.dimension();
-            String dimId = dimKey.identifier().toString();
+            String dimId = dimKey.location().toString();
 
             String normalizedId = normalizeDimensionId(dimId);
 
@@ -160,7 +160,7 @@ public class DimensionRegistry {
      */
     private static ServerLevel getLevelForDimension(MinecraftServer server, String dimId) {
         for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().identifier().toString().equals(dimId)) {
+            if (level.dimension().location().toString().equals(dimId)) {
                 return level;
             }
         }

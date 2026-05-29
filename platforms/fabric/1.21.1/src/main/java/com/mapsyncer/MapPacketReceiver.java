@@ -1,17 +1,13 @@
 package com.mapsyncer.client;
 
-import com.mapsyncer.network.NetworkManager;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlerEvent;
-
 /**
- * 地图数据包接收器 - NeoForge 平台包装器
+ * 地图数据包接收器 - Fabric 平台包装器
  *
  * 核心逻辑委托给 {@link MapPacketHandler}。
  */
 public class MapPacketReceiver {
 
-    public static void register(final RegisterPayloadHandlerEvent event) {
-        NetworkManager.registerHandlers(event);
+    public static void register() {
         MapPacketHandler.registerHandlers();
     }
 

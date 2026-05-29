@@ -1,7 +1,7 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.network.NetworkManager;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlerEvent;
 
 /**
  * NeoForge 平台薄包装器。
@@ -13,9 +13,9 @@ public class ServerSyncHandler {
      * 注册网络数据包处理器。
      * NeoForge 通过 modBus.addListener(ServerSyncHandler::register) 调用。
      *
-     * @param event RegisterPayloadHandlersEvent
+     * @param event RegisterPayloadHandlerEvent
      */
-    public static void register(final RegisterPayloadHandlersEvent event) {
+    public static void register(final RegisterPayloadHandlerEvent event) {
         NetworkManager.registerHandlers(event);
         ServerSyncHandlerLogic.registerHandlers();
     }

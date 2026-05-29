@@ -3,8 +3,8 @@ package com.mapsyncer.server;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.event.TickEvent;
 
 /**
  * NeoForge 增量更新处理器 - 薄包装器
@@ -12,7 +12,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * 委托所有业务逻辑给公共的 IncrementalUpdateHandlerLogic 类。
  * 此类仅负责 NeoForge 特定的事件注册和生命周期管理。
  */
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
+@Mod.EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class IncrementalUpdateHandler {
 
     /**
@@ -20,11 +20,13 @@ public class IncrementalUpdateHandler {
      *
      * 将事件委托给公共逻辑类处理。
      *
-     * @param event 服务器Tick后事件
+     * @param event 服务器Tick事件（END阶段）
      */
     @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Post event) {
-        IncrementalUpdateHandlerLogic.getInstance().onServerTick();
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            IncrementalUpdateHandlerLogic.getInstance().onServerTick();
+        }
     }
 
     /**

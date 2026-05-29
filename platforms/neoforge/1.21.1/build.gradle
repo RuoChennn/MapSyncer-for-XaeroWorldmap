@@ -99,8 +99,10 @@ tasks.named('jarJar') {
 
 publishing {
     publications {
-        register('mavenJava', MavenPublication) {
-            from components.java
+        if (!publications.findByName('mavenJava')) {
+            register('mavenJava', MavenPublication) {
+                from components.java
+            }
         }
     }
     repositories {

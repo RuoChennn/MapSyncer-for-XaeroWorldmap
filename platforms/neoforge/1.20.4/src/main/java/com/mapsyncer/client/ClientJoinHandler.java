@@ -2,7 +2,7 @@ package com.mapsyncer.client;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 /**
@@ -10,7 +10,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
  *
  * 核心逻辑委托给 {@link SyncResumeHelper}。
  */
-@EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+@Mod.EventBusSubscriber(value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ClientJoinHandler {
 
     @SubscribeEvent

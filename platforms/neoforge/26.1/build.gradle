@@ -59,6 +59,8 @@ dependencies {
     // 依赖核心模块
     implementation project(':libs:core')
     implementation project(':libs:platform-api')
+    // NeoForge 26.1 FML loader（ModDev 2.0.141 未正确解析此依赖到编译类路径）
+    implementation 'net.neoforged.fancymodloader:loader:11.0.5'
 }
 
 tasks.withType(JavaCompile).configureEach {

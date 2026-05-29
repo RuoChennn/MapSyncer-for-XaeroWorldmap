@@ -4,12 +4,12 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.event.TickEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
+@Mod.EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class PlayerJoinHandler {
 
     @SubscribeEvent
@@ -30,7 +30,9 @@ public class PlayerJoinHandler {
     }
 
     @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Post event) {
-        PlayerJoinHandlerLogic.onServerTick(event.getServer());
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            PlayerJoinHandlerLogic.onServerTick(event.getServer());
+        }
     }
 }

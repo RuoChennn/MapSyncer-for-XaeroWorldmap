@@ -128,7 +128,7 @@ public class ServerSyncHandlerLogic {
         if (batchBytes <= maxPacketSize) {
             // 单包发送
             final List<ChunkMapData> batchToSend = new ArrayList<>(batch);
-            serverPlayer.level().getServer().execute(() -> {
+            serverPlayer.serverLevel().getServer().execute(() -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(batchToSend, false, worldId, "ok"));
                 NetworkManager.sendToPlayer(serverPlayer,
@@ -148,7 +148,7 @@ public class ServerSyncHandlerLogic {
             if (currentSize + chunk.data.length > maxPacketSize && !currentChunk.isEmpty()) {
                 final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
                 final int sentProgress = processed + packetCount;
-                serverPlayer.level().getServer().execute(() -> {
+                serverPlayer.serverLevel().getServer().execute(() -> {
                     NetworkManager.sendToPlayer(serverPlayer,
                             new SyncResponsePayload(chunkToSend, false, worldId, "ok"));
                     NetworkManager.sendToPlayer(serverPlayer,
@@ -169,7 +169,7 @@ public class ServerSyncHandlerLogic {
         if (!currentChunk.isEmpty()) {
             final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
             final int sentProgress = processed + packetCount;
-            serverPlayer.level().getServer().execute(() -> {
+            serverPlayer.serverLevel().getServer().execute(() -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(chunkToSend, false, worldId, "ok"));
                 NetworkManager.sendToPlayer(serverPlayer,
@@ -271,7 +271,7 @@ public class ServerSyncHandlerLogic {
         ResourceKey<Level> startDimension = playerSyncDimensions.get(playerId);
         if (startDimension != null && !player.level().dimension().equals(startDimension)) {
             LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
-                    playerId, startDimension.identifier(), player.level().dimension().identifier());
+                    playerId, startDimension.location(), player.level().dimension().location());
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
             return false;
@@ -514,7 +514,7 @@ public class ServerSyncHandlerLogic {
 
         if (!Files.exists(cacheDir)) {
             // 在主线程发送消息和数据包
-            serverPlayer.level().getServer().execute(() -> {
+            serverPlayer.serverLevel().getServer().execute(() -> {
                 serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
@@ -567,7 +567,7 @@ public class ServerSyncHandlerLogic {
             } else {
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 // 在主线程发送消息
-                serverPlayer.level().getServer().execute(() -> {
+                serverPlayer.serverLevel().getServer().execute(() -> {
                     serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
                 });
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
@@ -577,7 +577,7 @@ public class ServerSyncHandlerLogic {
         if (!hasValidDimension) {
             LOGGER.info("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
             // 在主线程发送数据包
-            serverPlayer.level().getServer().execute(() -> {
+            serverPlayer.serverLevel().getServer().execute(() -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
             });
@@ -679,7 +679,7 @@ public class ServerSyncHandlerLogic {
 
         if (total == 0) {
             // 在主线程发送消息
-            serverPlayer.level().getServer().execute(() -> {
+            serverPlayer.serverLevel().getServer().execute(() -> {
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
@@ -694,7 +694,7 @@ public class ServerSyncHandlerLogic {
         // 立即发送轻量的"开始同步"通知，避免客户端超时
         // 这个包不含数据，仅通知客户端服务端已开始处理
         final int initialTotal = total;
-        serverPlayer.level().getServer().execute(() -> {
+        serverPlayer.serverLevel().getServer().execute(() -> {
             NetworkManager.sendToPlayer(serverPlayer,
                     new SyncProgressPayload(0, initialTotal, "Sync started"));
         });
@@ -761,7 +761,7 @@ public class ServerSyncHandlerLogic {
                 // 单包发送，标记完成
                 final List<ChunkMapData> finalBatch = new ArrayList<>(batch);
                 final int finalTotal = total;
-                serverPlayer.level().getServer().execute(() -> {
+                serverPlayer.serverLevel().getServer().execute(() -> {
                     NetworkManager.sendToPlayer(serverPlayer,
                             new SyncResponsePayload(finalBatch, true, worldId, "ok"));
                     NetworkManager.sendToPlayer(serverPlayer,
@@ -777,7 +777,7 @@ public class ServerSyncHandlerLogic {
                     if (currentSize + chunk.data.length > maxPacketSize && !currentChunk.isEmpty()) {
                         final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
                         final int sentProgress = processed;
-                        serverPlayer.level().getServer().execute(() -> {
+                        serverPlayer.serverLevel().getServer().execute(() -> {
                             NetworkManager.sendToPlayer(serverPlayer,
                                     new SyncResponsePayload(chunkToSend, false, worldId, "ok"));
                             NetworkManager.sendToPlayer(serverPlayer,
@@ -798,7 +798,7 @@ public class ServerSyncHandlerLogic {
                 if (!currentChunk.isEmpty()) {
                     final List<ChunkMapData> lastChunk = new ArrayList<>(currentChunk);
                     final int finalTotal = total;
-                    serverPlayer.level().getServer().execute(() -> {
+                    serverPlayer.serverLevel().getServer().execute(() -> {
                         NetworkManager.sendToPlayer(serverPlayer,
                                 new SyncResponsePayload(lastChunk, true, worldId, "ok"));
                         NetworkManager.sendToPlayer(serverPlayer,
@@ -809,7 +809,7 @@ public class ServerSyncHandlerLogic {
             }
         } else {
             // 没有数据要发送，但仍需发送完成消息
-            serverPlayer.level().getServer().execute(() -> {
+            serverPlayer.serverLevel().getServer().execute(() -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncProgressPayload(total, total, "completed"));
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
@@ -974,7 +974,7 @@ public class ServerSyncHandlerLogic {
         int playerRegionZ = playerChunkZ >> 5;
 
         // 获取视距（渲染距离），加2 chunks作为移动偏移容差
-        int viewDistanceChunks = player.level().getServer().getPlayerList().getViewDistance() + 2;
+        int viewDistanceChunks = player.serverLevel().getServer().getPlayerList().getViewDistance() + 2;
         int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;  // 向上取整
 
         LOGGER.debug("Player region: ({}, {}), view distance: {} chunks = ~{} regions",

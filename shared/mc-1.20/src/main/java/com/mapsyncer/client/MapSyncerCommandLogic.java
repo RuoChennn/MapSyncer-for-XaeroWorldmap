@@ -10,7 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,22 +40,22 @@ public class MapSyncerCommandLogic {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
-        mc.player.sendSystemMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.command.help_header")));
-        mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.command.help_sync"));
-        mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.command.help_sync_dim"));
-        mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.command.help_sync_all"));
-        mc.player.sendSystemMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"));
+        mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.command.help_header")), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync"), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_dim"), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_all"), false);
+        mc.player.displayClientMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"), false);
 
         if (hasServerPermission) {
-            mc.player.sendSystemMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_region"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_force"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.status"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"));
+            mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_region"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_force"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.status"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick"), false);
+            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"), false);
         }
     }
 
@@ -74,16 +74,16 @@ public class MapSyncerCommandLogic {
         ClientLevel level = mc.level;
         if (level != null) {
             ResourceKey<Level> currentDim = level.dimension();
-            Identifier currentLoc = currentDim.identifier();
+            ResourceLocation currentLoc = currentDim.location();
             if (!"minecraft".equals(currentLoc.getNamespace())) {
                 String suggestion = currentLoc.toString();
                 builder.suggest(suggestion);
                 added.add(suggestion);
             }
 
-            level.registryAccess().lookup(Registries.DIMENSION_TYPE).ifPresent(registry -> {
+            level.registryAccess().registry(Registries.DIMENSION_TYPE).ifPresent(registry -> {
                 for (var key : registry.registryKeySet()) {
-                    Identifier loc = key.identifier();
+                    ResourceLocation loc = key.location();
                     String namespace = loc.getNamespace();
                     if ("minecraft".equals(namespace)) continue;
 
@@ -97,9 +97,9 @@ public class MapSyncerCommandLogic {
                 }
             });
 
-            level.registryAccess().lookup(Registries.LEVEL_STEM).ifPresent(registry -> {
+            level.registryAccess().registry(Registries.LEVEL_STEM).ifPresent(registry -> {
                 for (var key : registry.registryKeySet()) {
-                    Identifier loc = key.identifier();
+                    ResourceLocation loc = key.location();
                     String namespace = loc.getNamespace();
                     if ("minecraft".equals(namespace)) continue;
                     String suggestion = loc.toString();
@@ -178,7 +178,7 @@ public class MapSyncerCommandLogic {
         if (mc.player == null || mc.level == null) return 0;
 
         ResourceKey<Level> currentDim = mc.level.dimension();
-        String dimensionId = currentDim.identifier().toString();
+        String dimensionId = currentDim.location().toString();
         sendSyncRequest(mc, dimensionId, false);
 
         return 1;
@@ -204,11 +204,11 @@ public class MapSyncerCommandLogic {
 
         if (input.contains(":")) return input;
 
-        var optRegistry = level.registryAccess().lookup(Registries.DIMENSION_TYPE);
+        var optRegistry = level.registryAccess().registry(Registries.DIMENSION_TYPE);
         if (optRegistry.isPresent()) {
             var registry = optRegistry.get();
             for (var key : registry.registryKeySet()) {
-                Identifier loc = key.identifier();
+                ResourceLocation loc = key.location();
                 if ("minecraft".equals(loc.getNamespace())) continue;
                 String path = loc.getPath();
                 String dimPath = path.endsWith("_type") ? path.substring(0, path.length() - 5) : path;

@@ -15,7 +15,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +32,7 @@ import java.util.HashSet;
  * 主要差异点：
  * - Forge 1.21.1 使用 Java 21
  * - SimpleNetworkWrapper 网络（非 StreamCodec）
- * - ForgeRegistries + BuiltInRegistries 双重注册表
+ * - BuiltInRegistries 注册表
  */
 public class ForgePlatform implements Platform {
 

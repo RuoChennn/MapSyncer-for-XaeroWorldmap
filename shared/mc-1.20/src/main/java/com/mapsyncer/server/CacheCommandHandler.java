@@ -276,6 +276,6 @@ public class CacheCommandHandler {
      * 获取维度ID字符串
      */
     public static String getDimensionId(ResourceKey<Level> dimension) {
-        return dimension.identifier().toString();
+        return dimension.location().toString();
     }
 }

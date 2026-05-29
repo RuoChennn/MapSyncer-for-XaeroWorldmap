@@ -9,7 +9,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 
-@EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+@EventBusSubscriber(value = Dist.CLIENT, modid = "mapsyncer")
 public class MapSyncerCommand {
 
     @SubscribeEvent
@@ -18,9 +18,10 @@ public class MapSyncerCommand {
 
         dispatcher.register(
                 net.minecraft.commands.Commands.literal("mapsyncer")
-                        .executes(ctx -> { MapSyncerCommandLogic.showHelp(ctx.getSource().hasPermission(4)); return Command.SINGLE_SUCCESS; })
+                        // TODO: MC 26.1 权限系统重构，暂时跳过权限检查
+                        .executes(ctx -> { MapSyncerCommandLogic.showHelp(true); return Command.SINGLE_SUCCESS; })
                         .then(net.minecraft.commands.Commands.literal("help")
-                                .executes(ctx -> { MapSyncerCommandLogic.showHelp(ctx.getSource().hasPermission(4)); return Command.SINGLE_SUCCESS; }))
+                                .executes(ctx -> { MapSyncerCommandLogic.showHelp(true); return Command.SINGLE_SUCCESS; }))
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
                                 .then(net.minecraft.commands.Commands.literal("all")

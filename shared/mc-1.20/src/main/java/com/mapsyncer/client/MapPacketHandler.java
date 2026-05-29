@@ -194,7 +194,7 @@ public class MapPacketHandler {
                 clearReflectionCache();
                 LOGGER.warn("Sync was stale, cleared accumulated data");
                 if (Minecraft.getInstance().player != null) {
-                    Minecraft.getInstance().player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.timeout"));
+                    Minecraft.getInstance().player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
                 }
                 return;
             }
@@ -489,14 +489,14 @@ public class MapPacketHandler {
         }
 
         String currentXaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(
-                mc.level.dimension().identifier().toString());
+                mc.level.dimension().location().toString());
 
         if (targetDimension.equals(currentXaeroDim)) {
             LOGGER.info("Syncing current dimension {}, unloading view distance regions", targetDimension);
             int unloaded = XaeroMapIntegrator.unloadViewDistanceRegions();
             if (unloaded > 0 && mc.player != null) {
-                mc.player.sendSystemMessage(
-                        ChatUtils.desc("mapsyncer.sync.unloading_regions", unloaded));
+                mc.player.displayClientMessage(
+                        ChatUtils.desc("mapsyncer.sync.unloading_regions", unloaded), false);
             }
         }
     }

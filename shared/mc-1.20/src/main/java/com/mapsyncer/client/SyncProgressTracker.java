@@ -101,10 +101,10 @@ public class SyncProgressTracker {
                     // 根据服务端安装状态显示不同错误
                     if (MapPacketReceiver.isServerInstalled()) {
                         // 服务端已安装但响应超时，可能是网络问题或服务端处理出错
-                        mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.timeout"));
+                        mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
                     } else {
                         // 服务端未安装
-                        mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"));
+                        mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"), false);
                     }
                 }
                 cancelTracking();
@@ -161,7 +161,7 @@ public class SyncProgressTracker {
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
-            mc.player.sendSystemMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed));
+            mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed), false);
         }
     }
 
@@ -206,9 +206,9 @@ public class SyncProgressTracker {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && tracking) {
             if (total > 0) {
-                mc.player.sendSystemMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent));
+                mc.player.displayClientMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent), false);
             } else {
-                mc.player.sendSystemMessage(ChatUtils.prefix().append(Component.literal(status)));
+                mc.player.displayClientMessage(ChatUtils.prefix().append(Component.literal(status)), false);
             }
         }
     }

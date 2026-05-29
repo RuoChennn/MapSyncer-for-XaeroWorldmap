@@ -25,6 +25,7 @@ include 'libs:platform-api'     // 平台抽象接口
 // ── 源码复用层（不独立编译，由平台模块通过 sourceSet 引用）──
 include 'shared:common'         // 全版本共享的纯 Java 代码（无 MC API 依赖）
 include 'shared:mc-1.21'        // MC 1.21.x 版本特定代码
+include 'shared:mc-1.20'        // MC 1.20.x 版本特定代码
 include 'shared:mc-26'          // MC 26.x 版本特定代码
 
 // ── 平台实现层（编译产出最终 mod JAR）──
@@ -32,7 +33,7 @@ include 'shared:mc-26'          // MC 26.x 版本特定代码
 // NeoForge 平台
 // NeoForge 从 MC 1.20.2 开始支持，版本号 20.2.x/20.3.x/20.4.x/21.x
 // NeoForge 1.20.4 需要 NeoGradle 6.x，与 Gradle 8.5 有兼容性问题
-// include 'platforms:neoforge:1.20.4'  // 暂时跳过
+include 'platforms:neoforge:1.20.4'
 include 'platforms:neoforge:1.21.1'
 include 'platforms:neoforge:1.21.11'
 include 'platforms:neoforge:26.1'
@@ -41,7 +42,7 @@ include 'platforms:neoforge:26.1'
 // ForgeGradle 6.x 与 Gradle 8.14.5 可能存在兼容性问题
 // include 'platforms:forge:1.20.1'
 // include 'platforms:forge:1.20.4'
-// include 'platforms:forge:1.21.1'
+include 'platforms:forge:1.21.1'
 // forge-1.21.11 和 forge-26.1 - Forge 可能不支持这些新版本
 // include 'platforms:forge:1.21.11'
 // include 'platforms:forge:26.1'

@@ -9,13 +9,13 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
+@EventBusSubscriber(value = Dist.DEDICATED_SERVER, modid = "mapsyncer")
 public class PlayerJoinHandler {
 
     @SubscribeEvent
     public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
         ServerPlayer player = (ServerPlayer) event.getEntity();
-        MinecraftServer server = player.getServer();
+        MinecraftServer server = player.level().getServer();
         PlayerJoinHandlerLogic.onPlayerJoin(player, server);
     }
 

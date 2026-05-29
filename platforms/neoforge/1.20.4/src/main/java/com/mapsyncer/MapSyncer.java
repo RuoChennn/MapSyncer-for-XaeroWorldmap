@@ -14,12 +14,13 @@ import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandler;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.config.ModConfig.Type;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
@@ -31,7 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer模组的主类 - NeoForge 1.20.1 版本
+ * MapSyncer模组的主类 - NeoForge 1.20.4 版本
  *
  * 使用抽象网络层进行跨平台网络通信。
  */
@@ -48,17 +49,21 @@ public class MapSyncer {
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
-        // 初始化 Platform（NeoForge 1.20.1 实现）
+        // 初始化 Platform（NeoForge 1.20.4 实现）
         PlatformManager.initialize(new NeoForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
+
+        // 初始化 DimensionPathMapping（1.20.4 使用传统格式）
+        DimensionPathMapping.getInstance().initialize(20);
+        LOGGER.info("DimensionPathMapping initialized for version 1.20.4");
 
         // 初始化 NetworkManager（NeoForge 网络实现）
         networkHandler = new NeoForgeNetworkHandler();
         NetworkManager.initialize(networkHandler);
         LOGGER.info("NetworkManager initialized");
 
-        modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
-        modContainer.registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
+        ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+        ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // 客户端初始化：注册网络包接收器
@@ -83,7 +88,7 @@ public class MapSyncer {
     /**
      * 客户端事件处理器 - 处理客户端玩家断开连接事件
      */
-    @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+    @Mod.EventBusSubscriber(value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
     public static class ClientEventHandler {
         /**
          * 玩家断开连接事件处理

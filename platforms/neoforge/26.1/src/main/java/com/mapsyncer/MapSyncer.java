@@ -65,7 +65,7 @@ public class MapSyncer {
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         modContainer.registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (FMLEnvironment.getDist() == Dist.CLIENT) {
             // 客户端初始化：注册网络包接收器
             modBus.addListener(MapPacketReceiver::register);
             NeoForge.EVENT_BUS.register(ClientEventHandler.class);
@@ -88,7 +88,7 @@ public class MapSyncer {
     /**
      * 客户端事件处理器 - 处理客户端玩家断开连接事件
      */
-    @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+    @EventBusSubscriber(value = Dist.CLIENT, modid = "mapsyncer")
     public static class ClientEventHandler {
         /**
          * 玩家断开连接事件处理

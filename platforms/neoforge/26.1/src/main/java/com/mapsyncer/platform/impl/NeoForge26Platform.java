@@ -60,7 +60,7 @@ public class NeoForge26Platform implements Platform {
 
     @Override
     public boolean isClientEnvironment() {
-        return net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT;
+        return net.neoforged.fml.loading.FMLEnvironment.getDist() == net.neoforged.api.distmarker.Dist.CLIENT;
     }
 
     // ===== 方块属性 =====

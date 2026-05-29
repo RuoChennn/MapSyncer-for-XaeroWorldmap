@@ -7,8 +7,7 @@ import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
@@ -21,34 +20,35 @@ import java.util.Map;
  * NeoForge Payload 适配器
  *
  * 将平台无关的 Payload DTO 适配到 NeoForge 的 CustomPacketPayload 接口。
- * 每个适配器包含 StreamCodec 用于网络序列化。
+ * NeoForge 20.4.x 使用 write()/id() 模式（无 StreamCodec）。
  */
 public class NeoForgePayloadAdapters {
 
     // ===== 同步请求适配器 =====
 
     public record NeoForgeSyncRequestPayload(SyncRequestPayload data) implements CustomPacketPayload {
-        public static final Type<NeoForgeSyncRequestPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_REQUEST_ID));
+        public static final ResourceLocation ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.SYNC_REQUEST_ID);
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncRequestPayload> STREAM_CODEC =
-            StreamCodec.of(NeoForgeSyncRequestPayload::encode, NeoForgeSyncRequestPayload::decode);
+        public static final FriendlyByteBuf.Reader<NeoForgeSyncRequestPayload> READER =
+            NeoForgeSyncRequestPayload::decode;
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ResourceLocation id() {
+            return ID;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeSyncRequestPayload payload) {
-            buf.writeInt(payload.data.clientMeta().size());
-            for (var entry : payload.data.clientMeta().entrySet()) {
+        @Override
+        public void write(FriendlyByteBuf buf) {
+            buf.writeInt(data.clientMeta().size());
+            for (var entry : data.clientMeta().entrySet()) {
                 buf.writeUtf(entry.getKey());
                 buf.writeLong(entry.getValue().timestampSeconds());
                 buf.writeUtf(entry.getValue().hash());
             }
         }
 
-        public static NeoForgeSyncRequestPayload decode(RegistryFriendlyByteBuf buf) {
+        public static NeoForgeSyncRequestPayload decode(FriendlyByteBuf buf) {
             int size = buf.readInt();
             Map<String, ClientMeta> metaMap = new HashMap<>();
             for (int i = 0; i < size; i++) {
@@ -64,28 +64,29 @@ public class NeoForgePayloadAdapters {
     // ===== 同步响应适配器 =====
 
     public record NeoForgeSyncResponsePayload(SyncResponsePayload data) implements CustomPacketPayload {
-        public static final Type<NeoForgeSyncResponsePayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_RESPONSE_ID));
+        public static final ResourceLocation ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.SYNC_RESPONSE_ID);
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncResponsePayload> STREAM_CODEC =
-            StreamCodec.of(NeoForgeSyncResponsePayload::encode, NeoForgeSyncResponsePayload::decode);
+        public static final FriendlyByteBuf.Reader<NeoForgeSyncResponsePayload> READER =
+            NeoForgeSyncResponsePayload::decode;
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ResourceLocation id() {
+            return ID;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeSyncResponsePayload payload) {
-            buf.writeInt(payload.data.worldId());
-            buf.writeInt(payload.data.chunks().size());
-            for (ChunkMapData chunk : payload.data.chunks()) {
+        @Override
+        public void write(FriendlyByteBuf buf) {
+            buf.writeInt(data.worldId());
+            buf.writeInt(data.chunks().size());
+            for (ChunkMapData chunk : data.chunks()) {
                 encodeChunkMapData(buf, chunk);
             }
-            buf.writeBoolean(payload.data.isComplete());
-            buf.writeUtf(payload.data.status());
+            buf.writeBoolean(data.isComplete());
+            buf.writeUtf(data.status());
         }
 
-        public static NeoForgeSyncResponsePayload decode(RegistryFriendlyByteBuf buf) {
+        public static NeoForgeSyncResponsePayload decode(FriendlyByteBuf buf) {
             int worldId = buf.readInt();
             int size = buf.readInt();
             List<ChunkMapData> chunks = new ArrayList<>();
@@ -101,24 +102,25 @@ public class NeoForgePayloadAdapters {
     // ===== 同步进度适配器 =====
 
     public record NeoForgeSyncProgressPayload(SyncProgressPayload data) implements CustomPacketPayload {
-        public static final Type<NeoForgeSyncProgressPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_PROGRESS_ID));
+        public static final ResourceLocation ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.SYNC_PROGRESS_ID);
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncProgressPayload> STREAM_CODEC =
-            StreamCodec.of(NeoForgeSyncProgressPayload::encode, NeoForgeSyncProgressPayload::decode);
+        public static final FriendlyByteBuf.Reader<NeoForgeSyncProgressPayload> READER =
+            NeoForgeSyncProgressPayload::decode;
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ResourceLocation id() {
+            return ID;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeSyncProgressPayload payload) {
-            buf.writeInt(payload.data.processed());
-            buf.writeInt(payload.data.total());
-            buf.writeUtf(payload.data.status());
+        @Override
+        public void write(FriendlyByteBuf buf) {
+            buf.writeInt(data.processed());
+            buf.writeInt(data.total());
+            buf.writeUtf(data.status());
         }
 
-        public static NeoForgeSyncProgressPayload decode(RegistryFriendlyByteBuf buf) {
+        public static NeoForgeSyncProgressPayload decode(FriendlyByteBuf buf) {
             return new NeoForgeSyncProgressPayload(new SyncProgressPayload(buf.readInt(), buf.readInt(), buf.readUtf()));
         }
     }
@@ -126,29 +128,30 @@ public class NeoForgePayloadAdapters {
     // ===== 服务端已安装适配器 =====
 
     public record NeoForgeServerInstalledPayload(ServerInstalledPayload data) implements CustomPacketPayload {
-        public static final Type<NeoForgeServerInstalledPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SERVER_INSTALLED_ID));
+        public static final ResourceLocation ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.SERVER_INSTALLED_ID);
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeServerInstalledPayload> STREAM_CODEC =
-            StreamCodec.of(NeoForgeServerInstalledPayload::encode, NeoForgeServerInstalledPayload::decode);
+        public static final FriendlyByteBuf.Reader<NeoForgeServerInstalledPayload> READER =
+            NeoForgeServerInstalledPayload::decode;
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public ResourceLocation id() {
+            return ID;
         }
 
-        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeServerInstalledPayload payload) {
-            buf.writeUtf(payload.data.version());
+        @Override
+        public void write(FriendlyByteBuf buf) {
+            buf.writeUtf(data.version());
         }
 
-        public static NeoForgeServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
+        public static NeoForgeServerInstalledPayload decode(FriendlyByteBuf buf) {
             return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf()));
         }
     }
 
     // ===== ChunkMapData 序列化（共享逻辑）=====
 
-    private static void encodeChunkMapData(RegistryFriendlyByteBuf buf, ChunkMapData data) {
+    private static void encodeChunkMapData(FriendlyByteBuf buf, ChunkMapData data) {
         buf.writeInt(data.regionX);
         buf.writeInt(data.regionZ);
         buf.writeUtf(data.dimension);
@@ -162,7 +165,7 @@ public class NeoForgePayloadAdapters {
         }
     }
 
-    private static ChunkMapData decodeChunkMapData(RegistryFriendlyByteBuf buf) {
+    private static ChunkMapData decodeChunkMapData(FriendlyByteBuf buf) {
         int regionX = buf.readInt();
         int regionZ = buf.readInt();
         String dimension = buf.readUtf();

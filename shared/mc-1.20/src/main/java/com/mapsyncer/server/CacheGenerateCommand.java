@@ -41,8 +41,7 @@ public class CacheGenerateCommand {
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mapsyncer")
-                // TODO: MC 26.1 权限系统重构，暂时跳过权限检查
-                .requires(source -> true)
+                .requires(source -> source.hasPermission(4))
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
                         .executes(CacheGenerateCommand::showHelp))
