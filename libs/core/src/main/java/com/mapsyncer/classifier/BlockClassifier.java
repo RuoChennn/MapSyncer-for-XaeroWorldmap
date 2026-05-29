@@ -63,10 +63,7 @@ public class BlockClassifier {
         "minecraft:brown_stained_glass", "minecraft:green_stained_glass",
         "minecraft:red_stained_glass", "minecraft:black_stained_glass",
         "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice",
-        "minecraft:tinted_glass",
-        // 水生植物 - 都是 translucent 渲染类型，作为 overlay 处理
-        "minecraft:kelp", "minecraft:kelp_plant",
-        "minecraft:seagrass", "minecraft:tall_seagrass"
+        "minecraft:tinted_glass"
     );
 
     /**
@@ -289,11 +286,6 @@ public class BlockClassifier {
             blockName.equals("minecraft:glass_pane") ||
             blockName.contains("stained_glass") ||
             blockName.contains("tinted_glass")) return 0;
-        // 水生植物 - 使用水的遮光值（它们在水中）
-        if (blockName.equals("minecraft:kelp") ||
-            blockName.equals("minecraft:kelp_plant") ||
-            blockName.equals("minecraft:seagrass") ||
-            blockName.equals("minecraft:tall_seagrass")) return 2;
         // 空气
         if (isAir(blockName)) return 0;
         // 含水方块（waterlogged）的遮光值取决于方块本身

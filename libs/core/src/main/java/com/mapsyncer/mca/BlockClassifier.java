@@ -42,9 +42,7 @@ public class BlockClassifier {
         "minecraft:brown_stained_glass", "minecraft:green_stained_glass",
         "minecraft:red_stained_glass", "minecraft:black_stained_glass",
         "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice",
-        "minecraft:tinted_glass",
-        "minecraft:kelp", "minecraft:kelp_plant",
-        "minecraft:seagrass", "minecraft:tall_seagrass"
+        "minecraft:tinted_glass"
     );
 
     private static final Set<String> INVISIBLE_BLOCKS = Set.of(
@@ -147,10 +145,6 @@ public class BlockClassifier {
             blockName.equals("minecraft:glass_pane") ||
             blockName.contains("stained_glass") ||
             blockName.contains("tinted_glass")) return 0;
-        if (blockName.equals("minecraft:kelp") ||
-            blockName.equals("minecraft:kelp_plant") ||
-            blockName.equals("minecraft:seagrass") ||
-            blockName.equals("minecraft:tall_seagrass")) return 2;
         if (isAir(blockName)) return 0;
         return 15;
     }

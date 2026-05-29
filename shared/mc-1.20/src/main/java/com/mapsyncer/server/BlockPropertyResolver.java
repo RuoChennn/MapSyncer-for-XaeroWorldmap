@@ -5,7 +5,7 @@ import com.mapsyncer.mca.BlockPropertyLookup;
 import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.AirBlock;
@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.CaveVinesPlantBlock;
 import net.minecraft.world.level.block.ChorusFlowerBlock;
 import net.minecraft.world.level.block.ChorusPlantBlock;
 import net.minecraft.world.level.block.CropBlock;
+import net.minecraft.world.level.block.DeadBushBlock;
 import net.minecraft.world.level.block.DoublePlantBlock;
 import net.minecraft.world.level.block.FlowerBlock;
 import net.minecraft.world.level.block.GrowingPlantBlock;
@@ -43,7 +44,7 @@ import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.block.TorchflowerCropBlock;
 import net.minecraft.world.level.block.TwistingVinesBlock;
 import net.minecraft.world.level.block.TwistingVinesPlantBlock;
-import net.minecraft.world.level.block.LilyPadBlock;
+import net.minecraft.world.level.block.WaterlilyBlock;
 import net.minecraft.world.level.block.WeepingVinesBlock;
 import net.minecraft.world.level.block.WeepingVinesPlantBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -219,7 +220,7 @@ public class BlockPropertyResolver {
      */
     private static BlockProperties resolveProperties(String blockName) {
         try {
-            Identifier location = Identifier.parse(blockName);
+            ResourceLocation location = new ResourceLocation(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(location);
 
             if (blockOpt.isEmpty()) {
@@ -317,9 +318,8 @@ public class BlockPropertyResolver {
      */
     private static int getLightBlock(BlockState state) {
         try {
-            // MC 26.1: getLightBlock(BlockGetter, BlockPos) 已移除
-            // 使用 propagatesSkylightDown() 替代（true = 光照穿透，等效 lightBlock=0）
-            return state.propagatesSkylightDown() ? 0 : 15;
+            // getLightBlock 需要 BlockGetter 和 BlockPos 参数
+            return state.getLightBlock(PLACEHOLDER_BLOCK_GETTER, PLACEHOLDER_BLOCKPOS);
         } catch (RuntimeException e) {
             // 备用：基于方块类型估算
             FluidState fluidState = state.getFluidState();
@@ -481,8 +481,8 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 5. LilyPadBlock 类（睡莲）
-        if (block instanceof LilyPadBlock) {
+        // 5. WaterlilyBlock 类（睡莲）
+        if (block instanceof WaterlilyBlock) {
             return true;
         }
 
@@ -550,7 +550,12 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 7. CactusBlock - 仙人掌
+        // 7. DeadBushBlock - 死灌木
+        if (block instanceof DeadBushBlock) {
+            return true;
+        }
+
+        // 8. CactusBlock - 仙人掌
         if (block instanceof CactusBlock) {
             return true;
         }

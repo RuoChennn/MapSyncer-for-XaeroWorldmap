@@ -29,21 +29,17 @@ import net.minecraft.world.level.block.FlowerBlock;
 import net.minecraft.world.level.block.GrowingPlantBlock;
 import net.minecraft.world.level.block.GrowingPlantBodyBlock;
 import net.minecraft.world.level.block.GrowingPlantHeadBlock;
-import net.minecraft.world.level.block.KelpBlock;
-import net.minecraft.world.level.block.KelpPlantBlock;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.MushroomBlock;
 import net.minecraft.world.level.block.NetherWartBlock;
 import net.minecraft.world.level.block.PitcherCropBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.SaplingBlock;
-import net.minecraft.world.level.block.SeagrassBlock;
 import net.minecraft.world.level.block.SmallDripleafBlock;
 import net.minecraft.world.level.block.StemBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
 import net.minecraft.world.level.block.TallGrassBlock;
-import net.minecraft.world.level.block.TallSeagrassBlock;
 import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.block.TorchflowerCropBlock;
 import net.minecraft.world.level.block.TwistingVinesBlock;
@@ -375,13 +371,6 @@ public class BlockPropertyResolver {
             return true;  // 流体使用 translucent 渲染
         }
 
-        // 3. 水生植物（海带、海草）- TransparentBlock 子类，已在上面判断
-        // 但有些 mod 可能不继承 TransparentBlock，需要额外检查
-        String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
-        if (blockId.contains("kelp") || blockId.contains("seagrass")) {
-            return true;
-        }
-
         // 4. 已知使用 translucent 渲染类型的方块
         // 参考 Minecraft 渲染类型定义
         // 注意：树叶使用 cutout 渲染，不是 translucent，所以不在这里
@@ -586,17 +575,7 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 12. SeagrassBlock / TallSeagrassBlock - 海草
-        if (block instanceof SeagrassBlock || block instanceof TallSeagrassBlock) {
-            return true;
-        }
-
-        // 13. KelpBlock / KelpPlantBlock - 海带
-        if (block instanceof KelpBlock || block instanceof KelpPlantBlock) {
-            return true;
-        }
-
-        // 14. GrowingPlantBlock / GrowingPlantBodyBlock / GrowingPlantHeadBlock - 生长植物（藤蔓类）
+        // 12. GrowingPlantBlock / GrowingPlantBodyBlock / GrowingPlantHeadBlock - 生长植物（藤蔓类）
         if (block instanceof GrowingPlantBlock || block instanceof GrowingPlantBodyBlock || block instanceof GrowingPlantHeadBlock) {
             return true;
         }
@@ -643,7 +622,6 @@ public class BlockPropertyResolver {
             blockId.contains("sapling") || blockId.contains("seed") ||
             blockId.contains("vine") || blockId.contains("fern") ||
             blockId.contains("bush") || blockId.contains("grass") ||
-            blockId.contains("kelp") || blockId.contains("seagrass") ||
             blockId.contains("cactus") || blockId.contains("reed") ||
             blockId.contains("stem") || blockId.contains("leaf") ||
             blockId.contains("mushroom") || blockId.contains("fungus")) {
@@ -703,8 +681,7 @@ public class BlockPropertyResolver {
         boolean isLava = name.contains("lava");
         boolean isFluid = isWater || isLava;
 
-        boolean isTransparent = name.contains("glass") || name.contains("ice") ||
-                               name.contains("kelp") || name.contains("seagrass");
+        boolean isTransparent = name.contains("glass") || name.contains("ice");
 
         boolean isInvisible = name.contains("torch") ||
                              (name.contains("grass") && !name.contains("grass_block") && !name.contains("tall"));
@@ -717,7 +694,6 @@ public class BlockPropertyResolver {
                          name.contains("sapling") || name.contains("seed") ||
                          name.contains("vine") || name.contains("fern") ||
                          name.contains("bush") || name.contains("grass") ||
-                         name.contains("kelp") || name.contains("seagrass") ||
                          name.contains("cactus") || name.contains("reed") ||
                          name.contains("stem") || name.contains("leaf") ||
                          name.contains("mushroom") || name.contains("fungus") ||
