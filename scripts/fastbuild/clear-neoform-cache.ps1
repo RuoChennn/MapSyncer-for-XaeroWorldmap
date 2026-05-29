@@ -44,8 +44,8 @@ if (Test-Path $gradleVersionCache) {
 # 6. 清理项目构建目录
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $buildDirs = @(
-    Join-Path $projectRoot "platforms\neoforge\1.21.11\build"
-    Join-Path $projectRoot "platforms\neoforge\1.21.1\build"
+    Join-Path $projectRoot "mc-1.21.11\neoforge\build"
+    Join-Path $projectRoot "mc-1.21.1\neoforge\build"
 )
 foreach ($dir in $buildDirs) {
     if (Test-Path $dir) {
@@ -57,4 +57,4 @@ foreach ($dir in $buildDirs) {
 Write-Host ""
 Write-Host "清理完成!" -ForegroundColor Green
 Write-Host "现在可以重新构建 NeoForge 1.21.11:" -ForegroundColor Yellow
-Write-Host "  .\gradlew :platforms:neoforge:1.21.11:build -x test --no-daemon --refresh-dependencies"
+Write-Host "  .\gradlew :mc-1.21.11:neoforge:build -x test --no-daemon --refresh-dependencies"

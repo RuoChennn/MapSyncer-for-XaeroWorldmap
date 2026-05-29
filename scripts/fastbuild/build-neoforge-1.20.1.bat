@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0..\.."
 echo Building: NeoForge 1.20.1
-call gradlew.bat :platforms:neoforge:1.20.1:clean :platforms:neoforge:1.20.1:build -x test
+call gradlew.bat :mc-1.20.1:neoforge:clean :mc-1.20.1:neoforge:build -x test
 if %errorlevel% neq 0 (
     echo Build failed!
     pause
@@ -10,7 +10,7 @@ if %errorlevel% neq 0 (
 echo.
 echo Collecting JARs to output...
 if not exist output mkdir output
-copy /y platforms\neoforge\1.20.1\build\libs\*.jar output\ >nul
+copy /y mc-1.20.1\neoforge\build\libs\*.jar output\ >nul
 copy /y libs\core\build\libs\*.jar output\ >nul
 copy /y libs\platform-api\build\libs\*.jar output\ >nul
 echo.

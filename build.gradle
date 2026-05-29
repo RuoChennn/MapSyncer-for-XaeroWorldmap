@@ -25,14 +25,11 @@ afterEvaluate {
     task buildAll {
         dependsOn ':libs:core:build'
         dependsOn ':libs:platform-api:build'
-        dependsOn ':platforms:neoforge:1.21.1:build'
-        dependsOn ':platforms:neoforge:1.21.11:build'
-        dependsOn ':platforms:forge:1.20.1:build'
-        dependsOn ':platforms:forge:1.20.4:build'
-        dependsOn ':platforms:forge:1.21.1:build'
-        dependsOn ':platforms:fabric:1.20.1:build'
-        dependsOn ':platforms:fabric:1.20.4:build'
-        dependsOn ':platforms:fabric:1.21.1:build'
+        dependsOn ':mc-1.21.1:neoforge:build'
+        dependsOn ':mc-1.21.11:neoforge:build'
+        dependsOn ':mc-1.21.1:forge:build'
+        dependsOn ':mc-1.21.1:fabric:build'
+        dependsOn ':mc-1.20.1:forge:build'
         finalizedBy 'collectJars'
     }
 }

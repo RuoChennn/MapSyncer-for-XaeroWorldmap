@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0..\.."
 echo Building: Forge 1.21.1
-call gradlew.bat :platforms:forge:1.21.1:clean :platforms:forge:1.21.1:build -x test
+call gradlew.bat :mc-1.21.1:forge:clean :mc-1.21.1:forge:build -x test
 if %errorlevel% neq 0 (
     echo Build failed!
     pause
@@ -10,7 +10,7 @@ if %errorlevel% neq 0 (
 echo.
 echo Collecting JARs to output...
 if not exist output mkdir output
-copy /y platforms\forge\1.21.1\build\libs\*.jar output\ >nul
+copy /y mc-1.21.1\forge\build\libs\*.jar output\ >nul
 copy /y libs\core\build\libs\*.jar output\ >nul
 copy /y libs\platform-api\build\libs\*.jar output\ >nul
 echo.

@@ -21,35 +21,41 @@ rootProject.name = mod_id
 // ── 抽象库层（平台无关，编译为独立 JAR）──
 include 'libs:core'             // 纯 Java 核心（MCA/NBT/工具类）
 include 'libs:platform-api'     // 平台抽象接口
+include 'libs:common'           // 全版本共享的代码（source-only，不独立编译）
 
-// ── 源码复用层（不独立编译，由平台模块通过 sourceSet 引用）──
-include 'shared:common'         // 全版本共享的纯 Java 代码（无 MC API 依赖）
-include 'shared:mc-1.21'        // MC 1.21.x 版本特定代码
-include 'shared:mc-1.20'        // MC 1.20.x 版本特定代码
-include 'shared:mc-26'          // MC 26.x 版本特定代码
+// ── 按 MC 版本组织的模块 ──
+// 每个 MC 版本包含：
+//   shared/  — 版本特定的共享源码（source-only，不独立编译）
+//   fabric/  — Fabric 平台实现
+//   forge/   — Forge 平台实现
+//   neoforge/ — NeoForge 平台实现
 
-// ── 平台实现层（编译产出最终 mod JAR）──
+// MC 1.20.1
+include 'mc-1.20.1:shared'
+// include 'mc-1.20.1:fabric'
+include 'mc-1.20.1:forge'
+// include 'mc-1.20.1:neoforge'
 
-// NeoForge 平台
-// NeoForge 从 MC 1.20.2 开始支持，版本号 20.2.x/20.3.x/20.4.x/21.x
-// NeoForge 1.20.4 需要 NeoGradle 6.x，与 Gradle 8.5 有兼容性问题
-include 'platforms:neoforge:1.20.4'
-include 'platforms:neoforge:1.21.1'
-include 'platforms:neoforge:1.21.11'
-include 'platforms:neoforge:26.1'
+// MC 1.20.4
+include 'mc-1.20.4:shared'
+include 'mc-1.20.4:neoforge'
+// include 'mc-1.20.4:forge'
+// include 'mc-1.20.4:fabric'
 
-// Forge 平台
-// ForgeGradle 6.x 与 Gradle 8.14.5 可能存在兼容性问题
-// include 'platforms:forge:1.20.1'
-// include 'platforms:forge:1.20.4'
-include 'platforms:forge:1.21.1'
-// forge-1.21.11 和 forge-26.1 - Forge 可能不支持这些新版本
-// include 'platforms:forge:1.21.11'
-// include 'platforms:forge:26.1'
+// MC 1.21.1
+include 'mc-1.21.1:shared'
+include 'mc-1.21.1:fabric'
+include 'mc-1.21.1:forge'
+include 'mc-1.21.1:neoforge'
 
-// Fabric 平台
-// 使用 fabric-loom-remap 1.16-SNAPSHOT，支持 Gradle 8.14.5
-include 'platforms:fabric:1.21.1'
-// fabric-1.21.11 和 fabric-26.1 需要 Gradle 9.x + Loom 1.16，暂时排除
-// include 'platforms:fabric:1.21.11'
-// include 'platforms:fabric:26.1'
+// MC 1.21.11
+include 'mc-1.21.11:shared'
+include 'mc-1.21.11:neoforge'
+// include 'mc-1.21.11:forge'
+// include 'mc-1.21.11:fabric'
+
+// MC 26.1
+include 'mc-26.1:shared'
+include 'mc-26.1:neoforge'
+// include 'mc-26.1:forge'
+// include 'mc-26.1:fabric'

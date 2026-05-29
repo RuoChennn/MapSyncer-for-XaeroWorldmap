@@ -60,7 +60,7 @@ function Build-Module($target) {
         if ($dashIndex -gt 0) {
             $platform = $target.Substring(0, $dashIndex)
             $version = $target.Substring($dashIndex + 1)
-            $buildCmd = ":platforms:${platform}:${version}:build"
+            $buildCmd = ":mc-${version}:${platform}:build"
         } else {
             $buildCmd = "${target}:build"
         }

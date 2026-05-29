@@ -1,0 +1,95 @@
+plugins {
+    id 'net.neoforged.gradle.userdev' version '7.0.97'
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+version = mod_version + '-neoforge-1.20.4'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// NeoForge 1.20.4 需要 Java 17
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+// NeoForge 20.4.x for Minecraft 1.20.4
+dependencies {
+    implementation "net.neoforged:neoforge:20.4.234"
+
+    // 依赖核心模块
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+}
+
+// 默认运行配置
+runs {
+    configureEach {
+        systemProperty 'forge.logging.markers', 'REGISTRIES'
+        systemProperty 'forge.logging.console.level', 'debug'
+        modSource project.sourceSets.main
+    }
+    client {
+        systemProperty 'forge.enabledGameTestNamespaces', mod_id
+    }
+    server {
+        systemProperty 'forge.enabledGameTestNamespaces', mod_id
+        programArgument '--nogui'
+    }
+}
+
+// 引用版本特定的共享源码（由平台模块提供 MC 依赖）
+sourceSets.main.java.srcDir '../shared/src/main/java'
+sourceSets.main.resources.srcDir '../shared/src/main/resources'
+sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/common/src/main/java"
+sourceSets.main.resources.srcDir "${rootProject.projectDir}/libs/common/src/main/resources"
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// 创建仅包含项目内部依赖的配置
+configurations {
+    bundle
+}
+dependencies {
+    bundle project(':libs:core')
+    bundle project(':libs:platform-api')
+}
+
+// Shadow 插件配置：仅打包项目内部依赖
+shadowJar {
+    archiveClassifier.set('')
+    configurations = [project.configurations.bundle]
+    // 排除 slf4j（运行时已由模块系统提供）
+    exclude 'org/slf4j/**'
+    // 排除 META-INF 中的签名文件
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+// 重新配置 jar 任务依赖 shadowJar
+tasks.named('jar') {
+    archiveClassifier.set('slim')
+    dependsOn shadowJar
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}
