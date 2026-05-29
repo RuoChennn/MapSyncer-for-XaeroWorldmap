@@ -1,0 +1,147 @@
+name: Build & Release (Multi-Branch)
+
+on:
+  push:
+    tags:
+      - 'V*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - single
+      branch:
+        description: '单分支构建时填写分支名'
+        required: false
+        default: ''
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.get_branches.outputs.branches }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 获取仓库所有分支
+        id: get_branches
+        run: |
+          BRANCHES=$(git branch -r | grep -v '\->' | sed 's/origin\///' | sort -u | jq -R . | jq -cs .)
+          echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: ${{ fromJson(needs.prepare.outputs.branches) }}
+      fail-fast: false
+    continue-on-error: true
+    steps:
+      - name: 过滤分支逻辑
+        if: |
+          (github.event.inputs.build_type == 'single' && github.event.inputs.branch == matrix.branch) ||
+          (github.event.inputs.build_type == 'all') ||
+          (github.event_name == 'push')
+        run: echo "开始构建分支 ${{ matrix.branch }}"
+
+      - name: Checkout 分支 ${{ matrix.branch }}
+        if: success()
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 1
+
+      - name: Set up JDK 21
+        if: success()
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        if: success()
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build with Gradle
+        if: success()
+        run: gradle build --no-daemon
+
+      - name: 读取版本号
+        id: version
+        run: |
+          MOD_VER=$(grep '^mod_version=' gradle.properties | cut -d'=' -f2)
+          MC_VER=$(grep '^minecraft_version=' gradle.properties | cut -d'=' -f2)
+          echo "MOD_VERSION=$MOD_VER" >> $GITHUB_ENV
+          echo "MC_VERSION=$MC_VER" >> $GITHUB_ENV
+          echo "mod_version=$MOD_VER" >> $GITHUB_OUTPUT
+          echo "mc_version=$MC_VER" >> $GITHUB_OUTPUT
+
+      - name: 重命名 JAR
+        run: |
+          cd build/libs
+          rm -f *-sources.jar
+          mv *.jar advancedscoreboard-fabric-${{ steps.version.outputs.mod_version }}-mc${{ steps.version.outputs.mc_version }}.jar
+
+      - name: 上传构建产物 (${{ matrix.branch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: jars-${{ matrix.branch }}
+          path: build/libs/advancedscoreboard-fabric-${{ steps.version.outputs.mod_version }}-mc${{ steps.version.outputs.mc_version }}.jar
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: ./outputs/
+          pattern: jars-*
+          merge-multiple: true
+
+      - name: 获取模组版本
+        id: get_mod_ver
+        run: |
+          MOD_VER=$(grep '^mod_version=' gradle.properties | cut -d'=' -f2)
+          echo "MOD_VERSION=$MOD_VER" >> $GITHUB_ENV
+          echo "mod_version=$MOD_VER" >> $GITHUB_OUTPUT
+
+      - name: 安装 git-cliff
+        run: |
+          curl -sSfL https://github.com/orhun/git-cliff/releases/download/v2.7.0/git-cliff-2.7.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv git-cliff-*/git-cliff /usr/local/bin/
+
+      - name: 生成更新日志
+        id: changelog
+        run: |
+          git-cliff --tag V${{ env.MOD_VERSION }} -o CHANGELOG_BODY.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG_BODY.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 标题 V2.1.0
+          name: V${{ env.MOD_VERSION }}
+          # tag 格式 V2.1.0
+          tag_name: V${{ env.MOD_VERSION }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: ./outputs/*.jar
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
