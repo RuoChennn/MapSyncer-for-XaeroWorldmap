@@ -40,7 +40,7 @@ import net.minecraft.world.level.block.StemBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
 import net.minecraft.world.level.block.TallGrassBlock;
-import net.minecraft.world.level.block.TransparentBlock;
+import net.minecraft.world.level.block.HalfTransparentBlock;
 import net.minecraft.world.level.block.TorchflowerCropBlock;
 import net.minecraft.world.level.block.TwistingVinesBlock;
 import net.minecraft.world.level.block.TwistingVinesPlantBlock;
@@ -361,7 +361,7 @@ public class BlockPropertyResolver {
     private static boolean checkTransparency(Block block, BlockState state) {
         // 1. AirBlock 或 TransparentBlock 类（Xaero 方式）
         // TransparentBlock 包括：玻璃、冰、遮光玻璃等
-        if (block instanceof AirBlock || block instanceof TransparentBlock) {
+        if (block instanceof AirBlock || block instanceof HalfTransparentBlock) {
             return true;
         }
 
@@ -419,7 +419,7 @@ public class BlockPropertyResolver {
         }
 
         // 3. 矮草（Xaero 默认跳过）
-        if (block == Blocks.SHORT_GRASS) {
+        if (block == Blocks.GRASS) {
             return true;
         }
 

@@ -10,7 +10,6 @@ import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.BlockPropertyResolver;
 import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -159,22 +158,22 @@ public class FabricPlatform implements Platform {
 
     @Override
     public int getSyncSpeedLimitKBps() {
-        return ModConfig.SERVER.syncSpeedLimitKBps.get();
+        return ModConfig.SERVER().getSyncSpeedLimitKBps();
     }
 
     @Override
     public int getMaxSyncPacketSize() {
-        return ModConfig.SERVER.maxSyncPacketSize.get();
+        return ModConfig.SERVER().getMaxSyncPacketSize();
     }
 
     @Override
     public int getMaxConcurrentRegions() {
-        return ModConfig.SERVER.maxConcurrentRegions.get();
+        return ModConfig.SERVER().getMaxConcurrentRegions();
     }
 
     @Override
     public boolean isDebugLoggingEnabled() {
-        return ModConfig.SERVER.enableDebugLogging.get();
+        return ModConfig.SERVER().getEnableDebugLogging();
     }
 
     @Override
@@ -184,22 +183,22 @@ public class FabricPlatform implements Platform {
 
     @Override
     public UpdateMode getIncrementalUpdateMode() {
-        return ModConfig.SERVER.incrementalUpdateMode.get();
+        return ModConfig.SERVER().getIncrementalUpdateMode();
     }
 
     @Override
     public int getIncrementalUpdateIntervalTicks() {
-        return ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+        return ModConfig.SERVER().getIncrementalUpdateIntervalTicks();
     }
 
     @Override
     public int getScheduledUpdateHour() {
-        return ModConfig.SERVER.scheduledUpdateHour.get();
+        return ModConfig.SERVER().getScheduledUpdateHour();
     }
 
     @Override
     public int getScheduledUpdateMinute() {
-        return ModConfig.SERVER.scheduledUpdateMinute.get();
+        return ModConfig.SERVER().getScheduledUpdateMinute();
     }
 
     @Override
@@ -267,10 +266,12 @@ public class FabricPlatform implements Platform {
                 return serverDir;
             }
 
-            // 回退：返回默认 Xaero 目录
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.gameDirectory != null) {
-                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
+            // 回退：返回默认 Xaero 目录（通过反射避免服务端加载客户端类）
+            Object mc = Class.forName("net.minecraft.client.Minecraft")
+                    .getMethod("getInstance").invoke(null);
+            java.io.File gameDir = (java.io.File) mc.getClass().getField("gameDirectory").get(mc);
+            if (gameDir != null) {
+                return com.mapsyncer.client.XaeroMapIntegrator.getWorldMapDir(gameDir.toPath());
             }
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());

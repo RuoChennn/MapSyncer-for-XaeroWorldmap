@@ -32,7 +32,7 @@ include 'libs:common'           // 全版本共享的代码（source-only，不�
 
 // MC 1.20.1
 include 'mc-1.20.1:shared'
-// include 'mc-1.20.1:fabric'
+include 'mc-1.20.1:fabric'
 include 'mc-1.20.1:forge'
 // include 'mc-1.20.1:neoforge'
 

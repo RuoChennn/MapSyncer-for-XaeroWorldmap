@@ -1,6 +1,5 @@
 package com.mapsyncer.network.impl;
 
-import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.FabricPayloadAdapters;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
@@ -8,22 +7,18 @@ import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.ClientPlayNetworking;
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.Identifier;
 
 import java.util.function.BiConsumer;
 
 /**
- * Fabric 网络处理器实现
+ * Fabric 1.20.1 网络处理器实现（仅服务端安全）
  *
- * <p>Fabric 1.20+ 使用 Fabric Networking API v1 (PayloadTypeRegistry + ServerPlayNetworking/ClientPlayNetworking)</p>
- * <p>Payload DTOs 在 platform-api 中定义为平台无关的纯 record。</p>
- * <p>Fabric 版本使用 FabricPayloadAdapters 进行序列化/反序列化。</p>
- * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object</p>
+ * <p>此类不引用任何客户端类（ClientPlayNetworking 等），
+ * 确保在专用服务器上类加载不会失败。</p>
+ * <p>客户端接收器通过 {@link FabricClientNetworkHandler} 单独注册。</p>
  */
 public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
@@ -32,75 +27,81 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
+    /**
+     * 服务端 handler 上下文持有者
+     */
+    private record ServerPlayerContext(net.minecraft.server.MinecraftServer server, ServerPlayer player) {}
+
     @Override
     public void registerHandlers(Object event) {
-        // 注册 Payload 类型 - 使用 FabricPayloadAdapters 的 Codec
-        PayloadTypeRegistry.playC2S().register(
+        // 注册服务端接收器 (旧版 5 参数 API)
+        ServerPlayNetworking.registerGlobalReceiver(
                 FabricPayloadAdapters.SYNC_REQUEST_ID,
-                PacketByteBuf.createCodec(FabricPayloadAdapters::writeSyncRequest, FabricPayloadAdapters::readSyncRequest)
+                (server, player, handler, buf, responseSender) -> {
+                    System.out.println("[MapSyncer DEBUG] Server received SYNC_REQUEST from " + player.getName().getString());
+                    if (syncRequestHandler != null) {
+                        SyncRequestPayload payload = FabricPayloadAdapters.readSyncRequest(buf);
+                        System.out.println("[MapSyncer DEBUG] Parsed sync request with " + payload.clientMeta().size() + " entries");
+                        syncRequestHandler.accept(payload, new PayloadContext(new ServerPlayerContext(server, player)));
+                    } else {
+                        System.out.println("[MapSyncer DEBUG] syncRequestHandler is NULL!");
+                    }
+                }
         );
-        PayloadTypeRegistry.playS2C().register(
-                FabricPayloadAdapters.SYNC_RESPONSE_ID,
-                PacketByteBuf.createCodec(FabricPayloadAdapters::writeSyncResponse, FabricPayloadAdapters::readSyncResponse)
-        );
-        PayloadTypeRegistry.playS2C().register(
-                FabricPayloadAdapters.SYNC_PROGRESS_ID,
-                PacketByteBuf.createCodec(FabricPayloadAdapters::writeSyncProgress, FabricPayloadAdapters::readSyncProgress)
-        );
-        PayloadTypeRegistry.playS2C().register(
-                FabricPayloadAdapters.SERVER_INSTALLED_ID,
-                PacketByteBuf.createCodec(FabricPayloadAdapters::writeServerInstalled, FabricPayloadAdapters::readServerInstalled)
-        );
-
-        // 注册服务端接收器
-        ServerPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_REQUEST_ID, (payload, context) -> {
-            if (syncRequestHandler != null) {
-                syncRequestHandler.accept(payload, new PayloadContext(context));
-            }
-        });
+        System.out.println("[MapSyncer DEBUG] ServerPlayNetworking.registerGlobalReceiver called for " + FabricPayloadAdapters.SYNC_REQUEST_ID);
     }
 
     /**
-     * 注册客户端接收器（在客户端初始化时调用）
+     * 注册客户端接收器。
+     *
+     * <p>此方法委托给 {@link FabricClientNetworkHandler}，避免在此类中引用客户端类。
+     * 必须在客户端环境中调用。</p>
      */
     public void registerClientHandlers() {
-        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_RESPONSE_ID, (payload, context) -> {
-            if (syncResponseHandler != null) {
-                syncResponseHandler.accept(payload, new PayloadContext(context));
-            }
-        });
+        FabricClientNetworkHandler.init(this);
+    }
 
-        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_PROGRESS_ID, (payload, context) -> {
-            if (syncProgressHandler != null) {
-                syncProgressHandler.accept(payload, new PayloadContext(context));
-            }
-        });
+    // ===== Handler getters（供 FabricClientNetworkHandler 延迟读取） =====
 
-        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SERVER_INSTALLED_ID, (payload, context) -> {
-            if (serverInstalledHandler != null) {
-                serverInstalledHandler.accept(payload, new PayloadContext(context));
-            }
-        });
+    public BiConsumer<SyncResponsePayload, PayloadContext> getSyncResponseHandler() {
+        return syncResponseHandler;
+    }
+
+    public BiConsumer<SyncProgressPayload, PayloadContext> getSyncProgressHandler() {
+        return syncProgressHandler;
+    }
+
+    public BiConsumer<ServerInstalledPayload, PayloadContext> getServerInstalledHandler() {
+        return serverInstalledHandler;
     }
 
     @Override
     public void sendToServer(SyncRequestPayload payload) {
-        ClientPlayNetworking.send(payload);
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeSyncRequest(buf, payload);
+        // 使用反射避免编译时依赖 ClientPlayNetworking
+        FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.SYNC_REQUEST_ID, buf);
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
-        ServerPlayNetworking.send(player, payload);
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeSyncResponse(buf, payload);
+        ServerPlayNetworking.send(player, FabricPayloadAdapters.SYNC_RESPONSE_ID, buf);
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
-        ServerPlayNetworking.send(player, payload);
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeSyncProgress(buf, payload);
+        ServerPlayNetworking.send(player, FabricPayloadAdapters.SYNC_PROGRESS_ID, buf);
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
-        ServerPlayNetworking.send(player, payload);
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeServerInstalled(buf, payload);
+        ServerPlayNetworking.send(player, FabricPayloadAdapters.SERVER_INSTALLED_ID, buf);
     }
 
     @Override
@@ -125,12 +126,21 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
 
     @Override
     public void enqueueWork(PayloadContext context, Runnable work) {
-        // Fabric 的 context.server() 已经提供了线程安全的执行方式
-        context.getPlatformContext().enqueueWork(work);
+        Object platformCtx = context.getPlatformContext();
+        if (platformCtx instanceof ServerPlayerContext spc) {
+            spc.server().execute(work);
+        } else {
+            // 客户端上下文：委托给客户端处理器（避免引用客户端类）
+            FabricClientNetworkHandler.enqueueClientWork(work);
+        }
     }
 
     @Override
     public ServerPlayer getPlayerFromContext(PayloadContext context) {
-        return context.getPlatformContext().player();
+        Object platformCtx = context.getPlatformContext();
+        if (platformCtx instanceof ServerPlayerContext spc) {
+            return spc.player();
+        }
+        return null;
     }
 }

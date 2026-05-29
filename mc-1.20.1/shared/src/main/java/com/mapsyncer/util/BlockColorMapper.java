@@ -609,7 +609,7 @@ public class BlockColorMapper {
         if (block == Blocks.EMERALD_ORE) return 0x33FF66;
         if (block == Blocks.CLAY) return 0xA0A4C9;
         if (block == Blocks.SANDSTONE) return 0xD7D2A0;
-        if (block == Blocks.SHORT_GRASS) return 0x7ABD47;
+        if (block == Blocks.GRASS) return 0x7ABD47;
         if (block == Blocks.FERN) return 0x5B8731;
         if (block == Blocks.DEAD_BUSH) return 0x9B8B6B;
         if (block == Blocks.CACTUS) return 0x5B8731;

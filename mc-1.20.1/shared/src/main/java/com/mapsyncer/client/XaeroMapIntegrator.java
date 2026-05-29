@@ -32,11 +32,11 @@ import java.util.Set;
  *   <li>重置区域加载状态，触发地图重新加载</li>
  * </ul>
  *
- * <p>目录结构：</p>
+ * <p>目录结构（自动检测，兼容 1.20.x 和 1.21.x+）：</p>
  * <ul>
- *   <li>多人游戏：xaero/world-map/Multiplayer_<serverIP>/<dimension>/mw$<worldId>/</li>
- *   <li>单机游戏：xaero/world-map/Multiplayer_Singleplayer/<dimension>/mw$<worldId>/</li>
- *   <li>局域网游戏：xaero/world-map/Multiplayer_LAN/<dimension>/mw$<worldId>/</li>
+ *   <li>多人游戏：&lt;worldMapDir&gt;/Multiplayer_&lt;serverIP&gt;/&lt;dimension&gt;/mw$&lt;worldId&gt;/</li>
+ *   <li>单机游戏：&lt;worldMapDir&gt;/Multiplayer_Singleplayer/&lt;dimension&gt;/mw$&lt;worldId&gt;/</li>
+ *   <li>局域网游戏：&lt;worldMapDir&gt;/Multiplayer_LAN/&lt;dimension&gt;/mw$&lt;worldId&gt;/</li>
  * </ul>
  */
 public class XaeroMapIntegrator {
@@ -47,6 +47,14 @@ public class XaeroMapIntegrator {
     private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
 
     /** 同步前预卸载的区域集合（原本已加载的），用于同步后设置 loadState=4 */
+
+    /**
+     * 自动检测 Xaero's World Map 数据目录。
+     * 委托给 {@link com.mapsyncer.util.XaeroPathResolver}。
+     */
+    public static Path getWorldMapDir(Path gameDir) {
+        return com.mapsyncer.util.XaeroPathResolver.getWorldMapDir(gameDir);
+    }
     private static volatile Set<RegionCoord> preUnloadedRegions = new HashSet<>();
 
     /**
@@ -392,7 +400,7 @@ public class XaeroMapIntegrator {
                 serverData, serverData != null ? serverData.ip : "N/A");
 
         Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+        Path worldMapDir = getWorldMapDir(gameDir);
 
         String serverIP;
 
@@ -484,7 +492,7 @@ public class XaeroMapIntegrator {
 
         ServerData serverData = connection.getServerData();
         Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+        Path worldMapDir = getWorldMapDir(gameDir);
 
         String serverIP;
 
@@ -570,7 +578,7 @@ public class XaeroMapIntegrator {
         LOGGER.info("Using server worldId: {}", serverWorldId);
 
         Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+        Path worldMapDir = getWorldMapDir(gameDir);
         Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
 
         // Get timestamp cache for this server

@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.7-SNAPSHOT'
+    id 'fabric-loom' version '1.9.2'
 }
 
 version = mod_version + '-fabric-1.20.1'
@@ -35,8 +35,8 @@ dependencies {
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:0.15.11"
 
-    // Fabric API
-    modImplementation "net.fabricmc.fabric-api:fabric-api:0.83.0+1.20.1"
+    // Fabric API for 1.20.1 (0.92.2+ includes PayloadTypeRegistry/CustomPacketPayload/PacketCodec)
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1"
 
     // Cloth Config (for configuration)
     modImplementation "me.shedaniel.cloth:cloth-config-fabric:11.0.99"
@@ -44,6 +44,9 @@ dependencies {
     // 依赖核心模块
     implementation project(':libs:core')
     implementation project(':libs:platform-api')
+    // include 会将依赖打包到 JAR 中
+    include project(':libs:core')
+    include project(':libs:platform-api')
 }
 
 tasks.withType(JavaCompile).configureEach {
