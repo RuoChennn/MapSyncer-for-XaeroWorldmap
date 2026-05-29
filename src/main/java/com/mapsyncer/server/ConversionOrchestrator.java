@@ -910,12 +910,11 @@ public class ConversionOrchestrator {
 
                 // 遍历维度目录下的所有 zip 文件（包括 caves 子目录）
                 try (Stream<Path> files = Files.walk(dimDir)) {
-                    regionCount = (int) files
+                    List<Path> zipFiles = files
                             .filter(p -> p.toString().endsWith(".zip"))
-                            .count();
-
-                    totalSize = files
-                            .filter(p -> p.toString().endsWith(".zip"))
+                            .toList();
+                    regionCount = zipFiles.size();
+                    totalSize = zipFiles.stream()
                             .mapToLong(p -> {
                                 try {
                                     return Files.size(p);
