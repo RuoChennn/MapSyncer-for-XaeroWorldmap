@@ -177,6 +177,7 @@ public class MapPacketHandler {
                 LOGGER.info("Server returned error status: {}, no sync needed", status);
                 clearSyncData();
                 clearReflectionCache();
+                SyncProgressTracker.cancelTracking();
                 if (tsCache != null) {
                     tsCache.clearSyncState();
                 }
@@ -187,6 +188,7 @@ public class MapPacketHandler {
                 LOGGER.info("Map is up-to-date, no sync needed");
                 clearSyncData();
                 clearReflectionCache();
+                SyncProgressTracker.cancelTracking();
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
                 }

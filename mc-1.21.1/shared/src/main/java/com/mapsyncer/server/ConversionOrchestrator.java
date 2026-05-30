@@ -172,20 +172,9 @@ public class ConversionOrchestrator {
      * @param xaeroDimName Xaero 格式的维度名（如 null, DIM-1, DIM1, namespace$path）
      */
     private static void clearGenerationCacheEntries(String xaeroDimName) {
-        GenerationCache genCache = GenerationCache.getInstance(CACHE_DIR);
-        Map<String, GenerationCache.RegionMeta> all = genCache.getAll();
-        int removed = 0;
-        String prefix = xaeroDimName + "/";
-        for (String key : all.keySet()) {
-            if (key.startsWith(prefix)) {
-                genCache.update(key, 0L, "00000000");
-                removed++;
-            }
-        }
+        int removed = GenerationCache.getInstance(CACHE_DIR).removeByPrefix(xaeroDimName + "/");
         if (removed > 0) {
-            genCache.save();
-            LOGGER.info("Cleared {} generation_cache entries for dimension: {} (prefix: {})",
-                    removed, xaeroDimName, prefix);
+            LOGGER.info("Cleared {} generation_cache entries for dimension: {}", removed, xaeroDimName);
         } else {
             LOGGER.info("No generation_cache entries found for dimension: {}", xaeroDimName);
         }
