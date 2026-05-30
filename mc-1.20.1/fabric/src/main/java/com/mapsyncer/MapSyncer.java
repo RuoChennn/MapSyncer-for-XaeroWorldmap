@@ -18,7 +18,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,10 +85,9 @@ public class MapSyncer implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             LOGGER.info("Server starting, initializing MapSyncer...");
 
-            // 初始化配置（使用世界目录下的 serverconfig 目录）
-            Path worldPath = server.getWorldPath(LevelResource.LEVEL_DATA_FILE).getParent();
-            Path serverConfigDir = worldPath.resolve("serverconfig");
-            ModConfig.getServerConfig(serverConfigDir);
+            // 初始化配置（使用游戏根目录下的 config 目录）
+            Path configDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir();
+            ModConfig.getServerConfig(configDir);
 
             // 设置平台的服务器实例
             platform.setServer(server);
