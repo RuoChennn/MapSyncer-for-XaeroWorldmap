@@ -2,8 +2,9 @@ package com.mapsyncer.client;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.resources.Identifier;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -18,7 +19,6 @@ public class MapSyncerCommand {
 
         dispatcher.register(
                 net.minecraft.commands.Commands.literal("mapsyncer")
-                        // TODO: MC 26.1 权限系统重构，暂时跳过权限检查
                         .executes(ctx -> { MapSyncerCommandLogic.showHelp(true); return Command.SINGLE_SUCCESS; })
                         .then(net.minecraft.commands.Commands.literal("help")
                                 .executes(ctx -> { MapSyncerCommandLogic.showHelp(true); return Command.SINGLE_SUCCESS; }))
@@ -26,13 +26,12 @@ public class MapSyncerCommand {
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
                                 .then(net.minecraft.commands.Commands.literal("all")
                                         .executes(ctx -> MapSyncerCommandLogic.executeSyncAll()))
-                                .then(net.minecraft.commands.Commands.argument("dimension", StringArgumentType.string())
-                                        .suggests((ctx, builder) -> {
-                                            MapSyncerCommandLogic.suggestDimensions(builder);
-                                            return builder.buildFuture();
-                                        })
-                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncDimension(
-                                                StringArgumentType.getString(ctx, "dimension")))))
+                                .then(net.minecraft.commands.Commands.argument("dimension", DimensionArgument.dimension())
+                                        .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
+                                        .executes(ctx -> {
+                                            Identifier loc = ctx.getArgument("dimension", Identifier.class);
+                                            return MapSyncerCommandLogic.executeSyncDimension(loc.toString());
+                                        })))
                         .then(net.minecraft.commands.Commands.literal("clearstate")
                                 .requires(source -> false)
                                 .executes(ctx -> MapSyncerCommandLogic.clearSyncState()))
