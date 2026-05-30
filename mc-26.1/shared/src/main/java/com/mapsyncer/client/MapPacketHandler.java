@@ -6,6 +6,7 @@ import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import com.mapsyncer.platform.XaeroReflectionHelper;
+import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
@@ -20,19 +21,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 地图数据包接收器。
- * 处理从服务端接收的地图同步数据包，并负责写入到 Xaero 地图目录。
- *
- * <p>主要功能：</p>
- * <ul>
- *   <li>注册数据包处理器，处理同步请求、响应和进度更新</li>
- *   <li>写入同步数据到 Xaero 目录，边接收边加载</li>
- *   <li>重置区域加载状态，触发地图重新加载</li>
- *   <li>检测超时和陈旧的同步请求，防止内存泄漏</li>
- *   <li>同步当前维度时，预先卸载视野范围内的region以便重新加载服务端数据</li>
- * </ul>
- *
- * <p>平台特定的 register() 方法由各平台薄包装器处理。</p>
+ * 客户端断开连接时的统一清理入口。
+ * 由各平台的断开连接事件处理器调用。
  */
 public class MapPacketHandler {
 
@@ -89,6 +79,7 @@ public class MapPacketHandler {
         lastMwDir = null;
         syncStartTime = 0;
         clearReceivedChunks();
+        loadedRegions.clear();
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
@@ -99,6 +90,20 @@ public class MapPacketHandler {
         if (updatedRegionCoords != null) {
             updatedRegionCoords.clear();
         }
+    }
+
+    /**
+     * 客户端断开连接时的统一清理入口。
+     * 清理所有同步状态、反射缓存、哈希计算线程池和时间戳缓存。
+     */
+    public static void onDisconnect() {
+        resetServerStatus();
+        clearSyncData();
+        XaeroReflectionHelper.clearCache();
+        XaeroMapDataHandler.clearRegionTracking();
+        ClientHashManager.shutdown();
+        ClientTimestampCache.resetInstance();
+        LOGGER.info("Client disconnected, all resources cleaned up");
     }
 
     /**

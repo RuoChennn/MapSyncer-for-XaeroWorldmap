@@ -1,7 +1,6 @@
 package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
-import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.impl.ForgeNetworkHandler;
@@ -84,10 +83,7 @@ public class MapSyncer {
     public static class ClientEventHandler {
         @SubscribeEvent
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
-            MapPacketReceiver.resetServerStatus();
-            MapPacketReceiver.clearSyncData();
-            SyncProgressTracker.shutdown();
-            LOGGER.info("Client disconnected from server, reset server status and cleaned up resources");
+            MapPacketReceiver.onDisconnect();
         }
     }
 

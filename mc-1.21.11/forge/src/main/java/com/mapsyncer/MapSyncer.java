@@ -82,9 +82,7 @@ public class MapSyncer {
     public static class ClientEventHandler {
         @SubscribeEvent
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
-            MapPacketReceiver.resetServerStatus();
-            MapPacketReceiver.clearSyncData();
-            LOGGER.info("Client disconnected from server, reset server status");
+            MapPacketReceiver.onDisconnect();
         }
     }
 

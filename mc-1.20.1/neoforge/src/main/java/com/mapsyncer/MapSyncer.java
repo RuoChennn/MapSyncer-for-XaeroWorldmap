@@ -1,7 +1,6 @@
 package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
-import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.impl.NeoForgeNetworkHandler;
@@ -94,12 +93,7 @@ public class MapSyncer {
          */
         @SubscribeEvent
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
-            // 断开连接时不改变同步状态（保持 in_progress），下次加入时可断点续传
-            MapPacketReceiver.resetServerStatus();
-            MapPacketReceiver.clearSyncData();
-            // 关闭进度追踪器的线程池，释放资源
-            SyncProgressTracker.shutdown();
-            LOGGER.info("Client disconnected from server, reset server status and cleaned up resources");
+            MapPacketReceiver.onDisconnect();
         }
     }
 

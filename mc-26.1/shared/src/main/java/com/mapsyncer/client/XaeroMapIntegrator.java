@@ -314,15 +314,16 @@ public class XaeroMapIntegrator {
         if (!dimDir.toFile().exists()) {
             try {
                 if (worldMapDir.toFile().exists() && worldMapDir.toFile().isDirectory()) {
-                    Files.list(worldMapDir)
-                        .filter(p -> p.getFileName().toString().startsWith("Multiplayer_"))
-                        .filter(p -> Files.isDirectory(p))
-                        .forEach(p -> {
-                            Path candidateDim = p.resolve("null");
-                            if (candidateDim.toFile().exists()) {
-                                LOGGER.debug("Found existing Xaero directory: {}", candidateDim);
-                            }
-                        });
+                    try (var stream = Files.list(worldMapDir)) {
+                        stream.filter(p -> p.getFileName().toString().startsWith("Multiplayer_"))
+                            .filter(p -> Files.isDirectory(p))
+                            .forEach(p -> {
+                                Path candidateDim = p.resolve("null");
+                                if (candidateDim.toFile().exists()) {
+                                    LOGGER.debug("Found existing Xaero directory: {}", candidateDim);
+                                }
+                            });
+                    }
                 }
             } catch (IOException e) {
                 LOGGER.debug("Failed to scan world-map directory: {}", e.getMessage());

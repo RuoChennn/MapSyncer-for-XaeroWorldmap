@@ -2,7 +2,6 @@ package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.MapSyncerCommand;
-import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -45,14 +44,7 @@ public class MapSyncerClient implements ClientModInitializer {
         });
 
         ClientPlayConnectionEvents.DISJOIN.register((handler, client) -> {
-            LOGGER.info("Client disconnected from server, resetting state...");
-            // 閲嶇疆鏈嶅姟绔畨瑁呯姸鎬?
-            MapPacketReceiver.resetServerStatus();
-            MapPacketReceiver.clearSyncData();
-            // 娓呯悊 XaeroMapIntegrator 鍖哄煙杩借釜
-            com.mapsyncer.client.XaeroMapDataHandler.clearRegionTracking();
-            // 鍏抽棴杩涘害杩借釜鍣ㄧ殑绾跨▼姹狅紙闃叉鍐呭瓨娉勬紡锛?
-            SyncProgressTracker.shutdown();
+            MapPacketReceiver.onDisconnect();
         });
 
         LOGGER.info("MapSyncer client initialized");

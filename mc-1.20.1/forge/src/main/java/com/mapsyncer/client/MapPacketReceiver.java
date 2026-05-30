@@ -21,4 +21,5 @@ public class MapPacketReceiver {
     public static void clearReceivedChunks() { MapPacketHandler.clearReceivedChunks(); }
     public static boolean isSyncStale() { return MapPacketHandler.isSyncStale(); }
     public static void prepareSyncForDimension(String targetDimension) { MapPacketHandler.prepareSyncForDimension(targetDimension); }
+    public static void onDisconnect() { MapPacketHandler.onDisconnect(); }
 }
