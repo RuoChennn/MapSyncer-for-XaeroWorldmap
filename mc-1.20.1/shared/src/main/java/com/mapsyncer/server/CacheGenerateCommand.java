@@ -50,7 +50,13 @@ public class CacheGenerateCommand {
                         .then(Commands.argument("dimension", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
                                     for (ServerLevel level : ctx.getSource().getServer().getAllLevels()) {
-                                        builder.suggest(level.dimension().location().toString());
+                                        String dimId = level.dimension().location().toString();
+                                        // 只建议短名（word() 不支持 ':' 字符）
+                                        if (dimId.startsWith("minecraft:")) {
+                                            builder.suggest(dimId.substring(10));
+                                        } else {
+                                            builder.suggest(dimId);
+                                        }
                                     }
                                     return builder.buildFuture();
                                 })
@@ -246,7 +252,8 @@ public class CacheGenerateCommand {
     }
 
     /**
-     * 从字符串解析维度，支持 "minecraft:overworld"、"overworld"、"the_nether" 等格式。
+     * 从字符串解析维度，支持短名和全名。
+     * <p>短名自动尝试补全 "minecraft:" 前缀，再按路径匹配所有维度。</p>
      */
     private static ServerLevel findDimension(MinecraftServer server, String dimId) {
         // 补全命名空间
@@ -254,9 +261,15 @@ public class CacheGenerateCommand {
             dimId = "minecraft:" + dimId;
         }
         ResourceLocation loc = new ResourceLocation(dimId);
+        // 精确匹配
         for (ServerLevel level : server.getAllLevels()) {
-            ResourceLocation levelLoc = level.dimension().location();
-            if (levelLoc.equals(loc)) {
+            if (level.dimension().location().equals(loc)) {
+                return level;
+            }
+        }
+        // 按路径匹配（支持 modded 维度短名，如 "twilight_forest" → "twilightforest:twilight_forest"）
+        for (ServerLevel level : server.getAllLevels()) {
+            if (level.dimension().location().getPath().equals(loc.getPath())) {
                 return level;
             }
         }
