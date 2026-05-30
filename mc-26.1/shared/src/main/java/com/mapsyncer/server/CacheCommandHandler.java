@@ -269,7 +269,7 @@ public class CacheCommandHandler {
      * 获取友好的维度名称
      */
     public static String getFriendlyDimensionName(ResourceKey<Level> dimension) {
-        return DimensionPathMapping.getInstance().getFriendlyName(dimension);
+        return DimensionPathMapping.getInstance().getFriendlyName(dimension.identifier().getPath());
     }
 
     /**

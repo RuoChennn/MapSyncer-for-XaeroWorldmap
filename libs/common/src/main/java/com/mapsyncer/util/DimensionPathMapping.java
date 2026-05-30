@@ -1,7 +1,5 @@
 package com.mapsyncer.util;
 
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -348,16 +346,6 @@ public class DimensionPathMapping {
     }
 
     /**
-     * 根据维度 ResourceKey 获取文件系统目录名
-     *
-     * @param dimensionKey 维度 ResourceKey
-     * @return 文件系统目录名
-     */
-    public String getFolderName(ResourceKey<Level> dimensionKey) {
-        return getFolderName(dimensionKey.location().toString());
-    }
-
-    /**
      * 根据文件系统目录名获取 ResourceLocation path
      *
      * @param folderName 文件系统目录名
@@ -522,16 +510,6 @@ public class DimensionPathMapping {
      */
     public String getFriendlyName(String dimPath) {
         return normalizeDimPath(dimPath);
-    }
-
-    /**
-     * 获取用户友好的维度显示名称
-     *
-     * @param dimensionKey 维度 ResourceKey
-     * @return 标准化后的维度名称
-     */
-    public String getFriendlyName(ResourceKey<Level> dimensionKey) {
-        return getFriendlyName(dimensionKey.location().getPath());
     }
 
     // ========== 辅助方法 ==========

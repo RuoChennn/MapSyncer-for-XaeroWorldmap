@@ -526,7 +526,7 @@ public class ConversionOrchestrator {
         LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA), {} failed",
             dimPath, regions.size(), processedCount - skippedCount, skippedCount, dimRegions.skippedEmptyCount(), failedRegions.size());
 
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension());
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension().identifier().getPath());
         completedDimensions.add(friendlyName);
 
         mcaCache.saveCache();
