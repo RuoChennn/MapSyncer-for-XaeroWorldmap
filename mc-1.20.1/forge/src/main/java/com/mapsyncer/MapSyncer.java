@@ -13,6 +13,7 @@ import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandlerLogic;
+import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -23,6 +24,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -31,6 +33,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * MapSyncer模组的主类 - Forge 1.20.1 版本
+ *
+ * Forge 1.20.1 使用 SimpleNetworkWrapper API 进行网络注册，
+ * 网络层在 ForgeNetworkHandler 的静态初始化中完成注册。
  */
 @Mod(MapSyncer.MOD_ID)
 public class MapSyncer {
@@ -39,9 +44,6 @@ public class MapSyncer {
     public static String VERSION = "unknown";
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
 
-    /** Forge 网络处理器实例 */
-    private static ForgeNetworkHandler networkHandler;
-
     public MapSyncer(IEventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
@@ -49,37 +51,34 @@ public class MapSyncer {
         PlatformManager.initialize(new ForgeLegacyPlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
-        // 初始化 NetworkManager（Forge 网络实现）
-        networkHandler = new ForgeNetworkHandler();
-        NetworkManager.initialize(networkHandler);
-        LOGGER.info("NetworkManager initialized");
+        // 初始化 DimensionPathMapping（1.20.X 使用传统格式）
+        DimensionPathMapping.getInstance().initialize(20);
+        LOGGER.info("DimensionPathMapping initialized for version 1.20.X");
 
         // 注册配置文件（Forge 1.20.1 使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
+        // 创建网络处理器实例
+        ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();
+        NetworkManager.initialize(networkHandler);
+        LOGGER.info("NetworkManager initialized for Forge 1.20.1");
+
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // 客户端：注册网络处理器
             networkHandler.registerHandlers(null);
             MinecraftForge.EVENT_BUS.register(ClientEventHandler.class);
-            LOGGER.info("MapSyncer initialized (client mode, Forge 1.20)");
+            LOGGER.info("MapSyncer initialized (client mode, Forge 1.20.1)");
         } else {
             // 服务端：注册网络处理器
             networkHandler.registerHandlers(null);
             ServerSyncHandlerLogic.registerHandlers();
             MinecraftForge.EVENT_BUS.register(this);
-            LOGGER.info("MapSyncer initialized (server mode, Forge 1.20)");
+            LOGGER.info("MapSyncer initialized (server mode, Forge 1.20.1)");
         }
     }
 
-    /**
-     * 获取网络处理器实例
-     */
-    public static ForgeNetworkHandler getNetworkHandler() {
-        return networkHandler;
-    }
-
-    @net.minecraftforge.fml.common.Mod.EventBusSubscriber(value = Dist.CLIENT, bus = net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus.FORGE)
+    @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.FORGE)
     public static class ClientEventHandler {
         @SubscribeEvent
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
