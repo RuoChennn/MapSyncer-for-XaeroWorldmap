@@ -316,23 +316,27 @@ public class BlockPropertyResolver {
      * @return 光照遮挡值（0-15）
      */
     private static int getLightBlock(BlockState state) {
+        // 优先检查流体：propagatesSkylightDown() 对水返回 true，
+        // 但水实际阻挡 2 级光照，需要特殊处理
+        FluidState fluidState = state.getFluidState();
+        if (!fluidState.isEmpty()) {
+            // 水：每层阻挡 2 级光照（参考原版 lightBlock 值）
+            if (fluidState.getType() == Fluids.WATER || fluidState.getType() == Fluids.FLOWING_WATER) {
+                return 2;
+            }
+            // 熔岩：阻挡全部光照（15 级）
+            if (fluidState.getType() == Fluids.LAVA || fluidState.getType() == Fluids.FLOWING_LAVA) {
+                return 15;
+            }
+        }
+
         try {
             // MC 26.1: getLightBlock(BlockGetter, BlockPos) 已移除
-            // 使用 propagatesSkylightDown() 替代（true = 光照穿透，等效 lightBlock=0）
+            // propagatesSkylightDown() = true 表示光照穿透（等效 lightBlock=0）
+            // 注意：流体已在上方处理，此处仅处理固体方块
             return state.propagatesSkylightDown() ? 0 : 15;
         } catch (RuntimeException e) {
             // 备用：基于方块类型估算
-            FluidState fluidState = state.getFluidState();
-            if (!fluidState.isEmpty()) {
-                // 水：遮挡值为2，熔岩：遮挡值为15
-                if (fluidState.getType() == Fluids.WATER || fluidState.getType() == Fluids.FLOWING_WATER) {
-                    return 2;
-                }
-                if (fluidState.getType() == Fluids.LAVA || fluidState.getType() == Fluids.FLOWING_LAVA) {
-                    return 15;
-                }
-            }
-            // 空气：遮挡值为0
             if (state.isAir()) {
                 return 0;
             }
