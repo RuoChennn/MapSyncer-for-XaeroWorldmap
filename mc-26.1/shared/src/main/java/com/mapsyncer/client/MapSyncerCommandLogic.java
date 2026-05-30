@@ -284,9 +284,8 @@ public class MapSyncerCommandLogic {
      */
     public static Path findMwDir(Path dimDir) {
         if (dimDir == null || !dimDir.toFile().exists()) return null;
-        try {
-            return Files.list(dimDir)
-                    .filter(p -> p.getFileName().toString().startsWith("mw$"))
+        try (var dirs = Files.list(dimDir)) {
+            return dirs.filter(p -> p.getFileName().toString().startsWith("mw$"))
                     .findFirst()
                     .orElse(null);
         } catch (IOException e) {

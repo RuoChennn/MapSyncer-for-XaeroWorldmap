@@ -150,16 +150,17 @@ public class ConversionOrchestrator {
 
         try {
             // 递归删除目录中的所有文件和子目录
-            Files.walk(dimCacheDir)
-                    .sorted((a, b) -> -a.compareTo(b)) // 先删除文件再删除目录
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                            LOGGER.debug("Deleted: {}", path);
-                        } catch (IOException e) {
-                            LOGGER.warn("Failed to delete: {}", path);
-                        }
-                    });
+            try (var files = Files.walk(dimCacheDir)) {
+                files.sorted((a, b) -> -a.compareTo(b)) // 先删除文件再删除目录
+                        .forEach(path -> {
+                            try {
+                                Files.deleteIfExists(path);
+                                LOGGER.debug("Deleted: {}", path);
+                            } catch (IOException e) {
+                                LOGGER.warn("Failed to delete: {}", path);
+                            }
+                        });
+            }
             LOGGER.info("Cleared cache directory: {}", dimCacheDir);
         } catch (IOException e) {
             LOGGER.error("Failed to clear dimension cache: {}", dimCacheDir, e);
