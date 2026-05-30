@@ -23,8 +23,6 @@ public class MapSyncerCommand {
                                 .executes(ctx -> { MapSyncerCommandLogic.showHelp(ctx.getSource().hasPermission(4)); return Command.SINGLE_SUCCESS; }))
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
-                                .then(net.minecraft.commands.Commands.literal("all")
-                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncAll()))
                                 .then(net.minecraft.commands.Commands.argument("dimension", StringArgumentType.greedyString())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> MapSyncerCommandLogic.executeSyncDimension(StringArgumentType.getString(ctx, "dimension")))))

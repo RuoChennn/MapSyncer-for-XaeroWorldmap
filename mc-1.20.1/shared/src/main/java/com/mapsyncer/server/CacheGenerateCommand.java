@@ -3,15 +3,14 @@ package com.mapsyncer.server;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -25,47 +24,32 @@ import java.util.List;
  * - /mapsyncer help - 显示帮助信息
  * - /mapsyncer generate - 生成所有维度的地图缓存
  * - /mapsyncer generate <dimension> - 生成指定维度的地图缓存
+ * - /mapsyncer generate <dimension> --force - 强制重新生成指定维度
  * - /mapsyncer generate <dimension> <x> <z> - 生成指定区域的地图缓存
- * - /mapsyncer generate <dimension> force - 强制重新生成指定维度
  * - /mapsyncer status - 显示当前生成状态
- * - /mapsyncer incremental off/tick/scheduled/status - 配置增量更新模式
+ * - /mapsyncer incremental off/tick/scheduled - 配置增量更新模式
+ *
+ * 维度参数使用原版 {@link DimensionArgument}，支持 namespace:path 且可安全序列化。
  *
  * 需要管理员权限（permission level 4）才能执行。
  */
 public class CacheGenerateCommand {
 
-    /**
-     * 注册命令到命令分发器
-     *
-     * @param dispatcher Brigadier命令分发器
-     */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("mapsyncerserver")
+        dispatcher.register(Commands.literal("mapsyncer")
                 .requires(source -> source.hasPermission(4))
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
                         .executes(CacheGenerateCommand::showHelp))
                 .then(Commands.literal("generate")
                         .executes(CacheGenerateCommand::generateAll)
-                        .then(Commands.argument("dimension", StringArgumentType.word())
-                                .suggests((ctx, builder) -> {
-                                    for (ServerLevel level : ctx.getSource().getServer().getAllLevels()) {
-                                        String dimId = level.dimension().location().toString();
-                                        // 只建议短名（word() 不支持 ':' 字符）
-                                        if (dimId.startsWith("minecraft:")) {
-                                            builder.suggest(dimId.substring(10));
-                                        } else {
-                                            builder.suggest(dimId);
-                                        }
-                                    }
-                                    return builder.buildFuture();
-                                })
+                        .then(Commands.argument("dimension", DimensionArgument.dimension())
                                 .executes(CacheGenerateCommand::generateDimension)
+                                .then(Commands.literal("--force")
+                                        .executes(CacheGenerateCommand::generateDimensionForce))
                                 .then(Commands.argument("x", IntegerArgumentType.integer())
                                         .then(Commands.argument("z", IntegerArgumentType.integer())
-                                                .executes(CacheGenerateCommand::generateSingleRegion)))
-                                .then(Commands.literal("force")
-                                        .executes(CacheGenerateCommand::generateDimensionForce))))
+                                                .executes(CacheGenerateCommand::generateSingleRegion)))))
                 .then(Commands.literal("status")
                         .executes(CacheGenerateCommand::showStatus))
                 .then(Commands.literal("incremental")
@@ -105,19 +89,13 @@ public class CacheGenerateCommand {
     }
 
     private static int generateDimension(CommandContext<CommandSourceStack> ctx) {
-        String dimId = StringArgumentType.getString(ctx, "dimension");
-        MinecraftServer server = ctx.getSource().getServer();
-        ServerLevel level = findDimension(server, dimId);
-        if (level == null) {
-            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.dimension_not_found", dimId));
-            return 0;
-        }
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_dim", friendlyName), false);
 
-        CacheCommandHandler.generateDimension(server, dimensionId, () -> {
+        CacheCommandHandler.generateDimension(ctx.getSource().getServer(), dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.dim_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
@@ -128,19 +106,13 @@ public class CacheGenerateCommand {
     }
 
     private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) {
-        String dimId = StringArgumentType.getString(ctx, "dimension");
-        MinecraftServer server = ctx.getSource().getServer();
-        ServerLevel level = findDimension(server, dimId);
-        if (level == null) {
-            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.dimension_not_found", dimId));
-            return 0;
-        }
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_force", friendlyName), false);
 
-        CacheCommandHandler.generateDimensionForce(server, dimensionId, () -> {
+        CacheCommandHandler.generateDimensionForce(ctx.getSource().getServer(), dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.force_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
@@ -151,16 +123,11 @@ public class CacheGenerateCommand {
     }
 
     private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) {
-        String dimId = StringArgumentType.getString(ctx, "dimension");
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         int x = IntegerArgumentType.getInteger(ctx, "x");
         int z = IntegerArgumentType.getInteger(ctx, "z");
-        MinecraftServer server = ctx.getSource().getServer();
-        ServerLevel level = findDimension(server, dimId);
-        if (level == null) {
-            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.dimension_not_found", dimId));
-            return 0;
-        }
         ResourceKey<Level> dimension = level.dimension();
+        MinecraftServer server = ctx.getSource().getServer();
 
         if (!CacheCommandHandler.checkRegionExists(server, dimension, x, z)) {
             String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
@@ -249,30 +216,5 @@ public class CacheGenerateCommand {
         CacheCommandHandler.setScheduledTime(ctx.getSource().getServer(), hour, minute);
         ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.incremental_scheduled_set", hour, minute), false);
         return Command.SINGLE_SUCCESS;
-    }
-
-    /**
-     * 从字符串解析维度，支持短名和全名。
-     * <p>短名自动尝试补全 "minecraft:" 前缀，再按路径匹配所有维度。</p>
-     */
-    private static ServerLevel findDimension(MinecraftServer server, String dimId) {
-        // 补全命名空间
-        if (!dimId.contains(":")) {
-            dimId = "minecraft:" + dimId;
-        }
-        ResourceLocation loc = new ResourceLocation(dimId);
-        // 精确匹配
-        for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().equals(loc)) {
-                return level;
-            }
-        }
-        // 按路径匹配（支持 modded 维度短名，如 "twilight_forest" → "twilightforest:twilight_forest"）
-        for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().getPath().equals(loc.getPath())) {
-                return level;
-            }
-        }
-        return null;
     }
 }

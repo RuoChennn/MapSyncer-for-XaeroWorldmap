@@ -60,12 +60,12 @@ public class MapSyncerCommandLogic {
     }
 
     /**
-     * 提供维度名称建议。
+     * 提供维度名称建议（namespace:path 格式）。
      */
     public static void suggestDimensions(SuggestionsBuilder builder) {
-        builder.suggest("overworld");
-        builder.suggest("the_nether");
-        builder.suggest("the_end");
+        builder.suggest("minecraft:overworld");
+        builder.suggest("minecraft:the_nether");
+        builder.suggest("minecraft:the_end");
         builder.suggest("all");
 
         Set<String> added = new HashSet<>();

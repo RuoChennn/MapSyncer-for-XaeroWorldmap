@@ -503,13 +503,21 @@ public class DimensionPathMapping {
     }
 
     /**
-     * 获取用户友好的维度显示名称
+     * 获取用户友好的维度显示名称（namespace:path 格式）。
      *
-     * @param dimPath 维度路径
-     * @return 标准化后的维度名称
+     * <p>接受任何格式的输入（Xaero 目录名、文件系统目录名、ResourceLocation path），
+     * 统一返回 {@code namespace:path} 格式。</p>
+     *
+     * @param dimPath 维度路径（支持 Xaero 格式如 null/DIM-1、文件系统格式、ResourceLocation 格式）
+     * @return namespace:path 格式的维度名称（如 minecraft:overworld）
      */
     public String getFriendlyName(String dimPath) {
-        return normalizeDimPath(dimPath);
+        String serverDim = toServerDimension(dimPath);
+        String normalized = normalizeDimPath(serverDim);
+        if (normalized.contains(":")) {
+            return normalized;
+        }
+        return "minecraft:" + normalized;
     }
 
     // ========== 辅助方法 ==========

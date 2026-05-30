@@ -9,7 +9,7 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 /**
  * 客户端命令注册。
  *
- * <p>使用 {@code /mapsyncer} 前缀。服务端命令通过 {@code /mapsyncerserver} 执行。</p>
+ * <p>使用 {@code /mapsyncer} 前缀。维度名支持短名（overworld）和完整 namespace:path 格式。
  */
 public class MapSyncerCommand {
 
@@ -21,9 +21,7 @@ public class MapSyncerCommand {
                                 .executes(ctx -> { MapSyncerCommandLogic.showHelp(false); return Command.SINGLE_SUCCESS; }))
                         .then(ClientCommandManager.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
-                                .then(ClientCommandManager.literal("all")
-                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncAll()))
-                                .then(ClientCommandManager.argument("dimension", StringArgumentType.word())
+                                .then(ClientCommandManager.argument("dimension", StringArgumentType.greedyString())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> MapSyncerCommandLogic.executeSyncDimension(StringArgumentType.getString(ctx, "dimension")))))
                         .then(ClientCommandManager.literal("clearstate")

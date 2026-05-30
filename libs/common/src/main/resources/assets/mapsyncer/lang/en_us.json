@@ -32,7 +32,7 @@
   "mapsyncer.help.server.generate": "/mapsyncer generate - Generate map cache for all dimensions",
   "mapsyncer.help.server.generate_dim": "/mapsyncer generate <dim> - Generate cache for specified dimension (incremental)",
   "mapsyncer.help.server.generate_region": "/mapsyncer generate <dim> <x> <z> - Generate single region",
-  "mapsyncer.help.server.generate_force": "/mapsyncer generate <dim> force - Force regenerate (ignore existing cache)",
+  "mapsyncer.help.server.generate_force": "/mapsyncer generate <dim> --force - Force regenerate (ignore existing cache)",
   "mapsyncer.help.server.status": "/mapsyncer status - Show generation task and incremental update status",
   "mapsyncer.help.server.incremental_header": "Incremental Update Commands:",
   "mapsyncer.help.server.incremental_off": "/mapsyncer incremental off - Disable incremental updates",
