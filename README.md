@@ -10,20 +10,17 @@
 
 ### 平台支持
 
-| 平台 | Minecraft 版本 | 加载器版本 | Java | 状态 |
-|------|----------------|------------|------|------|
-| **NeoForge** | 1.21.1 | 21.1+ | 21 | ✅ 编译通过 |
-| **NeoForge** | 1.21.11 | 21.11+ | 21 | ⚠️ 编译失败 |
-| **Forge** | 1.20.1 | 47+ | 17 | ✅ 编译通过 |
-| **Forge** | 1.20.4 | 49+ | 17 | ⚠️ 编译失败 |
-| **Forge** | 1.21.1 | 52+ | 21 | ✅ 编译通过 |
-| **Fabric** | 1.20.1 | Fabric API 0.83+ | 17 | ✅ 编译通过 |
-| **Fabric** | 1.20.4 | Fabric API 0.92+ | 17 | ⚠️ 编译失败 |
-| **Fabric** | 1.21.1 | Fabric API 0.107+ | 21 | ✅ 编译通过 |
+| 平台 | 1.20.1 | 1.21.1 |
+|------|:------:|:------:|
+| **Forge** | ✅ | ✅ |
+| **NeoForge** | — | ✅ |
+| **Fabric** | ✅ | ✅ |
+
+> 详细平台兼容性信息见 [`docs/features.md`](docs/features.md)
 
 ### 客户端依赖
 
-本mod设计为C/S交互，故暂不支持游戏内置服务器，所有问题暂时不会受理
+本模组基于客户端-服务端网络通信设计，暂不支持单人游戏内置服务器
 
 | 依赖 | 要求 |
 |------|------|
@@ -69,7 +66,7 @@
 
 ### 服务端命令（需 OP 权限）
 
-> 服务端命令前缀为/mapsyncer
+> Forge/NeoForge 服务端命令前缀为 `/mapsyncer`，Fabric 为 `/mapsyncerserver`（避免与客户端 `/mapsyncer` 冲突）
 
 | 命令 | 说明 |
 |------|------|
@@ -94,7 +91,8 @@
 
 ### 服务端配置
 
-配置文件位于 `config/mapsyncer-server.toml`。
+Forge 配置文件位于 `world/serverconfig/mapsyncer-server.toml`（每个世界独立配置）
+NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`，Fabric 为 `.properties`）
 
 **通用设置 `[general]`**
 
@@ -144,15 +142,21 @@ libs/                   抽象库层（平台无关，编译为独立 JAR）
 ├── core/               纯 Java 核心：MCA/NBT 解析、工具类
 └── platform-api/       平台抽象接口、网络 Payload 定义
 
-shared/                 源码复用层（由平台模块 sourceSet 引用）
-├── common/             全版本共享的 MC API 代码
-├── mc-1.20/            MC 1.20.x 版本特定代码
-└── mc-1.21/            MC 1.21.x 版本特定代码
+mc-1.20.1/              1.20.1 版本
+├── shared/             源码复用层（由平台模块 sourceSet 引用）
+├── fabric/             平台实现层（编译产出最终 mod JAR）
+├── forge/
+└── neoforge/
 
-platforms/              平台实现层（编译产出最终 mod JAR）
-├── neoforge/           NeoForge 平台实现
-├── forge/              Forge 平台实现
-└── fabric/             Fabric 平台实现
+mc-1.21.1/              1.21.1 版本
+├── shared/
+├── fabric/
+├── forge/
+└── neoforge/
+
+mc-26.1/                26.1 版本（迁移中）
+├── shared/
+└── neoforge/
 ```
 
 ### 工作流
@@ -253,18 +257,19 @@ platforms/              平台实现层（编译产出最终 mod JAR）
 ## 构建
 
 ```bash
-# 构建所有平台
-./gradlew build -x test --parallel collectJars
+# 构建所有活跃平台（并行）
+./gradlew build -x test --parallel
 
 # 构建单个平台
-./gradlew :platforms:forge:1.21.1:build -x test
+./gradlew :mc-1.21.1:forge:build -x test
+./gradlew :mc-1.21.1:fabric:build -x test
 
-# 快捷脚本（scripts/fastbuild/）
-build-all.bat                    # 构建全部
-build-forge-1.21.1.bat           # 构建指定平台
+# 快捷脚本
+scripts/fastbuild/build-all.bat          # 构建全部活跃平台
+scripts/fastbuild/build-forge-1.20.1.bat # 构建指定平台
 ```
 
-产物输出到 `build/lib/`。
+产物输出到各平台模块的 `build/libs/` 目录。
 
 ---
 
