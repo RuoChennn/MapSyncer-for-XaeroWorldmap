@@ -21,6 +21,7 @@ MapSyncer 是 Minecraft 多平台地图同步模组，将服务端已探索区�
 | **Fabric** | 1.20-1.20.1 | Fabric API 0.83+ | 17 | ✅ 编译通过 |
 | **Fabric** | 1.21.1 | Fabric API 0.107+ | 21 | ✅ 编译通过 |
 | **NeoForge** | 1.21.1 | 21.1+ | 21 | ✅ 编译通过 |
+| **NeoForge** | 26.1 | 26.1+ | 25 | ✅ 编译通过 |
 
 ### 架构分层
 
@@ -40,7 +41,7 @@ mc-1.21.1/          MC 1.21.1 版本
 ├── forge/
 └── neoforge/
 
-mc-26.1/            MC 26.1 版本（迁移中）
+mc-26.1/            MC 26.1 版本
 ├── shared/
 └── neoforge/
 ```
