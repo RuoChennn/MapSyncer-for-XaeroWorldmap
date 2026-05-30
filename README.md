@@ -23,6 +23,8 @@
 
 ### 客户端依赖
 
+本mod设计为C/S交互，故暂不支持游戏内置服务器，所有问题暂时不会受理
+
 | 依赖 | 要求 |
 |------|------|
 | Xaero's World Map | 1.40.11+ |
@@ -66,6 +68,8 @@
 - Mod 维度：完整 ID，如 `twilightforest:twilight_forest`
 
 ### 服务端命令（需 OP 权限）
+
+> fabric端服务端命令前缀为/mapsyncerserver
 
 | 命令 | 说明 |
 |------|------|
