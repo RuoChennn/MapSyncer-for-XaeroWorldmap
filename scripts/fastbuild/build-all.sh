@@ -11,3 +11,4 @@ echo
 echo "========================================"
 echo "  Build Complete! Output: build/lib/"
 echo "========================================"
+ls -la build/lib/*.jar 2>/dev/null || echo "No JARs found in build/lib"

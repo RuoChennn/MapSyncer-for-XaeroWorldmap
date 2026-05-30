@@ -1,35 +1,46 @@
 # MapSyncer 分版本构建指南
 
-## Gradle 版本兼容性问题
+## 当前可用模块
 
-由于不同 Minecraft 版本和平台需要不同版本的 Gradle：
+| MC 版本 | Fabric | Forge | NeoForge |
+|---------|--------|-------|----------|
+| 1.20.1  | fabric | forge | neoforge |
+| 1.21.1  | fabric | forge | neoforge |
+| 26.1    | fabric | —     | neoforge |
+
+## Gradle 版本兼容性
 
 | 平台/版本 | Gradle 版本 | 原因 |
 |----------|------------|------|
-| NeoForge 1.20.x | 8.5 | NeoGradle 6.x 最高支持 Gradle 8.5 |
-| NeoForge 1.21.x | 8.9 | ModDev 2.x 需要 Gradle 8.8+ |
-| Fabric | 8.9 | Fabric Loom 1.7 需要 Gradle 8.8+ |
-| Forge | 8.9 | ForgeGradle 6.x 支持 Gradle 8.x |
+| NeoForge 1.20.1 | 8.5 | NeoGradle 6.x 最高支持 Gradle 8.5 |
+| 其他所有平台 | 8.9 | Loom 1.7+ / ForgeGradle 6.x+ / ModDev 2.x |
 
 ## 使用构建脚本
 
-使用 `fastbuild/build-target.ps1` 脚本自动切换 Gradle 版本：
+### PowerShell 构建工具
 
 ```powershell
-# 构建 NeoForge 1.21.1（自动使用 Gradle 8.9）
-.\fastbuild\build-target.ps1 neoforge-1.21.1
+# 构建 Forge 1.20.1
+.\scripts\fastbuild\build-target.ps1 forge-1.20.1 -Clean -NoTest
 
-# 构建 NeoForge 1.20.4（自动使用 Gradle 8.5）
-.\fastbuild\build-target.ps1 neoforge-1.20.4
+# 构建所有版本
+.\scripts\fastbuild\build-target.ps1 all -NoTest
+```
 
-# 构建所有 NeoForge 1.21.x 版本
-.\fastbuild\build-target.ps1 neoforge-all
+### Windows 批处理
 
-# 清理后构建
-.\fastbuild\build-target.ps1 neoforge-1.21.1 -Clean
+```batch
+# 构建指定版本
+scripts\fastbuild\build-forge-1.20.1.bat
 
-# 跳过测试
-.\fastbuild\build-target.ps1 neoforge-1.21.1 -NoTest
+# 构建全部版本
+scripts\fastbuild\build-all.bat
+```
+
+### Linux / WSL
+
+```bash
+bash scripts/fastbuild/build-all.sh
 ```
 
 ## 手动切换 Gradle 版本
@@ -37,26 +48,15 @@
 编辑 `gradle/wrapper/gradle-wrapper.properties`：
 
 ```properties
-# 使用 Gradle 8.5
+# 使用 Gradle 8.5（仅 NeoForge 1.20.1 需要）
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
 
-# 使用 Gradle 8.9
+# 使用 Gradle 8.9（默认）
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-bin.zip
 ```
-
-## 当前可用模块
-
-### Gradle 8.9（默认）
-- core, platform-api, minecraft-common
-- neoforge-1.21.1, neoforge-1.21.11
-- forge-1.20.1, forge-1.20.4, forge-1.21.1, forge-1.21.11
-- fabric-1.20.1, fabric-1.20.4, fabric-1.21.1
-
-### Gradle 8.5（需要切换）
-- neoforge-1.20.4（配置问题待解决）
 
 ## 注意事项
 
 1. 切换 Gradle 版本后首次构建会下载对应版本的 Gradle
 2. Gradle wrapper 会缓存多个版本在 `~/.gradle/wrapper/dists/`
-3. NeoForge 1.20.x 构建需要额外解决 NeoForm 配置问题
+3. NeoForge 1.20.1 需要切换到 Gradle 8.5 后单独构建

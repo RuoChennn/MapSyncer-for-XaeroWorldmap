@@ -13,16 +13,13 @@ $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 # Gradle 版本映射
 $GradleVersions = @{
-    "neoforge-1.20.4" = "8.5"
-    "neoforge-1.21.1" = "8.9"
-    "neoforge-1.21.11" = "8.9"
+    "neoforge-1.20.1" = "8.5"
+    "neoforge-26.1" = "8.9"
     "forge-1.20.1" = "8.9"
-    "forge-1.20.4" = "8.9"
     "forge-1.21.1" = "8.9"
-    "forge-1.21.11" = "8.9"
     "fabric-1.20.1" = "8.9"
-    "fabric-1.20.4" = "8.9"
     "fabric-1.21.1" = "8.9"
+    "fabric-26.1" = "8.9"
     "core" = "8.9"
     "platform-api" = "8.9"
     "all" = "8.9"

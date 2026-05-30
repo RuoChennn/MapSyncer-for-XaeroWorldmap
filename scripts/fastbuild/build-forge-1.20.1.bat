@@ -11,8 +11,6 @@ echo.
 echo Collecting JARs to output...
 if not exist output mkdir output
 copy /y mc-1.20.1\forge\build\libs\*.jar output\ >nul
-copy /y libs\core\build\libs\*.jar output\ >nul
-copy /y libs\platform-api\build\libs\*.jar output\ >nul
 echo.
 echo Output: output\
 dir /b output\*.jar
