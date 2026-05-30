@@ -100,7 +100,7 @@ public class RegionConverterStandalone {
                                        BlockPropertyLookup blockLookup) throws IOException {
         MapRegionData data = new MapRegionData(minBuildHeight, lightMode);
 
-        try (McaReader reader = new McaReader(mcaPath.toString())) {
+        try (McaReader reader = McaReader.open(mcaPath.toString())) {
             int worldHeightRange = worldTopY - minBuildHeight;
             for (McaReader.ChunkData chunkData : reader.readAllChunks()) {
                 ChunkDataParser.ChunkInfo chunkInfo = ChunkDataParser.parseChunk(

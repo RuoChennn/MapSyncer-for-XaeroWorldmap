@@ -15,6 +15,7 @@ import java.nio.file.attribute.FileTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
@@ -91,6 +92,14 @@ public class ClientHashManager {
                     // 关闭旧的 pool（如果存在）
                     if (sharedPool != null && !sharedPool.isShutdown()) {
                         sharedPool.shutdown();
+                        try {
+                            if (!sharedPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                                sharedPool.shutdownNow();
+                            }
+                        } catch (InterruptedException e) {
+                            sharedPool.shutdownNow();
+                            Thread.currentThread().interrupt();
+                        }
                         LOGGER.info("Shutting down old ForkJoinPool (threads={})", currentPoolThreads);
                     }
 
@@ -164,19 +173,12 @@ public class ClientHashManager {
                     zipFiles.parallelStream()
                             .forEach(zipPath -> {
                                 try {
-                                    // Extract region coordinates from filename
                                     String fileName = zipPath.getFileName().toString();
                                     if (!fileName.endsWith(".zip")) return;
 
-                                    // Build relative path in server format (using serverDir as base)
-                                    // This ensures path format matches server's GenerationCache
                                     String relativePath = buildRelativePath(zipPath, serverDir);
-
-                                    // Compute CRC32 hash
                                     String hash = computeFileHash(zipPath);
 
-                                    // Use cached timestamp if available (from previous sync)
-                                    // This avoids issues where file modification time changes
                                     ClientTimestampCache.CacheEntry cached = cachedTimestamps.get(relativePath);
                                     long timestampSeconds;
                                     if (cached != null) {
@@ -184,7 +186,6 @@ public class ClientHashManager {
                                         LOGGER.debug("Region {}: using cached ts={}s, hash={}",
                                                 relativePath, timestampSeconds, hash);
                                     } else {
-                                        // No cached timestamp, use file modification time
                                         long timestampMillis = getFileModificationTime(zipPath);
                                         timestampSeconds = timestampMillis / 1000;
                                         LOGGER.debug("Region {}: using file ts={}s, hash={} (no cache)",
@@ -197,7 +198,7 @@ public class ClientHashManager {
                                     LOGGER.warn("Invalid region filename: {}", zipPath, e);
                                 }
                             })
-            ).get();  // Wait for completion
+            ).get(60, TimeUnit.SECONDS);  // Wait for completion with timeout
         } catch (Exception e) {
             LOGGER.error("Failed to compute hashes in parallel", e);
         }
@@ -415,6 +416,15 @@ public class ClientHashManager {
         ForkJoinPool pool = sharedPool;
         if (pool != null && !pool.isShutdown()) {
             pool.shutdown();
+            try {
+                if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            sharedPool = null;
             LOGGER.debug("ClientHashManager shared ForkJoinPool shutdown (threads={})", currentPoolThreads);
         }
     }

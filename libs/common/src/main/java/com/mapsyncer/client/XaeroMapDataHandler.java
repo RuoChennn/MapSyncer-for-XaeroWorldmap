@@ -195,14 +195,18 @@ public final class XaeroMapDataHandler {
         for (ChunkMapData chunk : chunks) {
             lastMwDir = writeChunkData(chunk, serverDir, worldId);
 
-            String relativePath = buildRelativePathForCache(chunk);
-            String hash = HashUtils.computeHash(chunk.data);
-            tsCache.update(relativePath, chunk.timestampSeconds, hash);
-            LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
-                    relativePath, chunk.timestampSeconds, hash);
+            if (tsCache != null) {
+                String relativePath = buildRelativePathForCache(chunk);
+                String hash = HashUtils.computeHash(chunk.data);
+                tsCache.update(relativePath, chunk.timestampSeconds, hash);
+                LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
+                        relativePath, chunk.timestampSeconds, hash);
+            }
         }
 
-        tsCache.save();
+        if (tsCache != null) {
+            tsCache.save();
+        }
         LOGGER.info("Saved timestamp cache for {} regions", chunks.size());
 
         return lastMwDir;
