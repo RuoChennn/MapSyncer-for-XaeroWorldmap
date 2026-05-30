@@ -56,5 +56,4 @@ include 'mc-1.21.11:neoforge'
 // MC 26.1
 include 'mc-26.1:shared'
 include 'mc-26.1:neoforge'
-// include 'mc-26.1:forge'
 // include 'mc-26.1:fabric'
