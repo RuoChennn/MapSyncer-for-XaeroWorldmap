@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -243,6 +244,26 @@ public class GenerationCache {
     public void clear() {
         cache.clear();
         save();
+    }
+
+    /**
+     * 移除以指定前缀开头的所有缓存记录。
+     *
+     * @param prefix 前缀（如 null/、DIM-1/）
+     * @return 移除的记录数
+     */
+    public int removeByPrefix(String prefix) {
+        int removed = 0;
+        for (String key : List.copyOf(cache.keySet())) {
+            if (key.startsWith(prefix)) {
+                cache.remove(key);
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            save();
+        }
+        return removed;
     }
 
     /**

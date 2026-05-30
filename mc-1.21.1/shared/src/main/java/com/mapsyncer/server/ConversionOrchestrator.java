@@ -149,9 +149,8 @@ public class ConversionOrchestrator {
         }
 
         try {
-            // 递归删除目录中的所有文件和子目录
             try (var files = Files.walk(dimCacheDir)) {
-                files.sorted((a, b) -> -a.compareTo(b)) // 先删除文件再删除目录
+                files.sorted((a, b) -> -a.compareTo(b))
                         .forEach(path -> {
                             try {
                                 Files.deleteIfExists(path);
@@ -164,6 +163,31 @@ public class ConversionOrchestrator {
             LOGGER.info("Cleared cache directory: {}", dimCacheDir);
         } catch (IOException e) {
             LOGGER.error("Failed to clear dimension cache: {}", dimCacheDir, e);
+        }
+    }
+
+    /**
+     * 清除 GenerationCache 中指定维度的记录。
+     *
+     * @param xaeroDimName Xaero 格式的维度名（如 null, DIM-1, DIM1, namespace$path）
+     */
+    private static void clearGenerationCacheEntries(String xaeroDimName) {
+        GenerationCache genCache = GenerationCache.getInstance(CACHE_DIR);
+        Map<String, GenerationCache.RegionMeta> all = genCache.getAll();
+        int removed = 0;
+        String prefix = xaeroDimName + "/";
+        for (String key : all.keySet()) {
+            if (key.startsWith(prefix)) {
+                genCache.update(key, 0L, "00000000");
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            genCache.save();
+            LOGGER.info("Cleared {} generation_cache entries for dimension: {} (prefix: {})",
+                    removed, xaeroDimName, prefix);
+        } else {
+            LOGGER.info("No generation_cache entries found for dimension: {}", xaeroDimName);
         }
     }
 
@@ -282,11 +306,12 @@ public class ConversionOrchestrator {
         ServerLevel level = server.getLevel(dimKey);
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
 
-        // 强制生成前先清除该维度的缓存目录
+        // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
         String fullDimId = dimKey.location().toString(); // 完整维度 ID（包含 namespace）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path dimCacheDir = CACHE_DIR.resolve(xaeroDimName);
         clearDimensionCache(dimCacheDir);
+        clearGenerationCacheEntries(xaeroDimName);
 
         // Force save all chunks before reading .mca files
         if (!saveAllChunks(server)) {

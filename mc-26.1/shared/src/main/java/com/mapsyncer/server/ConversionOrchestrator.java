@@ -149,9 +149,8 @@ public class ConversionOrchestrator {
         }
 
         try {
-            // 递归删除目录中的所有文件和子目录
             try (var files = Files.walk(dimCacheDir)) {
-                files.sorted((a, b) -> -a.compareTo(b)) // 先删除文件再删除目录
+                files.sorted((a, b) -> -a.compareTo(b))
                         .forEach(path -> {
                             try {
                                 Files.deleteIfExists(path);
@@ -164,6 +163,15 @@ public class ConversionOrchestrator {
             LOGGER.info("Cleared cache directory: {}", dimCacheDir);
         } catch (IOException e) {
             LOGGER.error("Failed to clear dimension cache: {}", dimCacheDir, e);
+        }
+    }
+
+    private static void clearGenerationCacheEntries(String xaeroDimName) {
+        int removed = GenerationCache.getInstance(CACHE_DIR).removeByPrefix(xaeroDimName + "/");
+        if (removed > 0) {
+            LOGGER.info("Cleared {} generation_cache entries for dimension: {}", removed, xaeroDimName);
+        } else {
+            LOGGER.info("No generation_cache entries found for dimension: {}", xaeroDimName);
         }
     }
 
@@ -282,11 +290,12 @@ public class ConversionOrchestrator {
         ServerLevel level = server.getLevel(dimKey);
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
 
-        // 强制生成前先清除该维度的缓存目录
+        // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
         String fullDimId = dimKey.identifier().toString(); // 完整维度 ID（包含 namespace）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path dimCacheDir = CACHE_DIR.resolve(xaeroDimName);
         clearDimensionCache(dimCacheDir);
+        clearGenerationCacheEntries(xaeroDimName);
 
         // Force save all chunks before reading .mca files
         if (!saveAllChunks(server)) {
