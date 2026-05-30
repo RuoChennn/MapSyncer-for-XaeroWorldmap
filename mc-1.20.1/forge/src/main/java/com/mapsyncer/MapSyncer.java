@@ -47,7 +47,7 @@ public class MapSyncer {
 
     public MapSyncer(FMLJavaModLoadingContext context) {
         IEventBus modBus = context.getModEventBus();
-        ModContainer modContainer = context.getContainer();
+        ModContainer modContainer = ModLoadingContext.get().getActiveContainer();
         VERSION = modContainer.getModInfo().getVersion().toString();
 
         // 初始化 Platform（Forge 1.20.1 实现）
