@@ -55,6 +55,21 @@ public class MapPacketHandler {
     /** 陈旧同步超时时间（10分钟） */
     private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
 
+    /** 同步完成防抖时长（Forge 网络层可能重复递送相同数据包） */
+    private static final long SYNC_COMPLETE_DEBOUNCE_MS = 500;
+
+    /** 上次同步完成时间戳，用于防抖 */
+    private static volatile long lastSyncCompleteTs = 0;
+
+    /** 进度更新去重：上次已处理的 processed 值 */
+    private static volatile int lastProgressProcessed = -1;
+    /** 进度更新去重：上次已处理的 total 值 */
+    private static volatile int lastProgressTotal = -1;
+    /** 进度更新去重：上次更新时间（毫秒） */
+    private static volatile long lastProgressTime = 0;
+    /** 进度更新去重阈值（相同值在此时间内重复到达则忽略） */
+    private static final long PROGRESS_DEDUP_MS = 100;
+
     /** 同步期间更新的区域坐标集合（仅存储坐标，不存储数据，节省内存） */
     private static volatile Set<XaeroMapDataHandler.RegionCoord> updatedRegionCoords = new HashSet<>();
 
@@ -167,6 +182,23 @@ public class MapPacketHandler {
 
             LOGGER.debug("Received sync response: status={}, chunks={}, isComplete={}", status, chunks.size(), payload.isComplete());
 
+            // Forge 网络层可能重复递送数据包，完成同步后 500ms 内的新 "ok" 包直接忽略
+            if ("ok".equals(status) && !payload.isComplete() && !syncInProgress) {
+                long elapsed = System.currentTimeMillis() - lastSyncCompleteTs;
+                if (elapsed < SYNC_COMPLETE_DEBOUNCE_MS) {
+                    LOGGER.debug("Debouncing duplicate sync packet ({}ms after complete)", elapsed);
+                    return;
+                }
+            }
+            // 完成包去重：500ms 内的重复完成包忽略
+            if (payload.isComplete() && !syncInProgress) {
+                long elapsed = System.currentTimeMillis() - lastSyncCompleteTs;
+                if (elapsed < SYNC_COMPLETE_DEBOUNCE_MS) {
+                    LOGGER.debug("Debouncing duplicate completion packet ({}ms after complete)", elapsed);
+                    return;
+                }
+            }
+
             // 获取时间戳缓存用于同步状态管理
             Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
             ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
@@ -265,6 +297,8 @@ public class MapPacketHandler {
                 int totalReceived = updatedRegionCoords.size();
                 LOGGER.info("同步完成: 总计 {} 个区域已处理", totalReceived);
 
+                lastSyncCompleteTs = System.currentTimeMillis();
+
                 if (!updatedRegionCoords.isEmpty()) {
                     XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.completeWithCount(totalReceived);
@@ -292,7 +326,18 @@ public class MapPacketHandler {
      */
     private static void handleProgressUpdate(SyncProgressPayload payload, PayloadContext context) {
         context.enqueueWork(() -> {
-            SyncProgressTracker.update(payload.processed(), payload.total(), payload.status());
+            // 进度去重：相同 (processed, total) 在 100ms 内到达视为重复
+            int processed = payload.processed();
+            int total = payload.total();
+            long now = System.currentTimeMillis();
+            if (processed == lastProgressProcessed && total == lastProgressTotal
+                    && now - lastProgressTime < PROGRESS_DEDUP_MS) {
+                return;
+            }
+            lastProgressProcessed = processed;
+            lastProgressTotal = total;
+            lastProgressTime = now;
+            SyncProgressTracker.update(processed, total, payload.status());
         });
     }
 
