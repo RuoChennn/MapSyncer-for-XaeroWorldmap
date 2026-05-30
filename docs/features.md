@@ -16,9 +16,9 @@ MapSyncer 是 Minecraft 多平台地图同步模组，将服务端已探索区�
 
 | 平台 | Minecraft 版本 | 加载器版本 | Java | 状态 |
 |------|----------------|------------|------|------|
-| **Forge** | 1.20.1 | 47+ | 17 | ✅ 编译通过 |
+| **Forge** | 1.20-1.20.1 | 47+ | 17 | ✅ 编译通过 |
 | **Forge** | 1.21.1 | 52+ | 21 | ✅ 编译通过 |
-| **Fabric** | 1.20.1 | Fabric API 0.83+ | 17 | ✅ 编译通过 |
+| **Fabric** | 1.20-1.20.1 | Fabric API 0.83+ | 17 | ✅ 编译通过 |
 | **Fabric** | 1.21.1 | Fabric API 0.107+ | 21 | ✅ 编译通过 |
 | **NeoForge** | 1.21.1 | 21.1+ | 21 | ✅ 编译通过 |
 
@@ -29,11 +29,10 @@ libs/               抽象库层（平台无关，编译为独立 JAR）
 ├── core/           纯 Java 核心（MCA 解析、NBT、工具类）
 └── platform-api/   平台抽象接口（40+ 方法）
 
-mc-1.20.1/          MC 1.20.1 版本
+mc-1.20.1/          MC 1.20-1.20.1 版本
 ├── shared/         源码复用层（不独立编译，由平台模块 sourceSet 引用）
 ├── fabric/         平台实现层（编译产出最终 mod JAR）
-├── forge/
-└── neoforge/
+└── forge/
 
 mc-1.21.1/          MC 1.21.1 版本
 ├── shared/
@@ -57,7 +56,7 @@ mc-26.1/            MC 26.1 版本（迁移中）
 | `/mapsyncer generate` | ✅ | 生成所有维度缓存 |
 | `/mapsyncer generate <dim>` | ✅ | 生成指定维度（增量模式） |
 | `/mapsyncer generate <dim> <x> <z>` | ✅ | 生成单个区域 |
-| `/mapsyncer generate <dim> force` | ✅ | 强制生成（清除缓存后重新生成） |
+| `/mapsyncer generate <dim> --force` | ✅ | 强制生成（清除缓存后重新生成） |
 | `/mapsyncer status` | ✅ | 查看生成进度和缓存统计（区域数量、各维度大小） |
 | `/mapsyncer incremental off` | ✅ | 关闭增量更新 |
 | `/mapsyncer incremental tick [interval]` | ✅ | Tick 模式（interval: 20-72000 ticks） |

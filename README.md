@@ -10,11 +10,12 @@
 
 ### 平台支持
 
-| 平台 | 1.20.1 | 1.21.1 |
-|------|:------:|:------:|
-| **Forge** | ✅ | ✅ |
-| **NeoForge** | — | ✅ |
-| **Fabric** | ✅ | ✅ |
+> 优先适配现代版本，1.20.4前neoforge尚未正式独立不做适配，26.1后forge未提供任何开发文档，不做适配
+
+| MC 版本 | Forge | NeoForge | Fabric |
+|---------|:-----:|:--------:|:------:|
+| 1.20.1 | ✅ | — | ✅ |
+| 1.21.1 | ✅ | ✅ | ✅ |
 
 > 详细平台兼容性信息见 [`docs/features.md`](docs/features.md)
 
@@ -73,7 +74,7 @@
 | `/mapsyncer generate` | 生成所有维度缓存 |
 | `/mapsyncer generate <维度>` | 生成指定维度（增量模式） |
 | `/mapsyncer generate <维度> <x> <z>` | 生成单个区域 |
-| `/mapsyncer generate <维度> force` | 强制重新生成（清除缓存） |
+| `/mapsyncer generate <维度> --force` | 强制重新生成（清除缓存） |
 | `/mapsyncer status` | 查看生成进度和缓存统计 |
 | `/mapsyncer incremental off` | 禁用增量更新 |
 | `/mapsyncer incremental tick [间隔]` | 启用周期更新（20-72000 ticks） |
@@ -145,8 +146,7 @@ libs/                   抽象库层（平台无关，编译为独立 JAR）
 mc-1.20.1/              1.20.1 版本
 ├── shared/             源码复用层（由平台模块 sourceSet 引用）
 ├── fabric/             平台实现层（编译产出最终 mod JAR）
-├── forge/
-└── neoforge/
+└── forge/
 
 mc-1.21.1/              1.21.1 版本
 ├── shared/
@@ -228,29 +228,8 @@ mc-26.1/                26.1 版本（迁移中）
 
 | 问题 | 说明 | 影响 |
 |------|------|------|
-| 地狱区块竖线分割 | CAVE 模式渲染存在分割线 | 显示异常 |
-| 洞穴内容异常 | 洞穴模式下部分内容不准确 | 显示异常 |
-| 含水方块渲染 | 海带、海草等含水方块颜色异常 | 显示为深蓝色 |
-| Mod 方块颜色 | 部分 Mod 方块颜色为近似值 | 可能与实际有偏差 |
-
----
-
-## 快速上手
-
-1. **服务端预生成**
-   ```
-   /mapsyncer generate
-   ```
-
-2. **客户端同步**
-   ```
-   /mapsyncer sync all
-   ```
-
-3. **配置增量更新（可选）**
-   ```
-   /mapsyncer incremental scheduled 4 0
-   ```
+| 洞穴内容异常 | 洞穴模式下部分内容不准确 | 基本上只有地狱受影响，看情况优化 |
+| 海带海草不显示 | 海带、海草无法被渲染上屏 | 不影响使用，有空了修 |
 
 ---
 
