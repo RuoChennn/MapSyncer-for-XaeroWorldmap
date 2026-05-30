@@ -8,10 +8,10 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
-import net.minecraft.commands.arguments.DimensionArgument;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -25,22 +25,19 @@ import java.util.List;
  * - /mapsyncer help - 显示帮助信息
  * - /mapsyncer generate - 生成所有维度的地图缓存
  * - /mapsyncer generate <dimension> - 生成指定维度的地图缓存
+ * - /mapsyncer generate <dimension> --force - 强制重新生成指定维度
  * - /mapsyncer generate <dimension> <x> <z> - 生成指定区域的地图缓存
- * - /mapsyncer generate <dimension> force - 强制重新生成指定维度
  * - /mapsyncer status - 显示当前生成状态
- * - /mapsyncer incremental off/tick/scheduled/status - 配置增量更新模式
+ * - /mapsyncer incremental off/tick/scheduled - 配置增量更新模式
+ *
+ * 维度参数使用原版 {@link DimensionArgument}，支持 namespace:path 且可安全序列化。
  *
  * 需要管理员权限（permission level 4）才能执行。
  */
 public class CacheGenerateCommand {
 
-    /**
-     * 注册命令到命令分发器
-     *
-     * @param dispatcher Brigadier命令分发器
-     */
-    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("mapsyncer")
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, String prefix) {
+        dispatcher.register(Commands.literal(prefix)
                 // TODO: MC 26.1 权限系统重构，暂时跳过权限检查
                 .requires(source -> true)
                 .executes(CacheGenerateCommand::showHelp)
@@ -50,11 +47,11 @@ public class CacheGenerateCommand {
                         .executes(CacheGenerateCommand::generateAll)
                         .then(Commands.argument("dimension", DimensionArgument.dimension())
                                 .executes(CacheGenerateCommand::generateDimension)
+                                .then(Commands.literal("--force")
+                                        .executes(CacheGenerateCommand::generateDimensionForce))
                                 .then(Commands.argument("x", IntegerArgumentType.integer())
                                         .then(Commands.argument("z", IntegerArgumentType.integer())
-                                                .executes(CacheGenerateCommand::generateSingleRegion)))
-                                .then(Commands.literal("force")
-                                        .executes(CacheGenerateCommand::generateDimensionForce))))
+                                                .executes(CacheGenerateCommand::generateSingleRegion)))))
                 .then(Commands.literal("status")
                         .executes(CacheGenerateCommand::showStatus))
                 .then(Commands.literal("incremental")
@@ -96,12 +93,11 @@ public class CacheGenerateCommand {
     private static int generateDimension(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
-        MinecraftServer server = ctx.getSource().getServer();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_dim", friendlyName), false);
 
-        CacheCommandHandler.generateDimension(server, dimensionId, () -> {
+        CacheCommandHandler.generateDimension(ctx.getSource().getServer(), dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.dim_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
@@ -114,12 +110,11 @@ public class CacheGenerateCommand {
     private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
-        MinecraftServer server = ctx.getSource().getServer();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
         ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_force", friendlyName), false);
 
-        CacheCommandHandler.generateDimensionForce(server, dimensionId, () -> {
+        CacheCommandHandler.generateDimensionForce(ctx.getSource().getServer(), dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.force_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
@@ -131,9 +126,9 @@ public class CacheGenerateCommand {
 
     private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
-        ResourceKey<Level> dimension = level.dimension();
         int x = IntegerArgumentType.getInteger(ctx, "x");
         int z = IntegerArgumentType.getInteger(ctx, "z");
+        ResourceKey<Level> dimension = level.dimension();
         MinecraftServer server = ctx.getSource().getServer();
 
         if (!CacheCommandHandler.checkRegionExists(server, dimension, x, z)) {
@@ -167,15 +162,17 @@ public class CacheGenerateCommand {
             int totalDims = cacheStats.size();
             int totalRegions = cacheStats.stream().mapToInt(DimensionCacheStats::regionCount).sum();
             long totalSize = cacheStats.stream().mapToLong(DimensionCacheStats::sizeBytes).sum();
-            double totalSizeMB = totalSize / (1024.0 * 1024.0);
 
-            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_total",
-                    totalDims, totalRegions, totalSizeMB), false);
-
+            StringBuilder dims = new StringBuilder();
             for (DimensionCacheStats stat : cacheStats) {
-                ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_dim",
-                        stat.dimension(), stat.regionCount(), stat.sizeMB()), false);
+                if (dims.length() > 0) dims.append("\n");
+                dims.append(String.format("  %s: %d regions, %.2f MB",
+                        stat.dimension(), stat.regionCount(), stat.sizeMB()));
             }
+
+            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_detail",
+                    totalDims, totalRegions, String.format("%.2f", totalSize / (1024.0 * 1024.0)),
+                    dims.toString()), false);
         }
 
         return Command.SINGLE_SUCCESS;

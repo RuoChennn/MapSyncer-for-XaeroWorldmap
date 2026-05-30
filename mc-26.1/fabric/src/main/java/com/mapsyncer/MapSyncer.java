@@ -74,7 +74,7 @@ public class MapSyncer implements ModInitializer {
 
         // 注册命令
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            CacheGenerateCommand.register(dispatcher);
+            CacheGenerateCommand.register(dispatcher, "mapsyncerserver");
         });
 
         // 注册服务端网络接收器

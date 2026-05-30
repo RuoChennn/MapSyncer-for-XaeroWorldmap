@@ -15,6 +15,7 @@ import com.mapsyncer.server.ServerSyncHandler;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -24,7 +25,6 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.server.ServerLifecycleHandler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
@@ -73,7 +73,7 @@ public class MapSyncer {
         context.getModEventBus().register(this);
 
         // 注册命令
-        MinecraftForge.EVENT_BUS.register(CacheGenerateCommand.class);
+        MinecraftForge.EVENT_BUS.register(this);
 
         // 注册服务端网络接收器
         ServerSyncHandler.register();
@@ -92,6 +92,11 @@ public class MapSyncer {
         event.enqueueWork(() -> {
             LOGGER.info("Common setup completed");
         });
+    }
+
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        CacheGenerateCommand.register(event.getDispatcher(), "mapsyncer");
     }
 
     /**

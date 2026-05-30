@@ -68,8 +68,9 @@ public class MapSyncer {
         LOGGER.info("NetworkManager initialized for Forge 1.20.1");
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            // 客户端：注册网络处理器
+            // 客户端：注册网络处理器和包接收器
             networkHandler.registerHandlers(null);
+            MapPacketReceiver.register(null);
             MinecraftForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode, Forge 1.20.1)");
         } else {
