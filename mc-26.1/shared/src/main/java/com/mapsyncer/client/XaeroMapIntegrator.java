@@ -197,7 +197,7 @@ public class XaeroMapIntegrator {
                             count++;
                             LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
                         } else {
-                            LOGGER.error("设置区域 ({}, {}) loadState 失败", rx, rz);
+                            LOGGER.warn("设置区域 ({}, {}) loadState 失败", rx, rz);
                         }
                     } else if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_CLEARED) {
                         XaeroMapDataHandler.getPreUnloadedRegionsInternal().add(coord);

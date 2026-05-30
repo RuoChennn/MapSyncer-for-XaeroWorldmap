@@ -140,7 +140,7 @@ public class McaTimestampCache {
             LOGGER.info("Saved timestamp cache: {} dimensions, {} regions to {}",
                 timestampCache.size(), totalRegions, cacheFilePath);
         } catch (IOException e) {
-            LOGGER.error("Failed to save timestamp cache: {}", e.getMessage());
+            LOGGER.error("Failed to save timestamp cache", e);
         }
     }
 

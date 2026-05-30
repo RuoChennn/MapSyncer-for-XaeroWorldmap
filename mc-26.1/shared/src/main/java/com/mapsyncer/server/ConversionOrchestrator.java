@@ -166,12 +166,17 @@ public class ConversionOrchestrator {
         }
     }
 
+    /**
+     * 清除 GenerationCache 中指定维度的记录。
+     *
+     * @param xaeroDimName Xaero 格式的维度名（如 null, DIM-1, DIM1, namespace$path）
+     */
     private static void clearGenerationCacheEntries(String xaeroDimName) {
         int removed = GenerationCache.getInstance(CACHE_DIR).removeByPrefix(xaeroDimName + "/");
         if (removed > 0) {
-            LOGGER.info("Cleared {} generation_cache entries for dimension: {}", removed, xaeroDimName);
+            LOGGER.debug("Cleared {} generation_cache entries for dimension: {}", removed, xaeroDimName);
         } else {
-            LOGGER.info("No generation_cache entries found for dimension: {}", xaeroDimName);
+            LOGGER.debug("No generation_cache entries found for dimension: {}", xaeroDimName);
         }
     }
 
@@ -726,7 +731,7 @@ public class ConversionOrchestrator {
             } catch (java.util.concurrent.TimeoutException e) {
                 LOGGER.warn("{} task timeout", taskName);
             } catch (ExecutionException e) {
-                LOGGER.error("{} task failed: {}", taskName, e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+                LOGGER.error("{} task failed", taskName, e);
             } catch (InterruptedException e) {
                 LOGGER.error("{} task interrupted", taskName, e);
                 Thread.currentThread().interrupt();
@@ -785,7 +790,7 @@ public class ConversionOrchestrator {
             Thread.currentThread().interrupt();
             return false;
         } catch (RuntimeException e) {
-            LOGGER.error("Runtime error during chunk flush: {}", e.getMessage());
+            LOGGER.error("Runtime error during chunk flush", e);
             return false;
         }
     }
@@ -829,7 +834,7 @@ public class ConversionOrchestrator {
             }
             LOGGER.warn("Dimension not found: {}", id);
         } catch (RuntimeException e) {
-            LOGGER.error("Invalid dimension id format '{}': {}", id, e.getMessage());
+            LOGGER.error("Invalid dimension id format '{}'", id, e);
         }
 
         return null;
@@ -854,7 +859,7 @@ public class ConversionOrchestrator {
         try {
             server.saveEverything(false, true, true);
         } catch (RuntimeException e) {
-            LOGGER.error("Runtime error saving chunks for incremental scan: {}", e.getMessage());
+            LOGGER.error("Runtime error saving chunks for incremental scan", e);
             return;
         }
 

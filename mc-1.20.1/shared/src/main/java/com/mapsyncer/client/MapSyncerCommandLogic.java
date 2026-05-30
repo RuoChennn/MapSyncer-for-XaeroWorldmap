@@ -125,7 +125,7 @@ public class MapSyncerCommandLogic {
                         }
                     });
             } catch (IOException e) {
-                LOGGER.debug("Failed to scan Xaero directory", e);
+                LOGGER.warn("Failed to scan Xaero directory", e);
             }
         }
     }
@@ -238,10 +238,10 @@ public class MapSyncerCommandLogic {
         if (syncAll) {
             if (serverDir != null && tsCache != null && tsCache.cacheFileExists()) {
                 metaMap = ClientHashManager.computeMetaForSync(serverDir);
-                LOGGER.info("Sync all: {} cached entries", metaMap.size());
+                LOGGER.debug("Sync all: {} cached entries", metaMap.size());
             } else {
                 metaMap = new java.util.HashMap<>();
-                LOGGER.info("First sync all, sending empty request");
+                LOGGER.debug("First sync all, sending empty request");
             }
         } else {
             if (tsCache != null && tsCache.cacheFileExists() && tsCache.hasDimensionSynced(xaeroDim)) {
@@ -249,7 +249,7 @@ public class MapSyncerCommandLogic {
                 Path mwDir = findMwDir(dimDir);
                 if (mwDir != null) {
                     metaMap = ClientHashManager.computeMetaForSync(mwDir);
-                    LOGGER.info("Dimension {} previously synced, {} entries", dimensionId, metaMap.size());
+                    LOGGER.debug("Dimension {} previously synced, {} entries", dimensionId, metaMap.size());
                 } else {
                     metaMap = new java.util.HashMap<>();
                     metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
@@ -258,11 +258,11 @@ public class MapSyncerCommandLogic {
             } else {
                 metaMap = new java.util.HashMap<>();
                 metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
-                LOGGER.info("First sync for {}", dimensionId);
+                LOGGER.debug("First sync for {}", dimensionId);
             }
         }
 
-        LOGGER.info("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
+        LOGGER.debug("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
 
         if (tsCache != null) {
             Set<String> dimensions = new HashSet<>();

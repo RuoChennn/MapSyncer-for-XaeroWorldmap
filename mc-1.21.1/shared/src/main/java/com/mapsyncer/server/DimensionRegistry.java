@@ -79,7 +79,7 @@ public class DimensionRegistry {
             if (!configuredDimensions.contains(normalizedId)) {
                 // 该维度未配置，需要添加
                 newDimensions.add(dimId);
-                LOGGER.info("Found unconfigured dimension: {} (normalized: {})", dimId, normalizedId);
+                LOGGER.debug("Found unconfigured dimension: {} (normalized: {})", dimId, normalizedId);
             }
         }
 

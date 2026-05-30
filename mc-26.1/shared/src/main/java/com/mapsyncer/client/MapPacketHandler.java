@@ -386,7 +386,7 @@ public class MapPacketHandler {
             if (regionDetectSuccess) {
                 LOGGER.info("regionDetectionComplete 设置为 true，反射功能就绪");
             } else {
-                LOGGER.error("regionDetectionComplete 设置失败，getLeafMapRegion 可能会返回 null");
+                LOGGER.warn("regionDetectionComplete 设置失败，getLeafMapRegion 可能会返回 null");
             }
         } else {
             LOGGER.error("XaeroReflectionHelper 初始化失败！反射功能完全不可用");
@@ -431,14 +431,14 @@ public class MapPacketHandler {
             // 准备区域加载（关键步骤）
             boolean prepareSuccess = XaeroReflectionHelper.prepareRegionLoad(mapRegion);
             if (!prepareSuccess) {
-                LOGGER.error("区域 ({}, {}) layer={} 准备加载失败，跳过此区域", coord.x(), coord.z(), caveLayer);
+                LOGGER.warn("区域 ({}, {}) layer={} 准备加载失败，跳过此区域", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
             // 设置 loadState = LOAD_STATE_CLEARED（需要加载）
             boolean setStateSuccess = XaeroReflectionHelper.setLoadState(mapRegion, XaeroReflectionHelper.LOAD_STATE_CLEARED);
             if (!setStateSuccess) {
-                LOGGER.error("区域 ({}, {}) layer={} 设置 loadState 失败，跳过此区域", coord.x(), coord.z(), caveLayer);
+                LOGGER.warn("区域 ({}, {}) layer={} 设置 loadState 失败，跳过此区域", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
@@ -446,14 +446,14 @@ public class MapPacketHandler {
             String reason = inViewDistance ? "sync view" : "sync outside";
             boolean loadSuccess = XaeroReflectionHelper.requestLoad(mapRegion, reason, true);
             if (!loadSuccess) {
-                LOGGER.error("区域 ({}, {}) layer={} 请求加载失败", coord.x(), coord.z(), caveLayer);
+                LOGGER.warn("区域 ({}, {}) layer={} 请求加载失败", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
             if (inViewDistance) {
-                LOGGER.info("区域 ({}, {}) layer={} 视距内，插入队头优先加载", coord.x(), coord.z(), caveLayer);
+                LOGGER.debug("区域 ({}, {}) layer={} 视距内，插入队头优先加载", coord.x(), coord.z(), caveLayer);
             } else {
-                LOGGER.info("区域 ({}, {}) layer={} 视距外，添加到加载队列", coord.x(), coord.z(), caveLayer);
+                LOGGER.debug("区域 ({}, {}) layer={} 视距外，添加到加载队列", coord.x(), coord.z(), caveLayer);
             }
 
             loadedRegions.add(coord);

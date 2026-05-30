@@ -181,15 +181,15 @@ public final class XaeroReflectionHelper {
             return true;
 
         } catch (ClassNotFoundException e) {
-            LOGGER.error("Xaero's World Map 未找到或类名不匹配，反射功能禁用: {}", e.getMessage());
+            LOGGER.error("Xaero's World Map 未找到或类名不匹配，反射功能禁用", e);
             LOGGER.error("请确保已安装 Xaero's World Map 模组");
             return false;
         } catch (NoSuchMethodException e) {
-            LOGGER.error("Xaero API 不兼容，方法签名变化: {}", e.getMessage());
+            LOGGER.error("Xaero API 不兼容，方法签名变化", e);
             LOGGER.error("可能原因：Xaero 版本过新或过旧，与当前 MapSyncer 版本不兼容");
             return false;
         } catch (NoSuchFieldException e) {
-            LOGGER.error("Xaero API 不兼容，字段不存在: {}", e.getMessage());
+            LOGGER.error("Xaero API 不兼容，字段不存在", e);
             LOGGER.error("可能原因：Xaero 版本过新或过旧，与当前 MapSyncer 版本不兼容");
             return false;
         } catch (Exception e) {
@@ -210,7 +210,7 @@ public final class XaeroReflectionHelper {
             cachedSession = getCurrentSessionMethod.invoke(null);
             return cachedSession;
         } catch (ReflectiveOperationException e) {
-            LOGGER.warn("Failed to get WorldMapSession: {}", e.getMessage());
+            LOGGER.warn("Failed to get WorldMapSession", e);
             return null;
         }
     }
@@ -231,7 +231,7 @@ public final class XaeroReflectionHelper {
             }
             return cachedMapProcessor;
         } catch (Exception e) {
-            LOGGER.warn("Failed to get MapProcessor: {}", e.getMessage());
+            LOGGER.warn("Failed to get MapProcessor", e);
             return null;
         }
     }
@@ -252,7 +252,7 @@ public final class XaeroReflectionHelper {
             }
             return cachedMapSaveLoad;
         } catch (Exception e) {
-            LOGGER.warn("Failed to get MapSaveLoad: {}", e.getMessage());
+            LOGGER.warn("Failed to get MapSaveLoad", e);
             return null;
         }
     }
@@ -274,7 +274,7 @@ public final class XaeroReflectionHelper {
             if (processor == null) return null;
             return getLeafMapRegionMethod.invoke(processor, caveLayer, regionX, regionZ, createIfMissing);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get MapRegion ({}, {}) layer={}: {}", regionX, regionZ, caveLayer, e.getMessage());
+            LOGGER.warn("Failed to get MapRegion ({}, {}) layer={}", regionX, regionZ, caveLayer, e);
             return null;
         }
     }
@@ -452,7 +452,7 @@ public final class XaeroReflectionHelper {
         try {
             return (String) worldIdField.get(mapRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get worldId: {}", e.getMessage());
+            LOGGER.warn("Failed to get worldId", e);
             return null;
         }
     }
@@ -469,7 +469,7 @@ public final class XaeroReflectionHelper {
         try {
             return (String) dimIdField.get(mapRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get dimId: {}", e.getMessage());
+            LOGGER.warn("Failed to get dimId", e);
             return null;
         }
     }
@@ -486,7 +486,7 @@ public final class XaeroReflectionHelper {
         try {
             return (String) mwIdField.get(mapRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get mwId: {}", e.getMessage());
+            LOGGER.warn("Failed to get mwId", e);
             return null;
         }
     }
@@ -532,7 +532,7 @@ public final class XaeroReflectionHelper {
             LOGGER.debug("区域加载准备完成");
             return true;
         } else {
-            LOGGER.error("区域加载准备部分失败: cancelRefresh={}, setShouldCache={}, setHasHadTerrain={}",
+            LOGGER.warn("区域加载准备部分失败: cancelRefresh={}, setShouldCache={}, setHasHadTerrain={}",
                 step1, step2, step3);
             return false;
         }
@@ -553,7 +553,7 @@ public final class XaeroReflectionHelper {
             if (processor == null) return null;
             return getMapWorldMethod.invoke(processor);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get MapWorld: {}", e.getMessage());
+            LOGGER.warn("Failed to get MapWorld", e);
             return null;
         }
     }
@@ -571,7 +571,7 @@ public final class XaeroReflectionHelper {
             if (mapWorld == null) return null;
             return getCurrentDimensionMethod.invoke(mapWorld);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get current dimension: {}", e.getMessage());
+            LOGGER.warn("Failed to get current dimension", e);
             return null;
         }
     }
@@ -589,7 +589,7 @@ public final class XaeroReflectionHelper {
             if (dimension == null) return null;
             return getLayeredMapRegionsMethod.invoke(dimension);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get LayeredRegionManager: {}", e.getMessage());
+            LOGGER.warn("Failed to get LayeredRegionManager", e);
             return null;
         }
     }
@@ -608,7 +608,7 @@ public final class XaeroReflectionHelper {
             if (layeredManager == null) return null;
             return getLayerMethod.invoke(layeredManager, layer);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get MapLayer for layer {}: {}", layer, e.getMessage());
+            LOGGER.warn("Failed to get MapLayer for layer {}", layer, e);
             return null;
         }
     }
@@ -627,7 +627,7 @@ public final class XaeroReflectionHelper {
             if (mapLayer == null) return null;
             return getMapRegionsMethod.invoke(mapLayer);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get LeveledRegionManager for layer {}: {}", layer, e.getMessage());
+            LOGGER.warn("Failed to get LeveledRegionManager for layer {}", layer, e);
             return null;
         }
     }
@@ -648,7 +648,7 @@ public final class XaeroReflectionHelper {
             if (leveledManager == null) return null;
             return regionTextureMapField.get(leveledManager);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get regionTextureMap for layer {}: {}", layer, e.getMessage());
+            LOGGER.warn("Failed to get regionTextureMap for layer {}", layer, e);
             return null;
         }
     }
@@ -667,7 +667,7 @@ public final class XaeroReflectionHelper {
         try {
             return regionXField.getInt(mapRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get regionX: {}", e.getMessage());
+            LOGGER.warn("Failed to get regionX", e);
             return -1;
         }
     }
@@ -684,7 +684,7 @@ public final class XaeroReflectionHelper {
         try {
             return regionZField.getInt(mapRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get regionZ: {}", e.getMessage());
+            LOGGER.warn("Failed to get regionZ", e);
             return -1;
         }
     }
@@ -701,7 +701,7 @@ public final class XaeroReflectionHelper {
         try {
             return loadStateField.getByte(mapRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get loadState: {}", e.getMessage());
+            LOGGER.warn("Failed to get loadState", e);
             return -1;
         }
     }
@@ -718,7 +718,7 @@ public final class XaeroReflectionHelper {
         try {
             return childrenField.get(branchRegion);
         } catch (Exception e) {
-            LOGGER.warn("Failed to get children: {}", e.getMessage());
+            LOGGER.warn("Failed to get children", e);
             return null;
         }
     }

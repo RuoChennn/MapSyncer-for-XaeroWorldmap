@@ -94,6 +94,9 @@ public class MapSyncer {
     public void onServerStarting(ServerStartingEvent event) {
         DimensionRegistry.registerAllDimensions(event.getServer());
 
+        // 根据配置启用/禁用 DEBUG 日志
+        com.mapsyncer.util.ModLogConfig.applyDebugLogging();
+
         Platform platform = PlatformManager.getPlatform();
         UpdateMode mode = platform.getIncrementalUpdateMode();
         if (mode != UpdateMode.DISABLED) {

@@ -69,17 +69,17 @@ public class SyncResumeHelper {
 
         // 检查缓存文件是否存在（不存在说明从未同步过）
         if (!tsCache.cacheFileExists()) {
-            LOGGER.info("Cache file not found, never synced before");
+            LOGGER.debug("Cache file not found, never synced before");
             return;
         }
 
         String syncState = tsCache.getSyncState();
         String syncCommand = tsCache.getSyncCommand();
-        LOGGER.info("Loaded sync state: {}, command: {}", syncState, syncCommand);
+        LOGGER.debug("Loaded sync state: {}, command: {}", syncState, syncCommand);
 
         // 检查是否需要断点续传（状态为 in_progress）
         if (tsCache.needsResume()) {
-            LOGGER.info("Found unfinished sync, showing prompt");
+            LOGGER.debug("Found unfinished sync, showing prompt");
 
             if (mc.player != null && !syncCommand.isEmpty()) {
                 showResumePrompt(mc, syncCommand);
@@ -87,7 +87,7 @@ public class SyncResumeHelper {
                 LOGGER.warn("Cannot show prompt: player={}, command={}", mc.player != null, syncCommand);
             }
         } else {
-            LOGGER.info("No resume needed: state={}", syncState);
+            LOGGER.debug("No resume needed: state={}", syncState);
         }
     }
 

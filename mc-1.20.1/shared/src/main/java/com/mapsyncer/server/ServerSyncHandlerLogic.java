@@ -478,7 +478,7 @@ public class ServerSyncHandlerLogic {
         // 如果玩家已经在同步中，先中断旧的同步线程
         Thread oldThread = syncThreads.get(playerId);
         if (oldThread != null && oldThread.isAlive()) {
-            LOGGER.info("Player {} requested new sync while syncing, interrupting old sync (v{})", playerId, syncVersion);
+            LOGGER.debug("Player {} requested new sync while syncing, interrupting old sync (v{})", playerId, syncVersion);
             oldThread.interrupt();
             cleanupSyncState(playerId);
         }
@@ -498,7 +498,7 @@ public class ServerSyncHandlerLogic {
         syncThread.setDaemon(true);
         syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
         syncThread.start();
-        LOGGER.info("Started async sync thread for player {} (v{})", serverPlayer.getName().getString(), syncVersion);
+        LOGGER.debug("Started async sync thread for player {} (v{})", serverPlayer.getName().getString(), syncVersion);
     }
 
     /**
@@ -527,7 +527,7 @@ public class ServerSyncHandlerLogic {
 
         // Read worldId from xaeromap.txt (Xaero's official method)
         int worldId = readWorldIdFromXaeroMap(serverPlayer);
-        LOGGER.info("Server worldId from xaeromap.txt: {}", worldId);
+        LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
 
         // Get server generation cache (timestamp + hash)
         GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR);
@@ -565,11 +565,11 @@ public class ServerSyncHandlerLogic {
                     requestedDimensions.add(dim);
                 } else {
                     requestedDimensions.add(dim);
-                    LOGGER.info("Found placeholder for dimension {}, will sync all regions", dim);
+                    LOGGER.debug("Found placeholder for dimension {}, will sync all regions", dim);
                 }
             }
         }
-        LOGGER.info("Client requesting dimensions (Xaero format): {}", requestedDimensions);
+        LOGGER.debug("Client requesting dimensions (Xaero format): {}", requestedDimensions);
 
         // Check if requested dimensions have cache data
         Set<String> skippedDimensions = new HashSet<>();
@@ -597,7 +597,7 @@ public class ServerSyncHandlerLogic {
         }
 
         if (!hasValidDimension) {
-            LOGGER.info("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
+            LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
             // 在主线程发送数据包
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 NetworkManager.sendToPlayer(serverPlayer,
@@ -636,7 +636,7 @@ public class ServerSyncHandlerLogic {
                         if (!requestedDimensions.contains(normalizedXaeroDim)) {
                             if (!skippedDimensions.contains(normalizedXaeroDim)) {
                                 skippedDimensions.add(normalizedXaeroDim);
-                                LOGGER.info("Skipping dimension {}: not requested", normalizedXaeroDim);
+                                LOGGER.debug("Skipping dimension {}: not requested", normalizedXaeroDim);
                             }
                             return;
                         }
@@ -696,7 +696,7 @@ public class ServerSyncHandlerLogic {
         final int finalHashMatchCount = hashMatchCount;
         final int finalTimestampSkipCount = timestampSkipCount;
 
-        LOGGER.info("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
+        LOGGER.debug("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
                 serverPlayer.getName().getString(), total, finalHashMatchCount, finalTimestampSkipCount);
 
         if (total == 0) {
@@ -832,7 +832,7 @@ public class ServerSyncHandlerLogic {
             });
         }
 
-        LOGGER.info("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
+        LOGGER.debug("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
 
         cleanupSyncState(playerId);
     }
@@ -903,7 +903,7 @@ public class ServerSyncHandlerLogic {
         syncThreads.clear();
         speedLimitBytesSent.clear();
         speedLimitCycleStart.clear();
-        LOGGER.info("ServerSyncHandler tracking data cleared");
+        LOGGER.debug("ServerSyncHandler tracking data cleared");
     }
 
     /**
@@ -925,7 +925,7 @@ public class ServerSyncHandlerLogic {
 
         // 清理离线玩家的状态
         for (UUID playerId : toRemove) {
-            LOGGER.info("Cleaning up stale state for offline player {}", playerId);
+            LOGGER.debug("Cleaning up stale state for offline player {}", playerId);
             cleanupSyncState(playerId);
         }
 
@@ -964,7 +964,7 @@ public class ServerSyncHandlerLogic {
         }
 
         if (!completedThreads.isEmpty()) {
-            LOGGER.info("Cleaned up {} completed thread references", completedThreads.size());
+            LOGGER.debug("Cleaned up {} completed thread references", completedThreads.size());
         }
     }
 
@@ -1019,7 +1019,7 @@ public class ServerSyncHandlerLogic {
             }
         }
 
-        LOGGER.info("Sorted {} regions: {} in view distance ({} region radius), rest by distance",
+        LOGGER.debug("Sorted {} regions: {} in view distance ({} region radius), rest by distance",
                 regions.size(), viewRegionCount, viewDistanceRegions);
     }
 }

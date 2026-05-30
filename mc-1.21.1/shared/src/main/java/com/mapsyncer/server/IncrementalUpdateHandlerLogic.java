@@ -189,7 +189,7 @@ public class IncrementalUpdateHandlerLogic {
         try {
             ConversionOrchestrator.performIncrementalScan(server);
         } catch (RuntimeException e) {
-            LOGGER.error("Error during scheduled incremental update: {}", e.getMessage());
+            LOGGER.error("Error during scheduled incremental update", e);
         }
 
         // 检查是否有玩家在线，无人则停止处理器节省资源
