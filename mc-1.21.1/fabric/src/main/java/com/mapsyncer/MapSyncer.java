@@ -66,9 +66,9 @@ public class MapSyncer implements ModInitializer {
         // 注册服务端生命周期事件
         registerServerEvents();
 
-        // 注册服务端命令（Fabric 专用 /mapsyncerserver 前缀）
+        // 注册服务端命令（/mapsyncer，与客户端共用根节点，子命令互不冲突）
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            CacheGenerateCommand.register(dispatcher, "mapsyncerserver");
+            CacheGenerateCommand.register(dispatcher, "mapsyncer");
         });
 
         // 注册服务端网络接收器
