@@ -128,6 +128,7 @@ public class MapSyncer {
      */
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        NeoForge.EVENT_BUS.unregister(this);
         IncrementalUpdateHandlerLogic.getInstance().stop();
     }
 

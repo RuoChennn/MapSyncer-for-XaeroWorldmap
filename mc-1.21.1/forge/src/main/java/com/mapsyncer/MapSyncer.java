@@ -100,6 +100,7 @@ public class MapSyncer {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        MinecraftForge.EVENT_BUS.unregister(this);
         IncrementalUpdateHandlerLogic.getInstance().stop();
     }
 

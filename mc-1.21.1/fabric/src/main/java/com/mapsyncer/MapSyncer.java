@@ -71,7 +71,8 @@ public class MapSyncer implements ModInitializer {
             CacheGenerateCommand.register(dispatcher, "mapsyncerserver");
         });
 
-        // 注册服务端网络接收器
+        // 注册服务端网络接收器（同时注册 PayloadTypeRegistry 类型）
+        networkHandler.registerHandlers(null);
         ServerSyncHandler.register(null);
 
         LOGGER.info("MapSyncer initialized (Fabric 1.21), version: {}", VERSION);

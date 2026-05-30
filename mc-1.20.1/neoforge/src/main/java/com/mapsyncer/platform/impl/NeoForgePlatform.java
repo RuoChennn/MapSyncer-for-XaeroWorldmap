@@ -328,7 +328,8 @@ public class NeoForgePlatform implements Platform {
         }
     }
 
-    public static void clearBlockPropertiesCache() {
+    @Override
+    public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 

@@ -350,7 +350,8 @@ public class FabricPlatform implements Platform {
     /**
      * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
      */
-    public static void clearBlockPropertiesCache() {
+    @Override
+    public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 

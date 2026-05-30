@@ -243,6 +243,12 @@ public interface Platform {
     java.util.Map<String, String> parseBlockProperties(String blockStateString);
 
     /**
+     * 清理平台级方块属性缓存。
+     * 在玩家加入或服务器停止时调用，释放内存并确保后续查询获取最新数据。
+     */
+    void clearBlockPropertiesCache();
+
+    /**
      * 记录同步更新的区域坐标
      *
      * @param regions 区域坐标集合

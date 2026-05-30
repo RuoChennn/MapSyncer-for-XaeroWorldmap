@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 /**
@@ -28,10 +29,17 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
+    /** 防止 Payload 类型被重复注册（集成客户端环境下 main + client 入口点各调用一次） */
+    private final AtomicBoolean payloadTypesRegistered = new AtomicBoolean(false);
+
     /**
-     * 注册 Payload 类型到 PayloadTypeRegistry
+     * 注册 Payload 类型到 PayloadTypeRegistry（幂等操作）
      */
     private void registerPayloadTypes() {
+        if (!payloadTypesRegistered.compareAndSet(false, true)) {
+            return; // 已注册过，跳过
+        }
+
         PayloadTypeRegistry.playC2S().register(
                 FabricPayloadAdapters.SYNC_REQUEST_TYPE,
                 FabricPayloadAdapters.SYNC_REQUEST_CODEC

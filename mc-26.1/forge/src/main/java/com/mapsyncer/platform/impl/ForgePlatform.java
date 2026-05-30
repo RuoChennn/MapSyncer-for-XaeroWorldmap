@@ -329,7 +329,8 @@ public class ForgePlatform implements Platform {
         }
     }
 
-    public static void clearBlockPropertiesCache() {
+    @Override
+    public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 

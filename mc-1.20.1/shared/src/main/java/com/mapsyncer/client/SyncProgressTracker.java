@@ -98,14 +98,16 @@ public class SyncProgressTracker {
             if (tracking && !receivedFirstResponse) {
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
-                    // 根据服务端安装状态显示不同错误
-                    if (MapPacketReceiver.isServerInstalled()) {
-                        // 服务端已安装但响应超时，可能是网络问题或服务端处理出错
-                        mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
-                    } else {
-                        // 服务端未安装
-                        mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"), false);
-                    }
+                    // displayClientMessage 必须在 MC 主线程调用，通过 execute() 调度
+                    mc.execute(() -> {
+                        if (mc.player != null) {
+                            if (MapPacketReceiver.isServerInstalled()) {
+                                mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.timeout"), false);
+                            } else {
+                                mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"), false);
+                            }
+                        }
+                    });
                 }
                 cancelTracking();
             }

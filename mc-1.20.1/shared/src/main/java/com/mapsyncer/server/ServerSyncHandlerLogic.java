@@ -444,6 +444,7 @@ public class ServerSyncHandlerLogic {
     private static void cleanupSyncState(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
+        playerSyncVersions.remove(playerId);
 
         // 清理线程引用并确保线程已停止
         Thread syncThread = syncThreads.remove(playerId);
@@ -489,11 +490,18 @@ public class ServerSyncHandlerLogic {
         syncingPlayers.add(playerId);
         playerSyncDimensions.put(playerId, startDimension);
 
+        // 在主线程预捕获玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
+        int startBlockX = serverPlayer.getBlockX();
+        int startBlockZ = serverPlayer.getBlockZ();
+        int viewDistanceChunks = serverPlayer.serverLevel().getServer().getPlayerList().getViewDistance() + 2;
+        int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;
+
         // Client metadata (timestamp + hash) - contains already received regions for resume
         Map<String, ClientMeta> clientMeta = payload.clientMeta();
 
         // 将耗时操作移到异步线程执行，避免阻塞主线程
-        Thread syncThread = new Thread(() -> processSyncAsync(serverPlayer, playerId, clientMeta, startDimension, syncVersion),
+        Thread syncThread = new Thread(() -> processSyncAsync(serverPlayer, playerId, clientMeta, startDimension, syncVersion,
+                startBlockX, startBlockZ, viewDistanceRegions),
                 "mapsyncer-sync-" + playerId);
         syncThread.setDaemon(true);
         syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
@@ -523,7 +531,8 @@ public class ServerSyncHandlerLogic {
      * @param startDimension 开始同步时的维度
      */
     private static void processSyncAsync(ServerPlayer serverPlayer, UUID playerId,
-            Map<String, ClientMeta> clientMeta, ResourceKey<Level> startDimension, int syncVersion) {
+            Map<String, ClientMeta> clientMeta, ResourceKey<Level> startDimension, int syncVersion,
+            int startBlockX, int startBlockZ, int viewDistanceRegions) {
 
         // Read worldId from xaeromap.txt (Xaero's official method)
         int worldId = readWorldIdFromXaeroMap(serverPlayer);
@@ -536,13 +545,12 @@ public class ServerSyncHandlerLogic {
         Path cacheDir = ConversionOrchestrator.CACHE_DIR;
 
         if (!Files.exists(cacheDir)) {
-            // 在主线程发送消息和数据包
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
+                cleanupSyncState(playerId);
             });
-            cleanupSyncState(playerId);
             return;
         }
 
@@ -598,12 +606,11 @@ public class ServerSyncHandlerLogic {
 
         if (!hasValidDimension) {
             LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
-            // 在主线程发送数据包
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
+                cleanupSyncState(playerId);
             });
-            cleanupSyncState(playerId);
             return;
         }
 
@@ -696,7 +703,7 @@ public class ServerSyncHandlerLogic {
         final int finalHashMatchCount = hashMatchCount;
         final int finalTimestampSkipCount = timestampSkipCount;
 
-        LOGGER.debug("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
+        LOGGER.info("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
                 serverPlayer.getName().getString(), total, finalHashMatchCount, finalTimestampSkipCount);
 
         if (total == 0) {
@@ -704,13 +711,13 @@ public class ServerSyncHandlerLogic {
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
+                cleanupSyncState(playerId);
             });
-            cleanupSyncState(playerId);
             return;
         }
 
         // 按视距优先排序：视距内region最先发送，让玩家更快看到周围地图
-        sortByViewDistancePriority(regionsToSync, serverPlayer);
+        sortByViewDistancePriority(regionsToSync, startBlockX, startBlockZ, viewDistanceRegions);
 
         // 立即发送轻量的"开始同步"通知，避免客户端超时
         // 这个包不含数据，仅通知客户端服务端已开始处理
@@ -786,6 +793,7 @@ public class ServerSyncHandlerLogic {
                     NetworkManager.sendToPlayer(serverPlayer,
                             new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                     serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                    cleanupSyncState(playerId);
                 });
             } else {
                 List<ChunkMapData> currentChunk = new ArrayList<>();
@@ -821,6 +829,7 @@ public class ServerSyncHandlerLogic {
                         NetworkManager.sendToPlayer(serverPlayer,
                                 new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                         serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                        cleanupSyncState(playerId);
                     });
                 }
             }
@@ -829,12 +838,11 @@ public class ServerSyncHandlerLogic {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncProgressPayload(total, total, "completed"));
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
+                cleanupSyncState(playerId);
             });
         }
 
-        LOGGER.debug("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
-
-        cleanupSyncState(playerId);
+        LOGGER.info("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
     }
 
     /**
@@ -900,6 +908,7 @@ public class ServerSyncHandlerLogic {
     public static void cleanup() {
         syncingPlayers.clear();
         playerSyncDimensions.clear();
+        playerSyncVersions.clear();
         syncThreads.clear();
         speedLimitBytesSent.clear();
         speedLimitCycleStart.clear();
@@ -982,19 +991,15 @@ public class ServerSyncHandlerLogic {
      * @param regions 待同步的region信息列表
      * @param player 服务端玩家实例
      */
-    private static void sortByViewDistancePriority(List<RegionSyncInfo> regions, ServerPlayer player) {
-        // 获取玩家位置
-        int playerChunkX = player.getBlockX() >> 4;
-        int playerChunkZ = player.getBlockZ() >> 4;
+    private static void sortByViewDistancePriority(List<RegionSyncInfo> regions, int startBlockX, int startBlockZ, int viewDistanceRegions) {
+        // 使用主线程预捕获的玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
+        int playerChunkX = startBlockX >> 4;
+        int playerChunkZ = startBlockZ >> 4;
         int playerRegionX = playerChunkX >> 5;
         int playerRegionZ = playerChunkZ >> 5;
 
-        // 获取视距（渲染距离），加2 chunks作为移动偏移容差
-        int viewDistanceChunks = player.serverLevel().getServer().getPlayerList().getViewDistance() + 2;
-        int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;  // 向上取整
-
-        LOGGER.debug("Player region: ({}, {}), view distance: {} chunks = ~{} regions",
-                playerRegionX, playerRegionZ, viewDistanceChunks, viewDistanceRegions);
+        LOGGER.debug("Player region: ({}, {}), view distance regions: ~{}",
+                playerRegionX, playerRegionZ, viewDistanceRegions);
 
         // 计算每个region到玩家的距离，并排序
         regions.sort((a, b) -> {

@@ -81,6 +81,8 @@ public class PlayerJoinHandlerLogic {
         XaeroMapDataHandler.clearRegionTracking();
         BlockColorMapper.clearCache();
         BlockPropertyResolver.clearCache();
+        // 清理平台级方块属性缓存
+        PlatformManager.getPlatform().clearBlockPropertiesCache();
         ClientHashManager.shutdown();
 
         // Clear sync tracking data

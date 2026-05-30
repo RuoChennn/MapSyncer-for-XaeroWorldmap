@@ -132,6 +132,7 @@ public class MapSyncer {
         LOGGER.info("Server stopping, cleaning up MapSyncer...");
 
         // 停止增量更新处理器
+        MinecraftForge.EVENT_BUS.unregister(this);
         IncrementalUpdateHandlerLogic.getInstance().stop();
 
         // 关闭转换线程池

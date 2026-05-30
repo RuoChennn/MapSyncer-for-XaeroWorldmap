@@ -9,11 +9,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 缓存服务端同步过来的 region 时间戳和同步状态。
@@ -75,8 +75,8 @@ public class ClientTimestampCache {
     /** 缓存文件路径 */
     private final Path cacheFile;
 
-    /** 缓存数据，键为相对路径（如 "null/0_0"），值为缓存条目 */
-    private final Map<String, CacheEntry> cache = new HashMap<>();
+    /** 缓存数据，键为相对路径（如 "null/0_0"），值为缓存条目。使用 ConcurrentHashMap 保证多线程安全 */
+    private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
     /** 当前同步状态（null 表示从未同步过） */
     private volatile String syncState = null;

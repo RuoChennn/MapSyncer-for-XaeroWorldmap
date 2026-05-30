@@ -380,10 +380,9 @@ public class BlockColorMapper {
                 return -1;
             }
 
-            try (InputStream input = resource.open()) {
-                ImageInputStream imageInputStream = ImageIO.createImageInputStream(input);
+            try (InputStream input = resource.open();
+                 ImageInputStream imageInputStream = ImageIO.createImageInputStream(input)) {
                 BufferedImage img = ImageIO.read(imageInputStream);
-                imageInputStream.close();
 
                 if (img == null) {
                     return -1;

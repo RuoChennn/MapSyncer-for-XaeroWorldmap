@@ -155,6 +155,10 @@ public class ModConfig {
             int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
             this.hashThreads = defaultThreads;
             load();
+            // 首次启动时自动生成默认配置文件
+            if (!Files.exists(configFile)) {
+                save();
+            }
         }
 
         /**
@@ -259,6 +263,10 @@ public class ModConfig {
             // 初始化默认维度配置
             if (dimensionConfigs.isEmpty()) {
                 dimensionConfigs = getDefaultDimensionConfigStrings();
+            }
+            // 首次启动时自动生成默认配置文件
+            if (!Files.exists(configFile)) {
+                save();
             }
         }
 
