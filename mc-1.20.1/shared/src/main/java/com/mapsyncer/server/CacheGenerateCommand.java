@@ -4,6 +4,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
@@ -88,7 +89,7 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateDimension(CommandContext<CommandSourceStack> ctx) {
+    private static int generateDimension(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
@@ -105,7 +106,7 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) {
+    private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
@@ -122,7 +123,7 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) {
+    private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         int x = IntegerArgumentType.getInteger(ctx, "x");
         int z = IntegerArgumentType.getInteger(ctx, "z");
