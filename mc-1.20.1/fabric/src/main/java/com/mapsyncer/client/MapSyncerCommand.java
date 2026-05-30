@@ -23,6 +23,8 @@ public class MapSyncerCommand {
                                 .executes(ctx -> { MapSyncerCommandLogic.showHelp(false); return Command.SINGLE_SUCCESS; }))
                         .then(ClientCommandManager.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
+                                .then(ClientCommandManager.literal("all")
+                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncAll()))
                                 .then(ClientCommandManager.argument("dimension", DimensionArgument.dimension())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> {

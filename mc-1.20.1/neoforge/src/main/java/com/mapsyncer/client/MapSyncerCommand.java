@@ -2,8 +2,9 @@ package com.mapsyncer.client;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -23,9 +24,14 @@ public class MapSyncerCommand {
                                 .executes(ctx -> { MapSyncerCommandLogic.showHelp(ctx.getSource().hasPermission(4)); return Command.SINGLE_SUCCESS; }))
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
-                                .then(net.minecraft.commands.Commands.argument("dimension", StringArgumentType.greedyString())
+                                .then(net.minecraft.commands.Commands.literal("all")
+                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncAll()))
+                                .then(net.minecraft.commands.Commands.argument("dimension", DimensionArgument.dimension())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
-                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncDimension(StringArgumentType.getString(ctx, "dimension")))))
+                                        .executes(ctx -> {
+                                            ResourceLocation loc = ctx.getArgument("dimension", ResourceLocation.class);
+                                            return MapSyncerCommandLogic.executeSyncDimension(loc.toString());
+                                        })))
                         .then(net.minecraft.commands.Commands.literal("clearstate")
                                 .requires(source -> false)
                                 .executes(ctx -> MapSyncerCommandLogic.clearSyncState()))
