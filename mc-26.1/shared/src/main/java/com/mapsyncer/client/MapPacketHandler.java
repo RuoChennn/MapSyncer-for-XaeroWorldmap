@@ -66,10 +66,10 @@ public class MapPacketHandler {
     private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
 
     /** 同步期间更新的区域坐标集合（仅存储坐标，不存储数据，节省内存） */
-    private static volatile Set<XaeroMapIntegrator.RegionCoord> updatedRegionCoords = new HashSet<>();
+    private static volatile Set<XaeroMapDataHandler.RegionCoord> updatedRegionCoords = new HashSet<>();
 
     /** 已加载的区域集合（避免重复加载） */
-    private static volatile Set<XaeroMapIntegrator.RegionCoord> loadedRegions = new HashSet<>();
+    private static volatile Set<XaeroMapDataHandler.RegionCoord> loadedRegions = new HashSet<>();
 
     /**
      * 检查当前同步是否陈旧（运行时间过长）。
@@ -212,7 +212,7 @@ public class MapPacketHandler {
 
             // 流式处理：写入后立即处理
             for (ChunkMapData chunk : chunks) {
-                XaeroMapIntegrator.RegionCoord coord = new XaeroMapIntegrator.RegionCoord(
+                XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                     chunk.regionX, chunk.regionZ, chunk.caveLayer);
                 updatedRegionCoords.add(coord);
 
@@ -228,7 +228,7 @@ public class MapPacketHandler {
                     : (chunk.caveLayer == Integer.MAX_VALUE); // 主世界/末地：地表层
 
                 // 判断是否在视距内
-                Set<XaeroMapIntegrator.RegionCoord> viewRegionsForLayer =
+                Set<XaeroMapDataHandler.RegionCoord> viewRegionsForLayer =
                     XaeroMapIntegrator.getViewDistanceRegions(chunk.caveLayer);
                 boolean inViewDistance = viewRegionsForLayer.contains(coord);
 
@@ -259,7 +259,7 @@ public class MapPacketHandler {
                 LOGGER.info("同步完成: 总计 {} 个区域已处理", totalReceived);
 
                 if (!updatedRegionCoords.isEmpty()) {
-                    XaeroMapIntegrator.recordUpdatedRegionCoords(updatedRegionCoords);
+                    XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.completeWithCount(totalReceived);
 
                     resumeChunkUpdates();
@@ -349,7 +349,7 @@ public class MapPacketHandler {
     /**
      * 立即加载单个区域。
      */
-    private static void triggerSingleRegionLoad(XaeroMapIntegrator.RegionCoord coord, int caveLayer, boolean inViewDistance) {
+    private static void triggerSingleRegionLoad(XaeroMapDataHandler.RegionCoord coord, int caveLayer, boolean inViewDistance) {
         if (!XaeroReflectionHelper.isInitialized()) {
             LOGGER.warn("反射缓存未初始化，无法加载区域 ({}, {}) layer={}", coord.x(), coord.z(), caveLayer);
             return;
@@ -414,7 +414,7 @@ public class MapPacketHandler {
     /**
      * 清除单个区域的缓存文件。
      */
-    private static void clearSingleRegionCache(XaeroMapIntegrator.RegionCoord coord) {
+    private static void clearSingleRegionCache(XaeroMapDataHandler.RegionCoord coord) {
         if (lastMwDir == null) return;
 
         String cacheFileName = coord.x() + "_" + coord.z() + ".xwmc";

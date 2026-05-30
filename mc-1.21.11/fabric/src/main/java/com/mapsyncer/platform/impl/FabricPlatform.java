@@ -28,9 +28,9 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabric 1.21.11 平台实现
+ * Fabric 1.21.11 骞冲彴瀹炵幇
  *
- * 实现 Platform 接口，适配 Fabric 1.21.11 的 API。
+ * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 Fabric 1.21.11 鐨?API銆?
  */
 public class FabricPlatform implements Platform {
 
@@ -38,7 +38,7 @@ public class FabricPlatform implements Platform {
 
     private MinecraftServer server;
 
-    // 缓存方块属性查询结果
+    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     public void setServer(MinecraftServer server) {
@@ -70,11 +70,11 @@ public class FabricPlatform implements Platform {
         return net.fabricmc.loader.api.FabricLoader.getInstance().getEnvironmentType() == net.fabricmc.api.EnvType.CLIENT;
     }
 
-    // ===== 方块属性 =====
+    // ===== 鏂瑰潡灞炴€?=====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 检查缓存
+        // 妫€鏌ョ紦瀛?
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
@@ -97,7 +97,7 @@ public class FabricPlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 使用 BlockPropertyResolver 获取属性（服务端可用）
+            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€э紙鏈嶅姟绔彲鐢級
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -131,7 +131,7 @@ public class FabricPlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 世界信息 =====
+    // ===== 涓栫晫淇℃伅 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -143,7 +143,7 @@ public class FabricPlatform implements Platform {
         return 320;
     }
 
-    // ===== 维度信息 =====
+    // ===== 缁村害淇℃伅 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -155,7 +155,7 @@ public class FabricPlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 配置系统 =====
+    // ===== 閰嶇疆绯荤粺 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
@@ -247,7 +247,7 @@ public class FabricPlatform implements Platform {
         return ModConfig.SERVER().getConfigForDimension(dimensionPath);
     }
 
-    // ===== 文件路径 =====
+    // ===== 鏂囦欢璺緞 =====
 
     @Override
     public Path getServerMapCacheDir() {
@@ -261,13 +261,13 @@ public class FabricPlatform implements Platform {
     @Override
     public Path getClientXaeroWorldMapDir() {
         try {
-            // 使用 XaeroMapIntegrator 获取当前服务器目录
+            // 浣跨敤 XaeroMapIntegrator 鑾峰彇褰撳墠鏈嶅姟鍣ㄧ洰褰?
             Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
             if (serverDir != null) {
                 return serverDir;
             }
 
-            // 回退：返回默认 Xaero 目录
+            // 鍥為€€锛氳繑鍥為粯璁?Xaero 鐩綍
             Minecraft mc = Minecraft.getInstance();
             if (mc.gameDirectory != null) {
                 return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
@@ -291,14 +291,14 @@ public class FabricPlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 日志 =====
+    // ===== 鏃ュ織 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 工具方法 =====
+    // ===== 宸ュ叿鏂规硶 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -331,14 +331,14 @@ public class FabricPlatform implements Platform {
     @Override
     public void recordUpdatedRegions(Set<RegionCoord> regions) {
         try {
-            // 转换 Platform.RegionCoord 到 XaeroMapIntegrator.RegionCoord
-            Set<com.mapsyncer.client.XaeroMapIntegrator.RegionCoord> xaeroRegions = new HashSet<>();
+            // 杞崲 Platform.RegionCoord 鍒?XaeroMapDataHandler.RegionCoord
+            Set<com.mapsyncer.client.XaeroMapDataHandler.RegionCoord> xaeroRegions = new HashSet<>();
             for (RegionCoord coord : regions) {
-                xaeroRegions.add(new com.mapsyncer.client.XaeroMapIntegrator.RegionCoord(
+                xaeroRegions.add(new com.mapsyncer.client.XaeroMapDataHandler.RegionCoord(
                     coord.x(), coord.z(), coord.caveLayer()
                 ));
             }
-            com.mapsyncer.client.XaeroMapIntegrator.recordUpdatedRegionCoords(xaeroRegions);
+            com.mapsyncer.client.XaeroMapDataHandler.recordUpdatedRegionCoords(xaeroRegions);
             LOGGER.debug("Recorded {} updated regions via XaeroMapIntegrator", regions.size());
         } catch (Exception e) {
             LOGGER.warn("Failed to record updated regions: {}", e.getMessage());
@@ -346,14 +346,14 @@ public class FabricPlatform implements Platform {
     }
 
     /**
-     * 清除方块属性缓存
+     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
      */
     public static void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 
     /**
-     * 获取缓存大小
+     * 鑾峰彇缂撳瓨澶у皬
      */
     public static int getCacheSize() {
         return blockPropertiesCache.size();

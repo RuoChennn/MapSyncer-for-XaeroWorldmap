@@ -27,15 +27,15 @@ import java.util.Set;
 import java.util.HashSet;
 
 /**
- * Forge 1.21.11 平台实现
+ * Forge 1.21.11 骞冲彴瀹炵幇
  *
- * 实现 Platform 接口，适配 Forge API。
+ * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 Forge API銆?
  */
 public class ForgePlatform implements Platform {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ForgePlatform.class);
 
-    // 缓存方块属性查询结果
+    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     @Override
@@ -63,11 +63,11 @@ public class ForgePlatform implements Platform {
         return net.minecraftforge.fml.loading.FMLEnvironment.dist == net.minecraftforge.api.distmarker.Dist.CLIENT;
     }
 
-    // ===== 方块属性 =====
+    // ===== 鏂瑰潡灞炴€?=====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 检查缓存
+        // 妫€鏌ョ紦瀛?
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
@@ -75,7 +75,7 @@ public class ForgePlatform implements Platform {
 
         try {
             ResourceLocation loc = ResourceLocation.parse(blockName);
-            // Forge 1.21: BuiltInRegistries 可用
+            // Forge 1.21: BuiltInRegistries 鍙敤
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {
@@ -91,7 +91,7 @@ public class ForgePlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 使用 BlockPropertyResolver 获取属性
+            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€?
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -125,7 +125,7 @@ public class ForgePlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 世界信息 =====
+    // ===== 涓栫晫淇℃伅 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -137,7 +137,7 @@ public class ForgePlatform implements Platform {
         return 320;
     }
 
-    // ===== 维度信息 =====
+    // ===== 缁村害淇℃伅 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -149,7 +149,7 @@ public class ForgePlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 配置系统 =====
+    // ===== 閰嶇疆绯荤粺 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
@@ -218,7 +218,7 @@ public class ForgePlatform implements Platform {
 
     @Override
     public void saveConfig() {
-        // Forge 自动管理配置持久化，无需手动保存
+        // Forge 鑷姩绠＄悊閰嶇疆鎸佷箙鍖栵紝鏃犻渶鎵嬪姩淇濆瓨
     }
 
     @Override
@@ -241,7 +241,7 @@ public class ForgePlatform implements Platform {
         return ModConfig.SERVER.getConfigForDimension(dimensionPath);
     }
 
-    // ===== 文件路径 =====
+    // ===== 鏂囦欢璺緞 =====
 
     @Override
     public Path getServerMapCacheDir() {
@@ -279,14 +279,14 @@ public class ForgePlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 日志 =====
+    // ===== 鏃ュ織 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 工具方法 =====
+    // ===== 宸ュ叿鏂规硶 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -319,13 +319,13 @@ public class ForgePlatform implements Platform {
     @Override
     public void recordUpdatedRegions(Set<RegionCoord> regions) {
         try {
-            Set<com.mapsyncer.client.XaeroMapIntegrator.RegionCoord> xaeroRegions = new HashSet<>();
+            Set<com.mapsyncer.client.XaeroMapDataHandler.RegionCoord> xaeroRegions = new HashSet<>();
             for (RegionCoord coord : regions) {
-                xaeroRegions.add(new com.mapsyncer.client.XaeroMapIntegrator.RegionCoord(
+                xaeroRegions.add(new com.mapsyncer.client.XaeroMapDataHandler.RegionCoord(
                     coord.x(), coord.z(), coord.caveLayer()
                 ));
             }
-            com.mapsyncer.client.XaeroMapIntegrator.recordUpdatedRegionCoords(xaeroRegions);
+            com.mapsyncer.client.XaeroMapDataHandler.recordUpdatedRegionCoords(xaeroRegions);
             LOGGER.debug("Recorded {} updated regions via XaeroMapIntegrator", regions.size());
         } catch (Exception e) {
             LOGGER.warn("Failed to record updated regions: {}", e.getMessage());
@@ -333,14 +333,14 @@ public class ForgePlatform implements Platform {
     }
 
     /**
-     * 清除方块属性缓存
+     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
      */
     public static void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 
     /**
-     * 获取缓存大小
+     * 鑾峰彇缂撳瓨澶у皬
      */
     public static int getCacheSize() {
         return blockPropertiesCache.size();

@@ -2,7 +2,7 @@ package com.mapsyncer.client;
 
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.platform.XaeroReflectionHelper;
-import com.mapsyncer.util.HashUtils;
+import com.mapsyncer.util.XaeroPathResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,117 +31,26 @@ import java.util.Set;
  *   <li>重置区域加载状态，触发地图重新加载</li>
  * </ul>
  *
- * <p>目录结构：</p>
+ * <p>纯数据操作（文件写入、区域追踪）已移至 {@link XaeroMapDataHandler}。
+ * 此类仅保留依赖 Minecraft API 的功能。</p>
+ *
+ * <p>目录结构（自动检测，兼容 1.20.x 和 1.21.x+）：</p>
  * <ul>
- *   <li>多人游戏：xaero/world-map/Multiplayer_<serverIP>/<dimension>/mw$<worldId>/</li>
- *   <li>单机游戏：xaero/world-map/Multiplayer_Singleplayer/<dimension>/mw$<worldId>/</li>
- *   <li>局域网游戏：xaero/world-map/Multiplayer_LAN/<dimension>/mw$<worldId>/</li>
+ *   <li>多人游戏：&lt;worldMapDir&gt;/Multiplayer_&lt;serverIP&gt;/&lt;dimension&gt;/mw$&lt;worldId&gt;/</li>
+ *   <li>单机游戏：&lt;worldMapDir&gt;/Multiplayer_Singleplayer/&lt;dimension&gt;/mw$&lt;worldId&gt;/</li>
+ *   <li>局域网游戏：&lt;worldMapDir;/Multiplayer_LAN/&lt;dimension&gt;/mw$&lt;worldId&gt;/</li>
  * </ul>
  */
 public class XaeroMapIntegrator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(XaeroMapIntegrator.class);
 
-    /** 同步期间更新的区域集合，用于选择性重置 */
-    private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
-
-    /** 同步前预卸载的区域集合（原本已加载的），用于同步后设置 loadState=4 */
-    private static volatile Set<RegionCoord> preUnloadedRegions = new HashSet<>();
-
     /**
-     * 获取同步期间更新的区域集合。
-     *
-     * @return 更新区域集合的副本
+     * 自动检测 Xaero's World Map 数据目录。
+     * 委托给 {@link XaeroPathResolver}，兼容 1.20.x 和 1.21.x+ 路径。
      */
-    public static Set<RegionCoord> getUpdatedRegions() {
-        return new HashSet<>(updatedRegions);
-    }
-
-    /**
-     * 获取同步前预卸载的区域集合（原本已加载的）。
-     * 这些区域在同步后应使用 loadState=4（需要重载）而非 loadState=0（未加载）。
-     *
-     * @return 预卸载区域集合的副本
-     */
-    public static Set<RegionCoord> getPreUnloadedRegions() {
-        return new HashSet<>(preUnloadedRegions);
-    }
-
-    /**
-     * 清除预卸载区域集合。
-     */
-    public static void clearPreUnloadedRegions() {
-        preUnloadedRegions.clear();
-    }
-
-    /**
-     * 清除所有区域追踪集合，释放内存。
-     * 在同步完成或离开服务器时调用。
-     */
-    public static void clearRegionTracking() {
-        updatedRegions.clear();
-        preUnloadedRegions.clear();
-        LOGGER.debug("Cleared region tracking sets");
-    }
-
-    /**
-     * 区域坐标记录，用于追踪更新的区域。
-     * 包含 caveLayer 信息，用于区分地表层和洞穴层。
-     *
-     * @param x 区域X坐标
-     * @param z 区域Z坐标
-     * @param caveLayer 洞穴层编号，地表层使用 Integer.MAX_VALUE
-     */
-    public record RegionCoord(int x, int z, int caveLayer) {
-        /**
-         * 兼容旧代码的构造器（默认地表层）。
-         *
-         * @param x 区域X坐标
-         * @param z 区域Z坐标
-         */
-        public RegionCoord(int x, int z) {
-            this(x, z, Integer.MAX_VALUE);
-        }
-
-        /**
-         * 判断是否为地表层。
-         *
-         * @return 如果是地表层返回 true；否则返回 false
-         */
-        public boolean isSurfaceLayer() {
-            return caveLayer == Integer.MAX_VALUE;
-        }
-    }
-
-    /**
-     * 记录同步期间更新的区域。
-     * 这些区域将在重新加载时被选择性重置。
-     * 包含 caveLayer 信息，用于区分地表层和洞穴层。
-     *
-     * @param chunks 同步期间接收的区块数据列表
-     */
-    public static void recordUpdatedRegions(List<ChunkMapData> chunks) {
-        // Clear existing set first to prevent memory leak
-        // (previous pattern "updatedRegions = regions" created new Set but old Set remained in memory)
-        updatedRegions.clear();
-
-        for (ChunkMapData chunk : chunks) {
-            updatedRegions.add(new RegionCoord(chunk.regionX, chunk.regionZ, chunk.caveLayer));
-        }
-        LOGGER.debug("Recorded {} updated regions for selective reset", updatedRegions.size());
-    }
-
-    /**
-     * 记录同步期间更新的区域（使用预计算的坐标集合）。
-     * 此方法更节省内存，直接接收坐标集合而非完整数据。
-     *
-     * @param coords 区域坐标集合
-     */
-    public static void recordUpdatedRegionCoords(Set<RegionCoord> coords) {
-        // Clear existing set first to prevent memory leak
-        updatedRegions.clear();
-        updatedRegions.addAll(coords);
-        LOGGER.debug("Recorded {} updated region coords for selective reset", updatedRegions.size());
+    public static Path getWorldMapDir(Path gameDir) {
+        return XaeroPathResolver.getWorldMapDir(gameDir);
     }
 
     /**
@@ -150,16 +58,9 @@ public class XaeroMapIntegrator {
      * 根据玩家的位置和视距设置，计算需要关注的区域集合。
      * 默认使用地表层 (Integer.MAX_VALUE)。
      *
-     * <p>计算逻辑：</p>
-     * <ul>
-     *   <li>视距 = 渲染距离（chunks 半径）</li>
-     *   <li>一个 region = 32 chunks</li>
-     *   <li>根据玩家位置计算视距范围可能跨越的 region</li>
-     * </ul>
-     *
      * @return 视距范围内的区域坐标集合（地表层）
      */
-    public static Set<RegionCoord> getViewDistanceRegions() {
+    public static Set<XaeroMapDataHandler.RegionCoord> getViewDistanceRegions() {
         return getViewDistanceRegions(Integer.MAX_VALUE);
     }
 
@@ -167,53 +68,34 @@ public class XaeroMapIntegrator {
      * 计算视距范围内的区域坐标。
      * 根据玩家的位置和视距设置，计算需要关注的区域集合。
      *
-     * <p>计算逻辑：</p>
-     * <ul>
-     *   <li>视距 = 渲染距离（chunks 半径）</li>
-     *   <li>一个 region = 32 chunks</li>
-     *   <li>根据玩家位置计算视距范围可能跨越的 region</li>
-     * </ul>
-     *
      * @param caveLayer 洞穴层编号，地表层使用 Integer.MAX_VALUE
      * @return 视距范围内的区域坐标集合
      */
-    public static Set<RegionCoord> getViewDistanceRegions(int caveLayer) {
+    public static Set<XaeroMapDataHandler.RegionCoord> getViewDistanceRegions(int caveLayer) {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
         if (player == null) {
             return new HashSet<>();
         }
 
-        // Get player position in chunks
-        int playerChunkX = player.getBlockX() >> 4;  // 16 blocks per chunk
+        int playerChunkX = player.getBlockX() >> 4;
         int playerChunkZ = player.getBlockZ() >> 4;
-
-        // Get view distance (render distance) in chunks (radius)
         int viewDistance = mc.options.renderDistance().get();
 
-        // 计算视距范围（chunks）
-        // 从 playerChunkX - viewDistance 到 playerChunkX + viewDistance
         int minChunkX = playerChunkX - viewDistance;
         int maxChunkX = playerChunkX + viewDistance;
         int minChunkZ = playerChunkZ - viewDistance;
         int maxChunkZ = playerChunkZ + viewDistance;
 
-        // 转换为 region 坐标
-        // region 边界: regionX * 32 到 (regionX + 1) * 32 - 1
-        int minRegionX = minChunkX >> 5;  // floor division for negative numbers
+        int minRegionX = minChunkX >> 5;
         int maxRegionX = maxChunkX >> 5;
         int minRegionZ = minChunkZ >> 5;
         int maxRegionZ = maxChunkZ >> 5;
 
-        // 处理负数情况的 floor division
-        // Java 的 >> 5 对负数是 floor，正数也是 floor，所以这里正确
-
-        Set<RegionCoord> viewRegions = new HashSet<>();
-
-        // 添加视距范围内的所有 region（使用指定的 caveLayer）
+        Set<XaeroMapDataHandler.RegionCoord> viewRegions = new HashSet<>();
         for (int rx = minRegionX; rx <= maxRegionX; rx++) {
             for (int rz = minRegionZ; rz <= maxRegionZ; rz++) {
-                viewRegions.add(new RegionCoord(rx, rz, caveLayer));
+                viewRegions.add(new XaeroMapDataHandler.RegionCoord(rx, rz, caveLayer));
             }
         }
 
@@ -231,7 +113,7 @@ public class XaeroMapIntegrator {
      * @return 卸载的区域数量
      */
     public static int unloadViewDistanceRegions() {
-        Set<RegionCoord> viewRegions = getViewDistanceRegions();
+        Set<XaeroMapDataHandler.RegionCoord> viewRegions = getViewDistanceRegions();
         if (viewRegions.isEmpty()) {
             LOGGER.info("No view distance regions to unload");
             return 0;
@@ -243,22 +125,19 @@ public class XaeroMapIntegrator {
 
     /**
      * 仅重置指定区域的加载状态。
-     * 公共方法，供外部调用者使用。
      *
      * @param regionsToReset 需要重置的区域集合
      * @return 重置的区域数量
      */
-    public static int resetSpecificRegionLoadStates(Set<RegionCoord> regionsToReset) {
+    public static int resetSpecificRegionLoadStates(Set<XaeroMapDataHandler.RegionCoord> regionsToReset) {
         int resetCount = 0;
 
-        // 确保 XaeroReflectionHelper 已初始化
         if (!XaeroReflectionHelper.isInitialized()) {
             LOGGER.warn("XaeroReflectionHelper not initialized for selective reset");
             return 0;
         }
 
         try {
-            // 使用封装方法获取 regionTextureMap
             Object regionTextureMap = XaeroReflectionHelper.getRegionTextureMap(Integer.MAX_VALUE);
             if (regionTextureMap == null) {
                 LOGGER.warn("Could not get regionTextureMap for selective reset");
@@ -269,7 +148,6 @@ public class XaeroMapIntegrator {
                 for (Object columnEntry : map.values()) {
                     if (columnEntry instanceof Map<?, ?> column) {
                         for (Object regionEntry : column.values()) {
-                            // Traverse and selectively reset
                             resetCount += selectiveResetLeafRegions(regionEntry, regionsToReset);
                         }
                     }
@@ -287,19 +165,12 @@ public class XaeroMapIntegrator {
 
     /**
      * 遍历区域并选择性重置目标集合中的区域。
-     * 记录原本已加载的 region（loadState==2）到 preUnloadedRegions，
-     * 用于同步后区分使用 loadState=4（需要重载）或 loadState=0（未加载）。
-     *
-     * @param region 区域对象
-     * @param regionsToReset 需要重置的区域集合
-     * @return 重置的区域数量
+     * 记录原本已加载的 region 到 preUnloadedRegions。
      */
-    private static int selectiveResetLeafRegions(Object region, Set<RegionCoord> regionsToReset) {
+    private static int selectiveResetLeafRegions(Object region, Set<XaeroMapDataHandler.RegionCoord> regionsToReset) {
         int count = 0;
         try {
-            // Check if this is a MapRegion (leaf)
             if (XaeroReflectionHelper.isMapRegion(region)) {
-                // Get region coordinates using encapsulated methods
                 int rx = XaeroReflectionHelper.getRegionX(region);
                 int rz = XaeroReflectionHelper.getRegionZ(region);
 
@@ -308,9 +179,8 @@ public class XaeroMapIntegrator {
                     return 0;
                 }
 
-                RegionCoord coord = new RegionCoord(rx, rz);
+                XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(rx, rz);
 
-                // Only reset if this region is in our target set
                 if (regionsToReset.contains(coord)) {
                     byte currentLoadState = XaeroReflectionHelper.getLoadState(region);
 
@@ -320,8 +190,7 @@ public class XaeroMapIntegrator {
                     }
 
                     if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_LOADED) {
-                        // 记录原本已加载的 region，同步后使用 loadState=4
-                        preUnloadedRegions.add(coord);
+                        XaeroMapDataHandler.getPreUnloadedRegionsInternal().add(coord);
 
                         boolean success = XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         if (success) {
@@ -331,8 +200,7 @@ public class XaeroMapIntegrator {
                             LOGGER.error("设置区域 ({}, {}) loadState 失败", rx, rz);
                         }
                     } else if (currentLoadState == XaeroReflectionHelper.LOAD_STATE_CLEARED) {
-                        // 需要重载的状态也记录为已加载
-                        preUnloadedRegions.add(coord);
+                        XaeroMapDataHandler.getPreUnloadedRegionsInternal().add(coord);
                         boolean success = XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         if (success) {
                             count++;
@@ -340,7 +208,6 @@ public class XaeroMapIntegrator {
                     }
                 }
             } else if (XaeroReflectionHelper.isBranchLeveledRegion(region)) {
-                // Traverse children using encapsulated method
                 Object childrenArray = XaeroReflectionHelper.getBranchChildren(region);
 
                 if (childrenArray != null && childrenArray.getClass().isArray()) {
@@ -366,14 +233,57 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 获取当前服务器的基础目录（null 目录）。
-     * 路径结构：xaero/world-map/Multiplayer_<server>/null/
+     * 清理服务器 IP 地址，去除端口和方括号。
      *
-     * <p>支持多种游戏模式：</p>
-     * <ul>
-     *   <li>多人游戏：Multiplayer_<serverIP>/</li>
-     *   <li>单机游戏/局域网：单机游戏使用 "Singleplayer" 目录名，局域网使用 LAN server 特殊处理</li>
-     * </ul>
+     * @param rawIP 原始 IP 字符串
+     * @return 清理后的 IP
+     */
+    private static String cleanServerIP(String rawIP) {
+        int portDivider = rawIP.lastIndexOf(":");
+        if (portDivider > 0 && rawIP.indexOf(":") != rawIP.lastIndexOf(":")) {
+            portDivider = rawIP.lastIndexOf("]:") + 1;
+        }
+        if (portDivider > 0) {
+            rawIP = rawIP.substring(0, portDivider);
+        }
+        rawIP = rawIP.replace("[", "").replace("]", "");
+        rawIP = rawIP.replaceAll(":", ".");
+        while (rawIP.endsWith(".")) {
+            rawIP = rawIP.substring(0, rawIP.length() - 1);
+        }
+        if (rawIP.isEmpty()) {
+            rawIP = "Empty Address";
+        }
+        return rawIP;
+    }
+
+    /**
+     * 获取当前服务器 IP（已清理）。
+     * 多人游戏返回清理后的 IP，单机返回 "Singleplayer"，局域网返回 "LAN"。
+     *
+     * @return 服务器 IP 字符串，如果未连接返回 null
+     */
+    private static String getCurrentServerIP() {
+        Minecraft mc = Minecraft.getInstance();
+        ClientPacketListener connection = mc.getConnection();
+        if (connection == null) {
+            return null;
+        }
+
+        ServerData serverData = connection.getServerData();
+        if (serverData != null && serverData.ip != null && !serverData.ip.isEmpty()) {
+            return cleanServerIP(serverData.ip);
+        }
+
+        if (mc.hasSingleplayerServer()) {
+            return "Singleplayer";
+        }
+        return "LAN";
+    }
+
+    /**
+     * 获取当前服务器的基础目录（null 目录）。
+     * 路径结构：&lt;worldMapDir&gt;/Multiplayer_&lt;server&gt;/null/
      *
      * @return 服务器基础目录路径，如果未连接返回 null
      */
@@ -386,56 +296,22 @@ public class XaeroMapIntegrator {
             return null;
         }
 
-        // 尝试获取 ServerData（多人游戏）
         ServerData serverData = connection.getServerData();
         LOGGER.debug("getCurrentServerBaseDirectory: serverData={}, serverData.ip={}",
                 serverData, serverData != null ? serverData.ip : "N/A");
 
         Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+        Path worldMapDir = getWorldMapDir(gameDir);
 
-        String serverIP;
-
-        if (serverData != null && serverData.ip != null && !serverData.ip.isEmpty()) {
-            // 多人游戏模式
-            serverIP = serverData.ip;
-
-            // Clean up server IP
-            int portDivider = serverIP.lastIndexOf(":");
-            if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
-                portDivider = serverIP.lastIndexOf("]:") + 1;
-            }
-            if (portDivider > 0) {
-                serverIP = serverIP.substring(0, portDivider);
-            }
-            serverIP = serverIP.replace("[", "").replace("]", "");
-            serverIP = serverIP.replaceAll(":", ".");
-            while (serverIP.endsWith(".")) {
-                serverIP = serverIP.substring(0, serverIP.length() - 1);
-            }
-            if (serverIP.isEmpty()) {
-                serverIP = "Empty Address";
-            }
-        } else {
-            // 单机游戏或局域网游戏模式
-            // 检查是否是单机游戏
-            if (mc.hasSingleplayerServer()) {
-                serverIP = "Singleplayer";
-                LOGGER.debug("Singleplayer mode detected");
-            } else {
-                // 局域网游戏：尝试从连接信息获取
-                // 局域网服务器通常使用 localhost 或 LAN
-                serverIP = "LAN";
-                LOGGER.debug("LAN mode detected");
-            }
+        String serverIP = getCurrentServerIP();
+        if (serverIP == null) {
+            return null;
         }
 
         Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
         Path dimDir = serverDir.resolve("null");
 
-        // 如果目录不存在，尝试查找已存在的 Xaero 目录
         if (!dimDir.toFile().exists()) {
-            // 尝试扫描 world-map 目录找到匹配的服务器目录
             try {
                 if (worldMapDir.toFile().exists() && worldMapDir.toFile().isDirectory()) {
                     Files.list(worldMapDir)
@@ -452,7 +328,6 @@ public class XaeroMapIntegrator {
                 LOGGER.debug("Failed to scan world-map directory: {}", e.getMessage());
             }
 
-            // 单机游戏模式下，自动创建目录（首次同步）
             if (serverIP.equals("Singleplayer") || serverIP.equals("LAN")) {
                 LOGGER.info("Creating Xaero directory for {} mode: {}", serverIP, dimDir);
                 try {
@@ -468,9 +343,7 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 获取当前连接服务器的服务器目录（Multiplayer_<serverIP>）。
-     * 这是包含所有维度文件夹的父目录。
-     * 路径结构：xaero/world-map/Multiplayer_<server>/
+     * 获取当前连接服务器的服务器目录（Multiplayer_&lt;serverIP&gt;）。
      *
      * @return 服务器目录路径，如果未连接返回 null
      */
@@ -482,39 +355,13 @@ public class XaeroMapIntegrator {
             return null;
         }
 
-        ServerData serverData = connection.getServerData();
-        Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
-
-        String serverIP;
-
-        if (serverData != null && serverData.ip != null && !serverData.ip.isEmpty()) {
-            serverIP = serverData.ip;
-
-            // Clean up server IP
-            int portDivider = serverIP.lastIndexOf(":");
-            if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
-                portDivider = serverIP.lastIndexOf("]:") + 1;
-            }
-            if (portDivider > 0) {
-                serverIP = serverIP.substring(0, portDivider);
-            }
-            serverIP = serverIP.replace("[", "").replace("]", "");
-            serverIP = serverIP.replaceAll(":", ".");
-            while (serverIP.endsWith(".")) {
-                serverIP = serverIP.substring(0, serverIP.length() - 1);
-            }
-            if (serverIP.isEmpty()) {
-                serverIP = "Empty Address";
-            }
-        } else {
-            if (mc.hasSingleplayerServer()) {
-                serverIP = "Singleplayer";
-            } else {
-                serverIP = "LAN";
-            }
+        String serverIP = getCurrentServerIP();
+        if (serverIP == null) {
+            return null;
         }
 
+        Path gameDir = mc.gameDirectory.toPath();
+        Path worldMapDir = getWorldMapDir(gameDir);
         Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
         LOGGER.debug("Server directory: {}", serverDir);
         return serverDir;
@@ -522,9 +369,7 @@ public class XaeroMapIntegrator {
 
     /**
      * 写入服务端接收的地图数据到正确位置。
-     * 使用服务端提供的 worldId 确保目录路径正确。
-     * 返回 mw 目录路径供后续处理。
-     * 同时保存服务端时间戳到本地缓存供未来同步比较。
+     * 委托给 {@link XaeroMapDataHandler#writeMapData}，同时获取 MC 上下文。
      *
      * @param chunks 接收的区块数据列表
      * @param serverWorldId 服务端的 worldId
@@ -544,96 +389,27 @@ public class XaeroMapIntegrator {
             return null;
         }
 
-        // Get server address
-        String serverIP = serverData.ip;
-        if (serverIP == null || serverIP.isEmpty()) {
-            serverIP = "Unknown";
-        }
-
-        // Clean up server IP
-        int portDivider = serverIP.lastIndexOf(":");
-        if (portDivider > 0 && serverIP.indexOf(":") != serverIP.lastIndexOf(":")) {
-            portDivider = serverIP.lastIndexOf("]:") + 1;
-        }
-        if (portDivider > 0) {
-            serverIP = serverIP.substring(0, portDivider);
-        }
-        serverIP = serverIP.replace("[", "").replace("]", "");
-        serverIP = serverIP.replaceAll(":", ".");
-        while (serverIP.endsWith(".")) {
-            serverIP = serverIP.substring(0, serverIP.length() - 1);
-        }
-        if (serverIP.isEmpty()) {
-            serverIP = "Empty Address";
+        String serverIP = getCurrentServerIP();
+        if (serverIP == null) {
+            return null;
         }
 
         LOGGER.info("Using server worldId: {}", serverWorldId);
 
         Path gameDir = mc.gameDirectory.toPath();
-        Path worldMapDir = gameDir.resolve("xaero").resolve("world-map");
+        Path worldMapDir = getWorldMapDir(gameDir);
         Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
 
-        // Get timestamp cache for this server
-        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
-
-        Path lastMwDir = null;
-        for (ChunkMapData chunk : chunks) {
-            lastMwDir = writeChunkDataAndGetDir(chunk, serverDir, serverWorldId);
-
-            // Update timestamp cache with server's timestamp and computed hash
-            String relativePath = buildRelativePathForCache(chunk);
-            String hash = HashUtils.computeHash(chunk.data);
-            tsCache.update(relativePath, chunk.timestampSeconds, hash);
-            LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
-                    relativePath, chunk.timestampSeconds, hash);
-        }
-
-        // Save timestamp cache after all chunks written
-        tsCache.save();
-        LOGGER.info("Saved timestamp cache for {} regions", chunks.size());
-
-        return lastMwDir;
+        return XaeroMapDataHandler.writeMapData(chunks, serverDir, serverWorldId);
     }
 
     /**
-     * 构建时间戳缓存的服务器格式相对路径。
-     *
-     * <p>格式（匹配服务端 GenerationCache 格式）：</p>
-     * <ul>
-     *   <li>地表：xaeroDim/regionX_regionZ（如 twilightforest$twilight_forest/0_0）</li>
-     *   <li>洞穴：xaeroDim/caves/layer/regionX_regionZ</li>
-     * </ul>
-     *
-     * <p>注意：chunk.dimension 已经是 Xaero 格式，直接使用即可，无需转换。</p>
+     * 写入单个区块数据并返回 mw 目录路径。
+     * 委托给 {@link XaeroMapDataHandler#writeChunkData}，同时获取 MC 上下文。
      *
      * @param chunk 区块数据
-     * @return 相对路径字符串
-     */
-    private static String buildRelativePathForCache(ChunkMapData chunk) {
-        // chunk.dimension 已经是 Xaero 格式（如 twilightforest$twilight_forest）
-        // 直接使用，与服务端 GenerationCache 的 key 格式保持一致
-        String xaeroDim = chunk.dimension;
-
-        if (chunk.caveLayer == Integer.MAX_VALUE) {
-            // 地表层
-            return xaeroDim + "/" + chunk.regionX + "_" + chunk.regionZ;
-        } else {
-            // 洞穴层
-            return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
-        }
-    }
-
-    /**
-     * 构建时间戳缓存的服务器格式相对路径。
-     * 支持 caves/<layer> 目录结构：
-     * <ul>
-     *   <li>地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip</li>
-     *   <li>洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip</li>
-     * </ul>
-     *
-     * @param chunk 区块数据
-     * @param worldId worldId
-     * @return mw 目录路径
+     * @param worldId 服务端 worldId
+     * @return mw 目录路径，如果获取服务器目录失败返回 null
      */
     public static Path writeChunkDataAndGetMwDir(ChunkMapData chunk, int worldId) {
         Path serverDir = getCurrentServerDirectory();
@@ -641,54 +417,6 @@ public class XaeroMapIntegrator {
             LOGGER.warn("无法获取服务器目录");
             return null;
         }
-        return writeChunkDataAndGetDir(chunk, serverDir, worldId);
-    }
-
-    /**
-     * 写入区块数据并返回 mw 目录路径。
-     * 支持 caves/<layer> 目录结构：
-     * <ul>
-     *   <li>地表：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/<regionX_regionZ>.zip</li>
-     *   <li>洞穴：Multiplayer_<server>/<xaero_dimension>/mw$<worldId>/caves/<layer>/<regionX_regionZ>.zip</li>
-     * </ul>
-     *
-     * @param chunk 区块数据
-     * @param serverDir 服务器目录
-     * @param worldId worldId
-     * @return mw 目录路径
-     */
-    private static Path writeChunkDataAndGetDir(ChunkMapData chunk, Path serverDir, int worldId) {
-        // chunk.dimension 已经是 Xaero 格式，直接使用
-        // 注意：服务端发送的 dimension 就是 Xaero 格式（如 null, DIM-1, DIM1, twilightforest$twilight_forest）
-        String xaeroDim = chunk.dimension;
-        Path dimDir = serverDir.resolve(xaeroDim);
-        Path mwDir = dimDir.resolve("mw$" + worldId);
-
-        // 根据 caveLayer 决定最终目录
-        Path targetDir;
-        if (chunk.caveLayer == Integer.MAX_VALUE) {
-            // 地表层：直接在 mw$<worldId> 目录
-            targetDir = mwDir;
-        } else {
-            // 洞穴层：存放到 caves/<layer> 子目录
-            targetDir = mwDir.resolve("caves").resolve(String.valueOf(chunk.caveLayer));
-        }
-
-        Path outputFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip");
-        Path tempFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip.temp");
-
-        try {
-            Files.createDirectories(targetDir);
-
-            // Direct write: replace existing file with server data (no incremental merge)
-            Files.write(tempFile, chunk.data);
-            Files.move(tempFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
-            LOGGER.debug("Wrote map file: {} (layer={}, {} bytes)", outputFile,
-                chunk.isSurfaceLayer() ? "surface" : chunk.caveLayer, chunk.data.length);
-        } catch (IOException e) {
-            LOGGER.error("Failed to write map file: {}", outputFile, e);
-        }
-
-        return mwDir;
+        return XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId);
     }
 }

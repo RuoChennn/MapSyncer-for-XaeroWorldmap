@@ -11,10 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer客户端初始化类 - Fabric 26.x 版本
+ * MapSyncer瀹㈡埛绔垵濮嬪寲绫?- Fabric 26.x 鐗堟湰
  *
- * 实现 ClientModInitializer 接口，在客户端初始化时注册网络接收器和命令。
- * API 预估与 Fabric 1.21 高度兼容。
+ * 瀹炵幇 ClientModInitializer 鎺ュ彛锛屽湪瀹㈡埛绔垵濮嬪寲鏃舵敞鍐岀綉缁滄帴鏀跺櫒鍜屽懡浠ゃ€?
+ * API 棰勪及涓?Fabric 1.21 楂樺害鍏煎銆?
  */
 public class MapSyncerClient implements ClientModInitializer {
 
@@ -24,34 +24,34 @@ public class MapSyncerClient implements ClientModInitializer {
     public void onInitializeClient() {
         LOGGER.info("Initializing MapSyncer client...");
 
-        // 注册客户端网络接收器
+        // 娉ㄥ唽瀹㈡埛绔綉缁滄帴鏀跺櫒
         FabricNetworkHandler networkHandler = MapSyncer.getNetworkHandler();
         if (networkHandler != null) {
             networkHandler.registerClientHandlers();
             LOGGER.info("Client network handlers registered");
         }
 
-        // 注册客户端命令
+        // 娉ㄥ唽瀹㈡埛绔懡浠?
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             MapSyncerCommand.registerClientCommands(dispatcher);
             LOGGER.info("Client commands registered");
         });
 
-        // 注册客户端连接事件
+        // 娉ㄥ唽瀹㈡埛绔繛鎺ヤ簨浠?
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             LOGGER.info("Client joined server, checking sync state...");
-            // 注册网络接收器
+            // 娉ㄥ唽缃戠粶鎺ユ敹鍣?
             MapPacketReceiver.register();
         });
 
         ClientPlayConnectionEvents.DISJOIN.register((handler, client) -> {
             LOGGER.info("Client disconnected from server, resetting state...");
-            // 重置服务端安装状态
+            // 閲嶇疆鏈嶅姟绔畨瑁呯姸鎬?
             MapPacketReceiver.resetServerStatus();
             MapPacketReceiver.clearSyncData();
-            // 清理 XaeroMapIntegrator 区域追踪
-            com.mapsyncer.client.XaeroMapIntegrator.clearRegionTracking();
-            // 关闭进度追踪器的线程池（防止内存泄漏）
+            // 娓呯悊 XaeroMapIntegrator 鍖哄煙杩借釜
+            com.mapsyncer.client.XaeroMapDataHandler.clearRegionTracking();
+            // 鍏抽棴杩涘害杩借釜鍣ㄧ殑绾跨▼姹狅紙闃叉鍐呭瓨娉勬紡锛?
             SyncProgressTracker.shutdown();
         });
 
