@@ -40,7 +40,7 @@ public class CacheGenerateCommand {
      * @param dispatcher Brigadier命令分发器
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("mapsyncer")
+        dispatcher.register(Commands.literal("mapsyncerserver")
                 .requires(source -> source.hasPermission(4))
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
@@ -48,6 +48,12 @@ public class CacheGenerateCommand {
                 .then(Commands.literal("generate")
                         .executes(CacheGenerateCommand::generateAll)
                         .then(Commands.argument("dimension", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    for (ServerLevel level : ctx.getSource().getServer().getAllLevels()) {
+                                        builder.suggest(level.dimension().location().toString());
+                                    }
+                                    return builder.buildFuture();
+                                })
                                 .executes(CacheGenerateCommand::generateDimension)
                                 .then(Commands.argument("x", IntegerArgumentType.integer())
                                         .then(Commands.argument("z", IntegerArgumentType.integer())
