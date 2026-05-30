@@ -26,6 +26,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import org.slf4j.Logger;
@@ -35,7 +36,7 @@ import org.slf4j.LoggerFactory;
  * MapSyncer模组的主类 - Forge 1.20.1 版本
  *
  * Forge 1.20.1 使用 SimpleNetworkWrapper API 进行网络注册，
- * 网络层在 ForgeNetworkHandler 的静态初始化中完成注册。
+ * FML 47.x 要求构造函数签名为 (FMLJavaModLoadingContext)。
  */
 @Mod(MapSyncer.MOD_ID)
 public class MapSyncer {
@@ -44,7 +45,9 @@ public class MapSyncer {
     public static String VERSION = "unknown";
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
 
-    public MapSyncer(IEventBus modBus, ModContainer modContainer) {
+    public MapSyncer(FMLJavaModLoadingContext context) {
+        IEventBus modBus = context.getModEventBus();
+        ModContainer modContainer = context.getContainer();
         VERSION = modContainer.getModInfo().getVersion().toString();
 
         // 初始化 Platform（Forge 1.20.1 实现）
