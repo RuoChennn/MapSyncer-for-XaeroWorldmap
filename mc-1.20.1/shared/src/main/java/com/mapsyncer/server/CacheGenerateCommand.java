@@ -36,8 +36,8 @@ import java.util.List;
  */
 public class CacheGenerateCommand {
 
-    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("mapsyncer")
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, String prefix) {
+        dispatcher.register(Commands.literal(prefix)
                 .requires(source -> source.hasPermission(4))
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
@@ -161,15 +161,17 @@ public class CacheGenerateCommand {
             int totalDims = cacheStats.size();
             int totalRegions = cacheStats.stream().mapToInt(DimensionCacheStats::regionCount).sum();
             long totalSize = cacheStats.stream().mapToLong(DimensionCacheStats::sizeBytes).sum();
-            double totalSizeMB = totalSize / (1024.0 * 1024.0);
 
-            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_total",
-                    totalDims, totalRegions, totalSizeMB), false);
-
+            StringBuilder dims = new StringBuilder();
             for (DimensionCacheStats stat : cacheStats) {
-                ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_dim",
-                        stat.dimension(), stat.regionCount(), stat.sizeMB()), false);
+                if (dims.length() > 0) dims.append("\n");
+                dims.append(String.format("  %s: %d regions, %.2f MB",
+                        stat.dimension(), stat.regionCount(), stat.sizeMB()));
             }
+
+            ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.cache_detail",
+                    totalDims, totalRegions, String.format("%.2f", totalSize / (1024.0 * 1024.0)),
+                    dims.toString()), false);
         }
 
         return Command.SINGLE_SUCCESS;

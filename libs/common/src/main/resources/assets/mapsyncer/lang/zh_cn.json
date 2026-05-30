@@ -74,8 +74,7 @@
   "mapsyncer.status.incremental_disabled": "增量更新：未启用",
   "mapsyncer.status.tick_mode": "增量更新：TICK 模式，下次更新 %d 分 %d 秒后",
   "mapsyncer.status.scheduled_mode": "增量更新：定时模式，每日 %02d:%02d",
-  "mapsyncer.status.cache_total": "缓存统计：共 %d 个维度，%d 个区域，占用 %.1f MB",
-  "mapsyncer.status.cache_dim": "  %s：%d 个区域，%.1f MB",
+  "mapsyncer.status.cache_detail": "缓存统计：共 %s 个维度，%s 个区域，占用 %s MB\n%s",
 
   "mapsyncer.sync.resume_header": "断点续传可用",
   "mapsyncer.sync.resume_prompt": "%s。点击下方继续同步：",

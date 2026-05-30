@@ -74,8 +74,7 @@
   "mapsyncer.status.incremental_disabled": "Incremental updates: Disabled",
   "mapsyncer.status.tick_mode": "Incremental updates: TICK mode, next update in %d min %d sec",
   "mapsyncer.status.scheduled_mode": "Incremental updates: SCHEDULED mode, daily at %02d:%02d",
-  "mapsyncer.status.cache_total": "Cache stats: %d dimensions, %d regions, %.1f MB total",
-  "mapsyncer.status.cache_dim": "  %s: %d regions, %.1f MB",
+  "mapsyncer.status.cache_detail": "Cache stats: %s dimensions, %s regions, %s MB\n%s",
 
   "mapsyncer.sync.resume_header": "Sync Resume Available",
   "mapsyncer.sync.resume_prompt": "%s. Click below to continue:",

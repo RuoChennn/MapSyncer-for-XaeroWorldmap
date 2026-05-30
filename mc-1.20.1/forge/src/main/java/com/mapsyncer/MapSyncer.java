@@ -107,6 +107,6 @@ public class MapSyncer {
 
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
-        CacheGenerateCommand.register(event.getDispatcher());
+        CacheGenerateCommand.register(event.getDispatcher(), "mapsyncer");
     }
 }

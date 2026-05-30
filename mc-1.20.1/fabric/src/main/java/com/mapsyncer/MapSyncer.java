@@ -7,6 +7,7 @@ import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.FabricPlatform;
+import com.mapsyncer.server.CacheGenerateCommand;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
@@ -67,7 +68,7 @@ public class MapSyncer implements ModInitializer {
 
         // 注册服务端命令（Fabric 专用 /mapsyncerserver 前缀）
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            com.mapsyncer.server.FabricServerCommand.register(dispatcher);
+            CacheGenerateCommand.register(dispatcher, "mapsyncerserver");
         });
 
         // 注册服务端网络接收器
