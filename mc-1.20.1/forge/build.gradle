@@ -1,5 +1,6 @@
 plugins {
     id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+    id 'com.gradleup.shadow' version '8.3.5'
 }
 
 version = mod_version + '-forge-1.20.1'
@@ -21,6 +22,9 @@ repositories {
 minecraft {
     // ForgeGradle 6.0+ mappings 配置
     mappings channel: 'official', version: '1.20.1'
+
+    // 使用 Official mappings 时必须设置 reobf = false
+    reobf = false
 
     runs {
         configureEach {
@@ -60,6 +64,36 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// 创建仅包含项目内部依赖的配置
+configurations {
+    bundle
+}
+dependencies {
+    bundle project(':libs:core')
+    bundle project(':libs:platform-api')
+}
+
+// Shadow 插件配置：仅打包项目内部依赖
+shadowJar {
+    archiveClassifier.set('')
+    configurations = [project.configurations.bundle]
+    exclude 'org/slf4j/**'
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+// 重新配置 jar 任务依赖 shadowJar
+tasks.named('jar') {
+    archiveClassifier.set('slim')
+    dependsOn shadowJar
+}
+
+// 禁用 jarJar（使用 shadowJar 替代）
+tasks.named('jarJar') {
+    enabled = false
 }
 
 publishing {
