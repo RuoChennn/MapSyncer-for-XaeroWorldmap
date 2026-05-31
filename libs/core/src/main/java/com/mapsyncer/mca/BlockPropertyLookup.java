@@ -28,5 +28,16 @@ public interface BlockPropertyLookup {
 
     boolean isWaterloggedSurface(String blockName, Map<String, String> properties);
 
+    /**
+     * 判断方块是否为水生植物（Water-inheriting）
+     *
+     * <p>水生植物（海草、海带等）在水中生长，但 NBT 中不存储 waterlogged 属性。
+     * 它们应继承上方水体的 overlay，渲染为：水 overlay + 植物表面。</p>
+     *
+     * @param blockName 方块注册表名称
+     * @return true 表示是水生植物
+     */
+    boolean isWaterInheriting(String blockName);
+
     int getLightBlock(String blockName);
 }

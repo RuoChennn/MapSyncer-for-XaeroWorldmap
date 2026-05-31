@@ -282,6 +282,17 @@ public class RegionConverterStandalone {
             int worldY = sectionBaseY + ly;
             if (worldY < scanBottomY) break;
 
+            // Water-inheriting：水生植物（海草、海带）继承上方水体的 overlay
+            if (blockLookup.isWaterInheriting(singleState.name())) {
+                int opacity = blockLookup.getLightBlock("minecraft:water");
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
+
+                byte surfaceLight = overlayLight;
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
+            }
+
             if (blockLookup.isWaterloggedSurface(singleState.name(), singleState.properties())
                 && !blockLookup.shouldOverlay(singleState.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
@@ -338,6 +349,17 @@ public class RegionConverterStandalone {
 
             if (isCaveMode && !underair) {
                 continue;
+            }
+
+            // Water-inheriting：水生植物（海草、海带）继承上方水体的 overlay
+            if (blockLookup.isWaterInheriting(state.name())) {
+                int opacity = blockLookup.getLightBlock("minecraft:water");
+                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
+                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
+
+                byte surfaceLight = overlayLight;
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
             }
 
             if (blockLookup.isWaterloggedSurface(state.name(), state.properties())

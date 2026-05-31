@@ -85,6 +85,7 @@ public class BlockPropertyResolver {
         @Override public boolean isGlowing(String name) { return BlockPropertyResolver.isGlowing(name); }
         @Override public boolean isTranslucentFluid(String name) { return BlockPropertyResolver.isTranslucentFluid(name); }
         @Override public boolean isWaterloggedSurface(String name, Map<String, String> props) { return BlockPropertyResolver.isWaterloggedSurface(name, props); }
+        @Override public boolean isWaterInheriting(String name) { return BlockPropertyResolver.isWaterInheriting(name); }
         @Override public int getLightBlock(String name) { return BlockPropertyResolver.getLightBlock(name); }
     };
 
@@ -138,8 +139,6 @@ public class BlockPropertyResolver {
          */
         public boolean isWaterloggedSurface(Map<String, String> properties) {
             if (properties == null) return false;
-            // 水生植物始终视为含水方块表面
-            if (isAquaticPlant) return true;
             return canBeWaterlogged &&
                    "true".equals(properties.get("waterlogged")) &&
                    !isWater && !isAir;
@@ -992,5 +991,18 @@ public class BlockPropertyResolver {
      */
     public static boolean isWaterloggedSurface(String blockName, Map<String, String> properties) {
         return getProperties(blockName).isWaterloggedSurface(properties);
+    }
+
+    /**
+     * 判断方块是否为水生植物（Water-inheriting）
+     *
+     * <p>水生植物（海草、海带等）生长在水中，地图生成时应继承上方水体的 overlay。
+     * 扫描代码在遇到水生植物时会添加水 overlay，然后将植物作为表面方块。</p>
+     *
+     * @param blockName 方块注册表名称
+     * @return true表示是水生植物
+     */
+    public static boolean isWaterInheriting(String blockName) {
+        return getProperties(blockName).isAquaticPlant();
     }
 }
