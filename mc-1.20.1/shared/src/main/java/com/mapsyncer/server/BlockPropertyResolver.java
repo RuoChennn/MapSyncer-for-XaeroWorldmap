@@ -429,10 +429,19 @@ public class BlockPropertyResolver {
             return true;
         }
 
+        // 4.5. 水生植物豁免：短海草、海带等作为表面方块显示在地图上
+        // 短海草 (seagrass) 和海带 (kelp) 非 DoublePlantBlock 亦非 TransparentBlock，
+        // 应当作为表面方块渲染。Xaero 客户端也将其视为表面方块。
+        // 注意：tall_seagrass 继承 DoublePlantBlock，与 Xaero 保持一致标记为 invisible
+        if (blockId.equals("seagrass") || blockId.equals("kelp") || blockId.equals("kelp_plant")) {
+            return false;
+        }
+
         // 5. 检查是否为花
         boolean isFlower = checkIsFlower(block, state);
 
-        // 6. DoublePlantBlock 非花类型（高草、大型蕨）
+        // 6. DoublePlantBlock 非花类型（高草、大型蕨、高海草）
+        // 与 Xaero MapWriter.isInvisible() 保持一致
         if (block instanceof DoublePlantBlock && !isFlower) {
             return true;
         }
