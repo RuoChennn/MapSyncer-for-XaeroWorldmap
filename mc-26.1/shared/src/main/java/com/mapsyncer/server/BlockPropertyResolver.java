@@ -39,7 +39,7 @@ import net.minecraft.world.level.block.StemBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
 import net.minecraft.world.level.block.TallGrassBlock;
-import net.minecraft.world.level.block.TransparentBlock;
+import net.minecraft.world.level.block.HalfTransparentBlock;
 import net.minecraft.world.level.block.TorchflowerCropBlock;
 import net.minecraft.world.level.block.TwistingVinesBlock;
 import net.minecraft.world.level.block.TwistingVinesPlantBlock;
@@ -342,8 +342,21 @@ public class BlockPropertyResolver {
         try {
             // MC 26.1: getLightBlock(BlockGetter, BlockPos) 已移除
             // propagatesSkylightDown() = true 表示光照穿透（等效 lightBlock=0）
-            // 注意：流体已在上方处理，此处仅处理固体方块
-            return state.propagatesSkylightDown() ? 0 : 15;
+            if (state.propagatesSkylightDown()) {
+                return 0;
+            }
+            // 半透明方块：propagatesSkylightDown() = false 但 lightBlock 不是 15
+            // 冰类方块：lightBlock = 2（半透明，Xaero 中作为 overlay 渲染）
+            Block block = state.getBlock();
+            if (block == Blocks.ICE || block == Blocks.FROSTED_ICE) {
+                return 2;
+            }
+            // 树叶：lightBlock = 1（使用 cutout 渲染，非 translucent，但需要正确的光遮挡值）
+            if (state.is(BlockTags.LEAVES)) {
+                return 1;
+            }
+            // 默认：大多数实体方块遮挡全部光照
+            return 15;
         } catch (RuntimeException e) {
             // 备用：基于方块类型估算
             if (state.isAir()) {
@@ -372,9 +385,10 @@ public class BlockPropertyResolver {
      * @return true表示是透明方块
      */
     private static boolean checkTransparency(Block block, BlockState state) {
-        // 1. AirBlock 或 TransparentBlock 类（Xaero 方式）
-        // TransparentBlock 包括：玻璃、冰、遮光玻璃等
-        if (block instanceof AirBlock || block instanceof TransparentBlock) {
+        // 1. AirBlock 或 HalfTransparentBlock 类（Xaero 方式）
+        // HalfTransparentBlock 包括：玻璃、冰、遮光玻璃等（TransparentBlock extends HalfTransparentBlock）
+        // IceBlock extends HalfTransparentBlock 但不 extends TransparentBlock，必须用 HalfTransparentBlock 检测
+        if (block instanceof AirBlock || block instanceof HalfTransparentBlock) {
             return true;
         }
 
