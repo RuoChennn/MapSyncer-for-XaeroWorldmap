@@ -550,8 +550,8 @@ public class ServerSyncHandlerLogic {
                 serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
+                cleanupSyncState(playerId);
             });
-            cleanupSyncState(playerId);
             return;
         }
 
@@ -611,8 +611,8 @@ public class ServerSyncHandlerLogic {
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
+                cleanupSyncState(playerId);
             });
-            cleanupSyncState(playerId);
             return;
         }
 
@@ -713,8 +713,8 @@ public class ServerSyncHandlerLogic {
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
+                cleanupSyncState(playerId);
             });
-            cleanupSyncState(playerId);
             return;
         }
 
@@ -795,6 +795,7 @@ public class ServerSyncHandlerLogic {
                     NetworkManager.sendToPlayer(serverPlayer,
                             new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                     serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                    cleanupSyncState(playerId);
                 });
             } else {
                 List<ChunkMapData> currentChunk = new ArrayList<>();
@@ -830,6 +831,7 @@ public class ServerSyncHandlerLogic {
                         NetworkManager.sendToPlayer(serverPlayer,
                                 new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                         serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                        cleanupSyncState(playerId);
                     });
                 }
             }
@@ -838,12 +840,11 @@ public class ServerSyncHandlerLogic {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncProgressPayload(total, total, "completed"));
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
+                cleanupSyncState(playerId);
             });
         }
 
-        LOGGER.debug("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
-
-        cleanupSyncState(playerId);
+        LOGGER.info("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
     }
 
     /**
