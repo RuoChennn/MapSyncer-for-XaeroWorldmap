@@ -122,16 +122,23 @@ public class BlockPropertyResolver {
         int lightEmission,          // 光照发射值
         boolean canBeWaterlogged,   // 是否可以含水
         boolean hasVanillaColor,    // 是否有地图颜色
-        boolean hasMapColor         // 是否有有效的MapColor
+        boolean hasMapColor,        // 是否有有效的MapColor
+        boolean isAquaticPlant      // 是否为水生植物（海草、海带等，始终视为含水方块）
     ) {
         /**
          * 判断是否为含水方块表面
+         *
+         * <p>水生植物（海草、海带等）虽然在 NBT 中不存储 waterlogged 属性，
+         * 但它们生长在水中，地图渲染时应作为含水方块处理：
+         * 上层水作为 overlay，植物本身作为表面方块。</p>
          *
          * @param properties 方块属性键值对
          * @return true表示是含水方块表面
          */
         public boolean isWaterloggedSurface(Map<String, String> properties) {
             if (properties == null) return false;
+            // 水生植物始终视为含水方块表面
+            if (isAquaticPlant) return true;
             return canBeWaterlogged &&
                    "true".equals(properties.get("waterlogged")) &&
                    !isWater && !isAir;
@@ -267,6 +274,9 @@ public class BlockPropertyResolver {
             // 检查是否可以含水
             boolean canBeWaterlogged = checkCanBeWaterlogged(block, defaultState);
 
+            // 检查是否为水生植物（海草、海带等生长在水中的植物）
+            boolean isAquaticPlant = checkIsAquaticPlant(block, defaultState);
+
             // 检查是否有有效的 MapColor
             boolean hasMapColor = checkHasMapColor(defaultState, blockName);
 
@@ -277,7 +287,7 @@ public class BlockPropertyResolver {
                 isAir, isWater, isLava, isFluid,
                 isTransparent, isInvisible, isFlower, isPlant, isGrassBlock,
                 isGlowing, lightBlock, lightEmission, canBeWaterlogged,
-                hasVanillaColor, hasMapColor
+                hasVanillaColor, hasMapColor, isAquaticPlant
             );
 
         } catch (RuntimeException e) {
@@ -433,19 +443,12 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 4.5. 水生植物豁免：短海草、海带等作为表面方块显示在地图上
-        // 短海草 (seagrass) 和海带 (kelp) 非 DoublePlantBlock 亦非 TransparentBlock，
-        // 应当作为表面方块渲染。Xaero 客户端也将其视为表面方块。
-        // 注意：tall_seagrass 继承 DoublePlantBlock，与 Xaero 保持一致标记为 invisible
-        if (blockId.equals("seagrass") || blockId.equals("kelp") || blockId.equals("kelp_plant")) {
-            return false;
-        }
-
         // 5. 检查是否为花
         boolean isFlower = checkIsFlower(block, state);
 
-        // 6. DoublePlantBlock 非花类型（高草、大型蕨、高海草）
+        // 6. DoublePlantBlock 非花类型（高草、大型蕨）
         // 与 Xaero MapWriter.isInvisible() 保持一致
+        // 注意：tall_seagrass 继承 DoublePlantBlock，通过 isWaterloggedSurface 处理
         if (block instanceof DoublePlantBlock && !isFlower) {
             return true;
         }
@@ -674,6 +677,31 @@ public class BlockPropertyResolver {
     }
 
     /**
+     * 检查方块是否为水生植物（海草、海带等生长在水中的植物）
+     *
+     * <p>水生植物虽然在 NBT 中不存储 waterlogged 属性，但实际生长在水中。
+     * 地图渲染时应添加水 overlay，使其正确显示。</p>
+     *
+     * @param block 方块实例
+     * @param state 方块状态
+     * @return true表示是水生植物
+     */
+    private static boolean checkIsAquaticPlant(Block block, BlockState state) {
+        // 海草类（包括短海草）
+        if (block == Blocks.SEAGRASS) {
+            return true;
+        }
+        // 海带类
+        if (block == Blocks.KELP || block == Blocks.KELP_PLANT) {
+            return true;
+        }
+        // 名称匹配（备用，支持 mod 水生植物）
+        String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
+        return blockId.equals("seagrass") || blockId.equals("tall_seagrass") ||
+               blockId.equals("kelp") || blockId.equals("kelp_plant");
+    }
+
+    /**
      * 备用属性（当方块未在注册表中找到时）
      *
      * 使用字符串模式匹配推断属性。
@@ -722,6 +750,9 @@ public class BlockPropertyResolver {
                                   name.contains("trapdoor") || name.contains("wall") ||
                                   name.contains("lantern") || name.contains("coral");
 
+        // 水生植物检测
+        boolean isAquaticPlant = name.contains("seagrass") || name.contains("kelp");
+
         boolean hasVanillaColor = !isAir && !isInvisible;
         boolean hasMapColor = hasVanillaColor;
 
@@ -729,7 +760,7 @@ public class BlockPropertyResolver {
             isAir, isWater, isLava, isFluid,
             isTransparent, isInvisible, isFlower, isPlant, isGrassBlock,
             isGlowing, lightBlock, lightEmission, canBeWaterlogged,
-            hasVanillaColor, hasMapColor
+            hasVanillaColor, hasMapColor, isAquaticPlant
         );
     }
 
