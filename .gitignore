@@ -58,3 +58,9 @@ deploy.bat
 crc32.bat
 CRC32Tool.java
 CRC32Tool.class
+
+# Build outputs
+outputs/
+
+# Temporary decompilation artifacts
+.tmpfml/
