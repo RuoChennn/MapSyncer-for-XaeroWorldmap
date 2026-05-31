@@ -333,9 +333,9 @@ public class BlockPropertyResolver {
             // 备用：基于方块类型估算
             FluidState fluidState = state.getFluidState();
             if (!fluidState.isEmpty()) {
-                // 水：遮挡值为2，熔岩：遮挡值为15
+                // 水：遮挡值为1，熔岩：遮挡值为15（MC 1.18+ water lightBlock = 1）
                 if (fluidState.getType() == Fluids.WATER || fluidState.getType() == Fluids.FLOWING_WATER) {
-                    return 2;
+                    return 1;
                 }
                 if (fluidState.getType() == Fluids.LAVA || fluidState.getType() == Fluids.FLOWING_LAVA) {
                     return 15;

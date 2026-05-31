@@ -326,12 +326,12 @@ public class BlockPropertyResolver {
      */
     private static int getLightBlock(BlockState state) {
         // 优先检查流体：propagatesSkylightDown() 对水返回 true，
-        // 但水实际阻挡 2 级光照，需要特殊处理
+        // 但水实际阻挡 1 级光照，需要特殊处理（MC 1.18+ water lightBlock = 1）
         FluidState fluidState = state.getFluidState();
         if (!fluidState.isEmpty()) {
-            // 水：每层阻挡 2 级光照（参考原版 lightBlock 值）
+            // 水：每层阻挡 1 级光照（参考原版 lightBlock 值，MC 1.18+）
             if (fluidState.getType() == Fluids.WATER || fluidState.getType() == Fluids.FLOWING_WATER) {
-                return 2;
+                return 1;
             }
             // 熔岩：阻挡全部光照（15 级）
             if (fluidState.getType() == Fluids.LAVA || fluidState.getType() == Fluids.FLOWING_LAVA) {
