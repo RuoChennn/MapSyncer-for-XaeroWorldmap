@@ -6,7 +6,7 @@
   "description": "Syncs server-side explored areas to client's Xaero World Map",
   "authors": ["Ruo_Chen"],
   "contact": {},
-  "license": "MIT",
+  "license": "GPL-3.0",
   "icon": "assets/mapsyncer/icon.png",
   "environment": "*",
   "entrypoints": {

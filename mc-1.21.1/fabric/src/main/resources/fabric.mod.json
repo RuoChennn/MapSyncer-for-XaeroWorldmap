@@ -10,7 +10,7 @@
     "sources": "https://github.com/RuoChennn/MapSyncer-for-XaeroWorldmap",
     "issues": "https://github.com/RuoChennn/MapSyncer-for-XaeroWorldmap/issues"
   },
-  "license": "MIT",
+  "license": "GPL-3.0",
   "icon": "assets/mapsyncer/icon.png",
   "environment": "*",
   "entrypoints": {
