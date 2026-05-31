@@ -283,14 +283,16 @@ public class RegionConverterStandalone {
             if (worldY < scanBottomY) break;
 
             // Water-inheriting：水生植物（海草、海带）继承上方水体的 overlay
+            // 参考 Xaero loadPixel：光照在 h+1 位置读取，overlay/surface 共享同一光照值
             if (blockLookup.isWaterInheriting(singleState.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
+                int lightLY = Math.min(ly + 1, 15);
+                byte effectiveLight = calculateSurfaceLight(section, lx, lightLY, lz, worldY + 1,
+                    heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
+                addOverlay(overlayList, "minecraft:water", worldY, opacity, effectiveLight, blockLookup);
 
-                byte surfaceLight = overlayLight;
                 String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
-                return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
+                return new SurfaceResult(singleState, worldY, worldY, biomeName, effectiveLight, overlayList);
             }
 
             if (blockLookup.isWaterloggedSurface(singleState.name(), singleState.properties())
@@ -352,14 +354,16 @@ public class RegionConverterStandalone {
             }
 
             // Water-inheriting：水生植物（海草、海带）继承上方水体的 overlay
+            // 参考 Xaero loadPixel：光照在 h+1 位置读取，overlay/surface 共享同一光照值
             if (blockLookup.isWaterInheriting(state.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
+                int lightLY = Math.min(ly + 1, 15);
+                byte effectiveLight = calculateSurfaceLight(section, lx, lightLY, lz, worldY + 1,
+                    heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
+                addOverlay(overlayList, "minecraft:water", worldY, opacity, effectiveLight, blockLookup);
 
-                byte surfaceLight = overlayLight;
                 String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
-                return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
+                return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, effectiveLight, overlayList);
             }
 
             if (blockLookup.isWaterloggedSurface(state.name(), state.properties())
