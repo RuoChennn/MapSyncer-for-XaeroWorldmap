@@ -21,6 +21,7 @@ MapSyncer 是 Minecraft 多平台地图同步模组，将服务端已探索区�
 | **Fabric** | 1.20-1.20.1 | Fabric API 0.83+ | 17 | ✅ 编译通过 |
 | **Fabric** | 1.21.1 | Fabric API 0.107+ | 21 | ✅ 编译通过 |
 | **NeoForge** | 1.21.1 | 21.1+ | 21 | ✅ 编译通过 |
+| **Fabric** | 26.1 | Fabric API 0.149+ | 25 | ✅ 编译通过 |
 | **NeoForge** | 26.1 | 26.1+ | 25 | ✅ 编译通过 |
 
 ### 架构分层
@@ -43,6 +44,7 @@ mc-1.21.1/          MC 1.21.1 版本
 
 mc-26.1/            MC 26.1 版本
 ├── shared/
+├── fabric/
 └── neoforge/
 ```
 
@@ -126,7 +128,7 @@ mc-26.1/            MC 26.1 版本
 
 ## 五、配置系统
 
-**配置文件位置**：Forge → `world/serverconfig/mapsyncer-server.toml`（每个世界独立）；NeoForge → `config/mapsyncer-server.toml`；Fabric → `config/mapsyncer-server.properties`
+**配置文件位置**：Forge → `world/serverconfig/mapsyncer-server.toml`（每个世界独立）；NeoForge → `config/mapsyncer-server.toml`；Fabric (1.20-1.21) → `config/mapsyncer-server.properties`；Fabric (26.1) → `config/mapsyncer-server.properties`
 
 ### 客户端配置
 

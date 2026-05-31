@@ -16,7 +16,7 @@
 |---------|:-----:|:--------:|:------:|
 | 1.20.1 | ✅ | — | ✅ |
 | 1.21.1 | ✅ | ✅ | ✅ |
-| 26.1 | — | ✅ | — |
+| 26.1 | — | ✅ | ✅ |
 
 > 详细平台兼容性信息见 [`docs/features.md`](docs/features.md)
 
@@ -157,6 +157,7 @@ mc-1.21.1/              1.21.1 版本
 
 mc-26.1/                26.1 版本
 ├── shared/
+├── fabric/
 └── neoforge/
 ```
 
@@ -246,6 +247,8 @@ mc-26.1/                26.1 版本
 # 快捷脚本
 scripts/fastbuild/build-all.bat          # 构建全部活跃平台
 scripts/fastbuild/build-forge-1.20.1.bat # 构建指定平台
+scripts/fastbuild/build-fabric-26.1.bat    # Fabric 26.1（独立 Gradle 进程）
+scripts/fastbuild/build-26.1.bat           # 全部 26.1 模块
 ```
 
 产物输出到各平台模块的 `build/libs/` 目录。
