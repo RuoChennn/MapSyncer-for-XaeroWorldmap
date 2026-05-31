@@ -2,6 +2,7 @@ package com.mapsyncer;
 
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.MapSyncerCommand;
+import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -10,10 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer瀹㈡埛绔垵濮嬪寲绫?- Fabric 26.x 鐗堟湰
+ * MapSyncer 客户端初始化类 - Fabric 26.x 版本
  *
- * 瀹炵幇 ClientModInitializer 鎺ュ彛锛屽湪瀹㈡埛绔垵濮嬪寲鏃舵敞鍐岀綉缁滄帴鏀跺櫒鍜屽懡浠ゃ€?
- * API 棰勪及涓?Fabric 1.21 楂樺害鍏煎銆?
+ * 实现 ClientModInitializer 接口，在客户端初始化时注册网络接收器和命令。
  */
 public class MapSyncerClient implements ClientModInitializer {
 
@@ -23,28 +23,36 @@ public class MapSyncerClient implements ClientModInitializer {
     public void onInitializeClient() {
         LOGGER.info("Initializing MapSyncer client...");
 
-        // 娉ㄥ唽瀹㈡埛绔綉缁滄帴鏀跺櫒
+        // 注册客户端网络接收器
         FabricNetworkHandler networkHandler = MapSyncer.getNetworkHandler();
         if (networkHandler != null) {
             networkHandler.registerClientHandlers();
             LOGGER.info("Client network handlers registered");
         }
 
-        // 娉ㄥ唽瀹㈡埛绔懡浠?
+        // 注册客户端命令
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             MapSyncerCommand.registerClientCommands(dispatcher);
             LOGGER.info("Client commands registered");
         });
 
-        // 娉ㄥ唽瀹㈡埛绔繛鎺ヤ簨浠?
+        // 注册客户端连接事件
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             LOGGER.info("Client joined server, checking sync state...");
-            // 娉ㄥ唽缃戠粶鎺ユ敹鍣?
+            // 注册网络接收器
             MapPacketReceiver.register();
         });
 
-        ClientPlayConnectionEvents.DISJOIN.register((handler, client) -> {
-            MapPacketReceiver.onDisconnect();
+        // Fabric API 26.x 使用 Mojang 官方命名
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            LOGGER.info("Client disconnected from server, resetting state...");
+            // 重置服务端安装状态
+            MapPacketReceiver.resetServerStatus();
+            MapPacketReceiver.clearSyncData();
+            // 清理 XaeroMapIntegrator 区域追踪
+            com.mapsyncer.client.XaeroMapDataHandler.clearRegionTracking();
+            // 关闭进度追踪器的线程池（防止内存泄漏）
+            SyncProgressTracker.shutdown();
         });
 
         LOGGER.info("MapSyncer client initialized");

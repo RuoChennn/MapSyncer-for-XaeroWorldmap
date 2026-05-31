@@ -1,0 +1,30 @@
+// settings-26.gradle — 专用于构建 MC 26.1 系列模块
+// 隔离 Loom 1.16 与旧版 Loom，避免 JarManifestService 类冲突
+//
+// 使用方式：构建脚本会自动临时复制此文件到 settings.gradle
+
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        maven { url = 'https://maven.neoforged.net/releases' }
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.aliyun.com/repository/public' }
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+}
+
+rootProject.name = mod_id
+
+// ── 抽象库层 ──
+include 'libs:core'
+include 'libs:platform-api'
+include 'libs:common'
+
+// ── MC 26.1 (仅包含 26.x 系列模块) ──
+include 'mc-26.1:shared'
+include 'mc-26.1:neoforge'
+include 'mc-26.1:fabric'

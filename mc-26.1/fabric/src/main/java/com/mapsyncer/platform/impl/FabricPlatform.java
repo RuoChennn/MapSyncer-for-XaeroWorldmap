@@ -10,9 +10,8 @@ import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.BlockPropertyResolver;
 import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,10 +27,10 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabric 26.1.x 骞冲彴瀹炵幇
+ * Fabric 26.x 平台实现
  *
- * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 Fabric 26.1.x 鐨?API銆?
- * 鏀寔 Minecraft 26.1, 26.1.1, 26.1.2 绛夌増鏈€?
+ * 实现 Platform 接口，适配 Fabric 26.1.x 的 API。
+ * 支持 Minecraft 26.1, 26.1.1, 26.1.2 等版本。
  */
 public class FabricPlatform implements Platform {
 
@@ -39,7 +38,7 @@ public class FabricPlatform implements Platform {
 
     private MinecraftServer server;
 
-    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
+    // 缓存方块属性查询结果
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     public void setServer(MinecraftServer server) {
@@ -71,18 +70,18 @@ public class FabricPlatform implements Platform {
         return net.fabricmc.loader.api.FabricLoader.getInstance().getEnvironmentType() == net.fabricmc.api.EnvType.CLIENT;
     }
 
-    // ===== 鏂瑰潡灞炴€?=====
+    // ===== 方块属性 =====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 妫€鏌ョ紦瀛?
+        // 检查缓存
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
         }
 
         try {
-            ResourceLocation loc = ResourceLocation.parse(blockName);
+            Identifier loc = Identifier.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {
@@ -98,7 +97,7 @@ public class FabricPlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€э紙鏈嶅姟绔彲鐢級
+            // 使用 BlockPropertyResolver 获取属性
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -132,7 +131,7 @@ public class FabricPlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 涓栫晫淇℃伅 =====
+    // ===== 世界信息 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -144,7 +143,7 @@ public class FabricPlatform implements Platform {
         return 320;
     }
 
-    // ===== 缁村害淇℃伅 =====
+    // ===== 维度信息 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -156,46 +155,51 @@ public class FabricPlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 閰嶇疆绯荤粺 =====
+    // ===== 配置系统 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
-        return ModConfig.SERVER.syncSpeedLimitKBps.get();
+        return ModConfig.SERVER().getSyncSpeedLimitKBps();
     }
 
     @Override
     public int getMaxSyncPacketSize() {
-        return ModConfig.SERVER.maxSyncPacketSize.get();
+        return ModConfig.SERVER().getMaxSyncPacketSize();
     }
 
     @Override
     public int getMaxConcurrentRegions() {
-        return ModConfig.SERVER.maxConcurrentRegions.get();
+        return ModConfig.SERVER().getMaxConcurrentRegions();
     }
 
     @Override
     public boolean isDebugLoggingEnabled() {
-        return ModConfig.SERVER.enableDebugLogging.get();
+        return ModConfig.SERVER().getEnableDebugLogging();
+    }
+
+    @Override
+    public int getClientHashThreads() {
+        return ModConfig.CLIENT().getHashThreads();
     }
 
     @Override
     public UpdateMode getIncrementalUpdateMode() {
-        return ModConfig.SERVER.incrementalUpdateMode.get();
+        return ModConfig.SERVER().getIncrementalUpdateMode();
     }
 
     @Override
     public int getIncrementalUpdateIntervalTicks() {
-        return ModConfig.SERVER.incrementalUpdateIntervalTicks.get();
+        return ModConfig.SERVER().getIncrementalUpdateIntervalTicks();
     }
 
     @Override
     public int getScheduledUpdateHour() {
-        return ModConfig.SERVER.scheduledUpdateHour.get();
+        return ModConfig.SERVER().getScheduledUpdateHour();
     }
 
     @Override
     public int getScheduledUpdateMinute() {
-        return ModConfig.SERVER.scheduledUpdateMinute.get();
+        return ModConfig.SERVER().getScheduledUpdateMinute();
     }
 
     @Override
@@ -243,7 +247,7 @@ public class FabricPlatform implements Platform {
         return ModConfig.SERVER().getConfigForDimension(dimensionPath);
     }
 
-    // ===== 鏂囦欢璺緞 =====
+    // ===== 文件路径 =====
 
     @Override
     public Path getServerMapCacheDir() {
@@ -257,17 +261,17 @@ public class FabricPlatform implements Platform {
     @Override
     public Path getClientXaeroWorldMapDir() {
         try {
-            // 浣跨敤 XaeroMapIntegrator 鑾峰彇褰撳墠鏈嶅姟鍣ㄧ洰褰?
-            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
-            if (serverDir != null) {
-                return serverDir;
+            // 使用 XaeroMapIntegrator 获取当前服务器目录（这是客户端方法，需要在客户端环境中调用）
+            if (isClientEnvironment()) {
+                Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+                if (serverDir != null) {
+                    return serverDir;
+                }
             }
 
-            // 鍥為€€锛氳繑鍥為粯璁?Xaero 鐩綍
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.gameDirectory != null) {
-                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
-            }
+            // 回退：返回默认 Xaero 目录（基于当前工作目录）
+            Path gameDir = Path.of(System.getProperty("user.dir"));
+            return gameDir.resolve("xaero").resolve("world-map");
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
         }
@@ -277,9 +281,12 @@ public class FabricPlatform implements Platform {
     @Override
     public String getCurrentServerDirectoryName() {
         try {
-            Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
-            if (serverDir != null) {
-                return serverDir.getFileName().toString();
+            // 使用 XaeroMapIntegrator 获取当前服务器目录（这是客户端方法，需要在客户端环境中调用）
+            if (isClientEnvironment()) {
+                Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
+                if (serverDir != null) {
+                    return serverDir.getFileName().toString();
+                }
             }
         } catch (Exception e) {
             LOGGER.debug("Failed to get server directory name: {}", e.getMessage());
@@ -287,14 +294,14 @@ public class FabricPlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 鏃ュ織 =====
+    // ===== 日志 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 宸ュ叿鏂规硶 =====
+    // ===== 工具方法 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -327,7 +334,7 @@ public class FabricPlatform implements Platform {
     @Override
     public void recordUpdatedRegions(Set<RegionCoord> regions) {
         try {
-            // 杞崲 Platform.RegionCoord 鍒?XaeroMapDataHandler.RegionCoord
+            // 转换 Platform.RegionCoord 到 XaeroMapDataHandler.RegionCoord
             Set<com.mapsyncer.client.XaeroMapDataHandler.RegionCoord> xaeroRegions = new HashSet<>();
             for (RegionCoord coord : regions) {
                 xaeroRegions.add(new com.mapsyncer.client.XaeroMapDataHandler.RegionCoord(
@@ -342,7 +349,7 @@ public class FabricPlatform implements Platform {
     }
 
     /**
-     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
+     * 清除方块属性缓存
      */
     @Override
     public void clearBlockPropertiesCache() {
@@ -350,7 +357,7 @@ public class FabricPlatform implements Platform {
     }
 
     /**
-     * 鑾峰彇缂撳瓨澶у皬
+     * 获取缓存大小
      */
     public static int getCacheSize() {
         return blockPropertiesCache.size();

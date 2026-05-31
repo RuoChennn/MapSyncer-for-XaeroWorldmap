@@ -19,7 +19,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,8 +27,7 @@ import java.nio.file.Path;
 /**
  * MapSyncer模组的主类 - Fabric 26.x 版本
  *
- * 实现 FabricModInitializer 接口，在模组初始化时设置平台和网络处理器。
- * API 预估与 Fabric 1.21 高度兼容。
+ * 实现 ModInitializer 接口，在模组初始化时设置平台和网络处理器。
  */
 public class MapSyncer implements ModInitializer {
 
@@ -72,13 +70,14 @@ public class MapSyncer implements ModInitializer {
         // 注册服务端生命周期事件
         registerServerEvents();
 
-        // 注册命令
+        // 注册服务端命令（/mapsyncerserver，避免与客户端 /mapsyncer 树根冲突）
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             CacheGenerateCommand.register(dispatcher, "mapsyncerserver");
         });
 
-        // 注册服务端网络接收器
-        ServerSyncHandler.register();
+        // 注册服务端网络接收器（同时注册 PayloadTypeRegistry 类型）
+        networkHandler.registerHandlers(null);
+        ServerSyncHandler.register(null);
 
         LOGGER.info("MapSyncer initialized (Fabric 26.x), version: {}", VERSION);
     }
@@ -91,10 +90,9 @@ public class MapSyncer implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             LOGGER.info("Server starting, initializing MapSyncer...");
 
-            // 初始化配置（使用世界目录下的 serverconfig 目录）
-            Path worldPath = server.getWorldPath(LevelResource.LEVEL_DATA_FILE).getParent();
-            Path serverConfigDir = worldPath.resolve("serverconfig");
-            ModConfig.getServerConfig(serverConfigDir);
+            // 初始化配置（使用 Fabric 标准配置目录）
+            Path configDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir();
+            ModConfig.getServerConfig(configDir);
 
             // 设置平台的服务器实例
             platform.setServer(server);
@@ -132,14 +130,13 @@ public class MapSyncer implements ModInitializer {
             com.mapsyncer.server.PlayerJoinHandler.onPlayerJoin(handler.player, server);
         });
 
-        // 玩家离开时
-        ServerPlayConnectionEvents.DISJOIN.register((handler, server) -> {
+        // 玩家离开时（Fabric API 26.x 使用 Mojang 官方命名）
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             com.mapsyncer.server.PlayerJoinHandler.onPlayerLeave(handler.player.getUUID());
         });
 
-        // 服务端 Tick 事件
+        // 服务端 Tick 事件（IncrementalUpdateHandler 已在 static 块中自注册）
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            IncrementalUpdateHandlerLogic.onServerTick(server);
             com.mapsyncer.server.PlayerJoinHandler.onServerTick(server);
         });
     }
