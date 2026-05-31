@@ -1,0 +1,72 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+}
+
+version = mod_version + '-forge-1.20.1'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Forge 1.20.1 需要 Java 17
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+}
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+        }
+    }
+}
+
+// 直接将所有子模块源码合并编译，避免运行时 ClassNotFoundException
+sourceSets.main.java.srcDir '../shared/src/main/java'
+sourceSets.main.resources.srcDir '../shared/src/main/resources'
+sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/common/src/main/java"
+sourceSets.main.resources.srcDir "${rootProject.projectDir}/libs/common/src/main/resources"
+sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/core/src/main/java"
+sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/platform-api/src/main/java"
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_1201_version}-${forge_1201_version}"
+
+    // 强制 jopt-simple 版本
+    implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        register('forge120MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "mapsyncer",
+  "version": "${version}",
+  "name": "MapSyncer",
+  "description": "Syncs server-side explored areas to client's Xaero World Map",
+  "authors": ["Ruo_Chen"],
+  "contact": {},
+  "license": "GPL-3.0",
+  "icon": "assets/mapsyncer/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.mapsyncer.MapSyncer"],
+    "client": ["com.mapsyncer.MapSyncerClient"]
+  },
+  "mixins": [],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": ">=1.20 <1.20.2",
+    "java": ">=17",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "cloth-config": "*"
+  }
+}

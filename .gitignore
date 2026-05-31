@@ -3,6 +3,9 @@
 build/
 out/
 
+# Build outputs
+output/
+
 # IDE
 .idea/
 *.iml
@@ -28,17 +31,14 @@ logs/
 # Claude Code
 .claude/
 
+# 参考资料（反编译源码、工具 JAR、日志等，不参与构建）
+.reference/
+
 # Decompiler output
 .decompiled/
 
 # Eclipse metadata
 .eclipse/
-
-# Planning files
-.plan/
-
-# Tools (CFR decompiler jar etc)
-.tool/
 
 # Downloaded/pulled JAR files (not build outputs)
 xaeroworldmap-neoforge-*.jar
@@ -58,3 +58,9 @@ deploy.bat
 crc32.bat
 CRC32Tool.java
 CRC32Tool.class
+
+# Build outputs
+outputs/
+
+# Temporary decompilation artifacts
+.tmpfml/

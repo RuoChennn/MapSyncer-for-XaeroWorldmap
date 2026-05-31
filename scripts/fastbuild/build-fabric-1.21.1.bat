@@ -1,0 +1,19 @@
+@echo off
+cd /d "%~dp0..\.."
+echo Building: Fabric 1.21.1
+call gradlew.bat :mc-1.21.1:fabric:clean :mc-1.21.1:fabric:build -x test
+if %errorlevel% neq 0 (
+    echo Build failed!
+    pause
+    exit /b 1
+)
+echo.
+echo Collecting JARs to output...
+if not exist output mkdir output
+copy /y mc-1.21.1\fabric\build\libs\*.jar output\ >nul
+copy /y libs\core\build\libs\*.jar output\ >nul
+copy /y libs\platform-api\build\libs\*.jar output\ >nul
+echo.
+echo Output: output\
+dir /b output\*.jar
+pause

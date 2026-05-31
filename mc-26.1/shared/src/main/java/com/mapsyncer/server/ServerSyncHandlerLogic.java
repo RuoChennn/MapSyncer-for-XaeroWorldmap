@@ -1,0 +1,1034 @@
+package com.mapsyncer.server;
+
+import com.mapsyncer.network.NetworkManager;
+import com.mapsyncer.network.PayloadContext;
+import com.mapsyncer.network.payload.ChunkMapData;
+import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.payload.SyncProgressPayload;
+import com.mapsyncer.network.payload.SyncRequestPayload;
+import com.mapsyncer.network.payload.SyncResponsePayload;
+import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.server.GenerationCache.RegionMeta;
+import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.HashUtils;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+
+/**
+ * 服务端同步处理器 - 处理客户端请求的地图数据同步
+ *
+ * 功能：
+ * - 接收客户端同步请求，包含客户端缓存的元数据（时间戳+哈希）
+ * - 比对服务端缓存与客户端元数据，确定需要同步的区域
+ * - 分批发送差异区域数据到客户端
+ * - 支持速度限制，避免网络拥塞
+ *
+ * 同步逻辑（基于哈希比对，自动断点续传）：
+ * 1. 哈希值一致 → 不同步（文件内容相同）
+ * 2. 哈希值不一致 + 客户端时间戳旧于服务端 → 同步
+ * 3. 哈希值不一致 + 客户端时间戳新于服务端 → 不同步（客户端有新数据）
+ * 4. 客户端无该区域的元数据 → 同步（新区域）
+ *
+ * 断点续传机制：
+ * - 完全依赖哈希比对，客户端时间戳缓存（sync_timestamps.cache）记录已接收区域
+ * - 断线重连后，客户端发送已接收区域的哈希，服务端比对后只同步差异
+ * - 无需服务端保留进度索引，简化实现并避免内存泄漏
+ *
+ * 注意：此类包含所有平台共享的业务逻辑，平台特定的注册由各平台薄包装器处理。
+ */
+public class ServerSyncHandlerLogic {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServerSyncHandlerLogic.class);
+
+    /** 最大数据包大小上限（1MB），避免超过网络限制 */
+    private static final int MAX_PACKET_SIZE_LIMIT = 1_000_000;
+
+    /**
+     * 获取最大单包大小（用于拆包）。
+     * 这是每个网络包的大小限制。
+     *
+     * @return 最大单包大小（字节）
+     */
+    private static int getMaxPacketSize() {
+        int configValue = PlatformManager.getPlatform().getMaxSyncPacketSize();
+        return Math.min(configValue, MAX_PACKET_SIZE_LIMIT);
+    }
+
+    /**
+     * 获取批次累积阈值（目标每秒发送量）。
+     * 当有限速时，将限速值向下取整到整包大小，确保每秒发送整数个完整包。
+     * 无限速时，阈值 = 最大包大小。
+     *
+     * @return 批次累积阈值（字节）
+     */
+    private static int getBatchThreshold() {
+        int limitKBps = PlatformManager.getPlatform().getSyncSpeedLimitKBps();
+        if (limitKBps <= 0) {
+            // 无限速：使用最大包大小
+            return getMaxPacketSize();
+        }
+
+        // 有限速：向下取整到整包大小
+        int maxPacketSize = getMaxPacketSize();
+        int limitBytesPerSec = limitKBps * 1024;
+
+        // 计算每秒可发送的完整包数（向下取整）
+        int packetsPerSecond = limitBytesPerSec / maxPacketSize;
+
+        // 至少允许发送一个包，否则无法发送任何数据
+        if (packetsPerSecond < 1) {
+            packetsPerSecond = 1;
+        }
+
+        // 实际限速 = 整包数 × 包大小
+        int actualThreshold = packetsPerSecond * maxPacketSize;
+
+        LOGGER.debug("Speed limit adjusted: {} KB/s → {} packets/s × {} KB = {} KB/s",
+                limitKBps, packetsPerSecond, maxPacketSize / 1024, actualThreshold / 1024);
+
+        return actualThreshold;
+    }
+
+    /**
+     * 将批次数据按包大小限制拆分发送。
+     * 当批次数据超过单包大小限制时，拆成多个包发送。
+     *
+     * @param batch 待发送的数据列表
+     * @param batchBytes 批次总字节数
+     * @param serverPlayer 玩家实例
+     * @param worldId 世界ID
+     * @param processed 已处理数量
+     * @param total 总数量
+     * @return 发送的包数量
+     */
+    private static int sendBatchInChunks(List<ChunkMapData> batch, int batchBytes,
+            ServerPlayer serverPlayer, int worldId, int processed, int total, UUID playerId, int syncVersion) {
+        int maxPacketSize = getMaxPacketSize();
+
+        if (batchBytes <= maxPacketSize) {
+            final List<ChunkMapData> batchToSend = new ArrayList<>(batch);
+            enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncResponsePayload(batchToSend, false, worldId, "ok"));
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncProgressPayload(processed, total,
+                                String.format("Sending regions %d/%d", processed, total)));
+            });
+            return 1;
+        }
+
+        List<ChunkMapData> currentChunk = new ArrayList<>();
+        int currentSize = 0;
+        int packetCount = 0;
+
+        for (ChunkMapData chunk : batch) {
+            if (currentSize + chunk.data.length > maxPacketSize && !currentChunk.isEmpty()) {
+                final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
+                final int sentProgress = processed + packetCount;
+                enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                    NetworkManager.sendToPlayer(serverPlayer,
+                            new SyncResponsePayload(chunkToSend, false, worldId, "ok"));
+                    NetworkManager.sendToPlayer(serverPlayer,
+                            new SyncProgressPayload(sentProgress, total,
+                                    String.format("Sending regions %d/%d", sentProgress, total)));
+                });
+                packetCount++;
+
+                currentChunk.clear();
+                currentSize = 0;
+            }
+
+            currentChunk.add(chunk);
+            currentSize += chunk.data.length;
+        }
+
+        if (!currentChunk.isEmpty()) {
+            final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
+            final int sentProgress = processed + packetCount;
+            enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncResponsePayload(chunkToSend, false, worldId, "ok"));
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncProgressPayload(sentProgress, total,
+                                String.format("Sending regions %d/%d", sentProgress, total)));
+            });
+            packetCount++;
+        }
+
+        return packetCount;
+    }
+
+    /** 正在同步的玩家集合（用于断线或维度切换时中断同步） */
+    private static final Set<UUID> syncingPlayers = ConcurrentHashMap.newKeySet();
+
+    /** 玩家同步开始时的维度（用于维度切换时中断同步） */
+    private static final Map<UUID, ResourceKey<Level>> playerSyncDimensions = new ConcurrentHashMap<>();
+
+    /** 玩家同步线程引用（用于断线时立即中断线程） */
+    private static final Map<UUID, Thread> syncThreads = new ConcurrentHashMap<>();
+
+    /** 限速统计：累计发送字节数 */
+    private static final Map<UUID, Long> speedLimitBytesSent = new ConcurrentHashMap<>();
+
+    /** 限速统计：周期开始时间 */
+    private static final Map<UUID, Long> speedLimitCycleStart = new ConcurrentHashMap<>();
+
+    /** 限速周期最大时长（1秒），防止周期过长导致累计量过大 */
+    private static final long MAX_SPEED_LIMIT_CYCLE_MS = 1000;
+
+    /** 全局递增版本号，用于标记每次同步请求 */
+    private static final AtomicInteger globalSyncVersion = new AtomicInteger(0);
+
+    /** 每个玩家当前的同步版本号，server.execute() 任务通过版本号判断是否过期 */
+    private static final Map<UUID, Integer> playerSyncVersions = new ConcurrentHashMap<>();
+
+    /**
+     * 轻量级的 region 同步信息。
+     * 只存储路径和元数据，不包含实际数据，节省内存。
+     * 用于流式处理：先收集路径，排序后逐个读取发送。
+     *
+     * @param zipPath zip文件路径
+     * @param normalizedPath 规范化的相对路径
+     * @param timestampSeconds 时间戳（秒）
+     */
+    private record RegionSyncInfo(Path zipPath, String normalizedPath, long timestampSeconds,
+                                   int regionX, int regionZ, String dimension, int caveLayer) {
+        /**
+         * 判断是否为地表层。
+         */
+        boolean isSurfaceLayer() {
+            return caveLayer == Integer.MAX_VALUE;
+        }
+    }
+
+    /**
+     * 注册网络数据包处理器。
+     * 由各平台薄包装器在适当的时机调用。
+     */
+    public static void registerHandlers() {
+        NetworkManager.getHandler().registerSyncRequestHandler(
+            (payload, context) -> handleSyncRequest(payload, context)
+        );
+    }
+
+    /**
+     * 玩家断线事件处理
+     *
+     * 哈希比对机制会自动处理断点续传：
+     * - 客户端重连后发送已接收区域的哈希（从 sync_timestamps.cache 读取）
+     * - 服务端比对后只同步差异区域
+     *
+     * @param playerId 玩家UUID
+     */
+    public static void onPlayerDisconnect(UUID playerId) {
+        syncingPlayers.remove(playerId);
+        playerSyncDimensions.remove(playerId);
+
+        // 清理限速状态
+        clearSpeedLimitState(playerId);
+
+        // 立即中断同步线程
+        Thread syncThread = syncThreads.remove(playerId);
+        if (syncThread != null && syncThread.isAlive()) {
+            syncThread.interrupt();
+            LOGGER.info("Player {} disconnected, sync thread interrupted", playerId);
+        }
+    }
+
+    /**
+     * 检查玩家是否仍然有效（在线、在同步会话中、在同一维度）
+     *
+     * @param player 服务端玩家实例
+     * @return true表示玩家有效，false表示无效（应中断同步）
+     */
+    private static boolean isPlayerStillValid(ServerPlayer player) {
+        UUID playerId = player.getUUID();
+
+        // 如果当前线程不是为该玩家注册的同步线程（被新请求替换），立即停止
+        if (syncThreads.get(playerId) != Thread.currentThread()) {
+            return false;
+        }
+
+        // Check if player is still online and still in our sync set
+        if (!syncingPlayers.contains(playerId) || player.connection == null) {
+            return false;
+        }
+
+        // Check if player is still in the same dimension
+        ResourceKey<Level> startDimension = playerSyncDimensions.get(playerId);
+        if (startDimension != null && !player.level().dimension().equals(startDimension)) {
+            LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
+                    playerId, startDimension.identifier(), player.level().dimension().identifier());
+            syncingPlayers.remove(playerId);
+            playerSyncDimensions.remove(playerId);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 从xaeromap.txt文件读取worldId
+     *
+     * 文件位置：<world>/xaeromap.txt
+     * 格式：id:<number>
+     *
+     * @param serverPlayer 服务端玩家实例
+     * @return worldId，如果文件不存在返回0
+     */
+    private static int readWorldIdFromXaeroMap(ServerPlayer serverPlayer) {
+        try {
+            Path xaeromapPath = serverPlayer.level().getServer()
+                    .getWorldPath(LevelResource.LEVEL_DATA_FILE).getParent()
+                    .resolve("xaeromap.txt");
+
+            if (!Files.exists(xaeromapPath)) {
+                LOGGER.warn("xaeromap.txt not found at {}", xaeromapPath);
+                return 0;
+            }
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(xaeromapPath.toFile()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split(":");
+                    if (parts.length == 2 && parts[0].equals("id")) {
+                        int worldId = Integer.parseInt(parts[1]);
+                        LOGGER.info("Read worldId {} from xaeromap.txt", worldId);
+                        return worldId;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to read xaeromap.txt", e);
+        }
+        return 0;
+    }
+
+    /**
+     * 根据发送的数据量计算休眠时间，实现带宽感知的速度限制。
+     *
+     * 核心思路：
+     * 1. 维护一个限速周期的累计发送量和周期开始时间
+     * 2. 每次发送后，计算当前周期的平均带宽
+     * 3. 如果平均带宽超过限速值，计算需要等待的时间
+     * 4. 如果实际发送时间已经超过预期时间（网络瓶颈），则不需要额外等待
+     *
+     * 这种方式能自动适应网络状况：
+     * - 当网络带宽充足时，通过等待来限制发送速度
+     * - 当网络瓶颈导致发送速度低于限速时，不额外等待
+     *
+     * @param bytesSent 本次发送的字节数
+     * @param player 玩家实例（用于中断检查）
+     * @param playerId 玩家UUID（用于中断检查）
+     * @return true 表示速度限制完成，false 表示玩家已掉线应中断同步
+     */
+    private static boolean applySpeedLimit(int bytesSent, ServerPlayer player, UUID playerId) {
+        int limitKBps = PlatformManager.getPlatform().getSyncSpeedLimitKBps();
+        if (limitKBps <= 0) return true; // No limit
+
+        // 获取或初始化限速周期状态
+        Long cycleStart = speedLimitCycleStart.get(playerId);
+        Long totalBytes = speedLimitBytesSent.get(playerId);
+
+        if (cycleStart == null || totalBytes == null) {
+            // 新周期开始
+            cycleStart = System.currentTimeMillis();
+            totalBytes = 0L;
+            speedLimitCycleStart.put(playerId, cycleStart);
+            speedLimitBytesSent.put(playerId, totalBytes);
+        }
+
+        // 累加本次发送量
+        totalBytes += bytesSent;
+        speedLimitBytesSent.put(playerId, totalBytes);
+
+        // 计算当前周期实际耗时
+        long actualTimeMs = System.currentTimeMillis() - cycleStart;
+
+        // 如果周期时间超过上限，重置周期（防止累计量过大）
+        if (actualTimeMs > MAX_SPEED_LIMIT_CYCLE_MS) {
+            LOGGER.debug("Speed limit cycle too long ({} ms), resetting", actualTimeMs);
+            speedLimitCycleStart.put(playerId, System.currentTimeMillis());
+            speedLimitBytesSent.put(playerId, 0L);
+            // 重新计算（使用本次发送量作为新周期的起点）
+            totalBytes = (long) bytesSent;
+            speedLimitBytesSent.put(playerId, totalBytes);
+            cycleStart = System.currentTimeMillis();
+            actualTimeMs = 0;
+        }
+
+        // 计算在限速下，发送这些字节应该花费的时间
+        long expectedTimeMs = (totalBytes * 1000L) / (limitKBps * 1024L);
+
+        // 如果实际耗时 >= 预期耗时，说明网络瓶颈已经限制了发送速度，不需要等待
+        if (actualTimeMs >= expectedTimeMs) {
+            LOGGER.debug("Bandwidth bottleneck detected: sent {} bytes in {} ms (expected {} ms at {} KBps), skipping wait",
+                    totalBytes, actualTimeMs, expectedTimeMs, limitKBps);
+            // 重置周期，因为当前周期的带宽已经低于限速值
+            speedLimitCycleStart.put(playerId, System.currentTimeMillis());
+            speedLimitBytesSent.put(playerId, 0L);
+            return true;
+        }
+
+        // 计算需要等待的剩余时间
+        long remainingTimeMs = expectedTimeMs - actualTimeMs;
+
+        LOGGER.debug("Applying speed limit: sent {} bytes in {} ms, need to wait {} ms more (limit: {} KBps)",
+                totalBytes, actualTimeMs, remainingTimeMs, limitKBps);
+
+        // 执行可中断的等待
+        long checkIntervalMs = 100; // Check every 100ms
+        long waitStartTime = System.currentTimeMillis();
+
+        while (System.currentTimeMillis() - waitStartTime < remainingTimeMs) {
+            // Check if player disconnected during speed limit wait
+            if (!isPlayerStillValid(player)) {
+                LOGGER.info("Player {} disconnected during speed limit wait, aborting sync", playerId);
+                return false;
+            }
+
+            long waitRemainingMs = remainingTimeMs - (System.currentTimeMillis() - waitStartTime);
+            long sleepMs = Math.min(checkIntervalMs, waitRemainingMs);
+
+            try {
+                Thread.sleep(sleepMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+
+        // 等待完成后，重置周期开始新的限速周期
+        speedLimitCycleStart.put(playerId, System.currentTimeMillis());
+        speedLimitBytesSent.put(playerId, 0L);
+
+        return true;
+    }
+
+    /**
+     * 清除玩家的限速状态。
+     *
+     * @param playerId 玩家UUID
+     */
+    private static void clearSpeedLimitState(UUID playerId) {
+        speedLimitBytesSent.remove(playerId);
+        speedLimitCycleStart.remove(playerId);
+    }
+
+    /**
+     * 清除玩家的所有同步状态（同步完成或中断时调用）。
+     *
+     * @param playerId 玩家UUID
+     */
+    private static void cleanupSyncState(UUID playerId) {
+        syncingPlayers.remove(playerId);
+        playerSyncDimensions.remove(playerId);
+        playerSyncVersions.remove(playerId);
+
+        // 清理线程引用并确保线程已停止
+        Thread syncThread = syncThreads.remove(playerId);
+        if (syncThread != null && syncThread.isAlive()) {
+            syncThread.interrupt();
+        }
+
+        clearSpeedLimitState(playerId);
+    }
+
+    /**
+     * 处理客户端同步请求
+     *
+     * 接收客户端元数据，比对服务端缓存，发送差异数据。
+     * 基于哈希比对实现自动断点续传，无需索引恢复。
+     *
+     * **重要**：同步处理在异步线程执行，避免阻塞服务器主线程导致 Watchdog 崩溃。
+     *
+     * @param payload 同步请求数据包
+     * @param context 数据包上下文
+     */
+    private static void handleSyncRequest(SyncRequestPayload payload, PayloadContext context) {
+        Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
+        if (!(player instanceof ServerPlayer serverPlayer)) return;
+
+        UUID playerId = serverPlayer.getUUID();
+
+        // 递增版本号，用于标记此次请求（旧请求的 server.execute() 任务会通过版本号自过滤）
+        int syncVersion = globalSyncVersion.incrementAndGet();
+        playerSyncVersions.put(playerId, syncVersion);
+
+        // 如果玩家已经在同步中，先中断旧的同步线程
+        Thread oldThread = syncThreads.get(playerId);
+        if (oldThread != null && oldThread.isAlive()) {
+            LOGGER.debug("Player {} requested new sync while syncing, interrupting old sync (v{})", playerId, syncVersion);
+            oldThread.interrupt();
+            cleanupSyncState(playerId);
+        }
+
+        ResourceKey<Level> startDimension = serverPlayer.level().dimension();
+
+        // Mark player as syncing and record starting dimension (在主线程快速完成)
+        syncingPlayers.add(playerId);
+        playerSyncDimensions.put(playerId, startDimension);
+
+        // 在主线程预捕获玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
+        int startBlockX = serverPlayer.getBlockX();
+        int startBlockZ = serverPlayer.getBlockZ();
+        int viewDistanceChunks = serverPlayer.level().getServer().getPlayerList().getViewDistance() + 2;
+        int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;
+
+        // Client metadata (timestamp + hash) - contains already received regions for resume
+        Map<String, ClientMeta> clientMeta = payload.clientMeta();
+
+        // 将耗时操作移到异步线程执行，避免阻塞主线程
+        Thread syncThread = new Thread(() -> processSyncAsync(serverPlayer, playerId, clientMeta, startDimension, syncVersion,
+                startBlockX, startBlockZ, viewDistanceRegions),
+                "mapsyncer-sync-" + playerId);
+        syncThread.setDaemon(true);
+        syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
+        syncThread.start();
+        LOGGER.debug("Started async sync thread for player {} (v{})", serverPlayer.getName().getString(), syncVersion);
+    }
+
+    /**
+     * 在主线程执行任务前检查版本号是否匹配（旧请求的入队任务自动丢弃）。
+     */
+    private static void enqueueIfCurrent(ServerPlayer serverPlayer, UUID playerId, int version, Runnable task) {
+        serverPlayer.level().getServer().execute(() -> {
+            if (playerSyncVersions.getOrDefault(playerId, 0) == version) {
+                task.run();
+            }
+        });
+    }
+
+    /**
+     * 异步处理同步请求。
+     * 在单独线程中执行耗时操作（遍历缓存、比对哈希、发送数据），
+     * 避免阻塞服务器主线程。
+     *
+     * @param serverPlayer 服务端玩家实例
+     * @param playerId 玩家UUID
+     * @param clientMeta 客户端元数据
+     * @param startDimension 开始同步时的维度
+     */
+    private static void processSyncAsync(ServerPlayer serverPlayer, UUID playerId,
+            Map<String, ClientMeta> clientMeta, ResourceKey<Level> startDimension, int syncVersion,
+            int startBlockX, int startBlockZ, int viewDistanceRegions) {
+
+        // Read worldId from xaeromap.txt (Xaero's official method)
+        int worldId = readWorldIdFromXaeroMap(serverPlayer);
+        LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
+
+        // Get server generation cache (timestamp + hash)
+        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR);
+        Map<String, RegionMeta> serverCache = genCache.getAll();
+
+        Path cacheDir = ConversionOrchestrator.CACHE_DIR;
+
+        if (!Files.exists(cacheDir)) {
+            // 在主线程发送消息和数据包
+            enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
+                cleanupSyncState(playerId);
+            });
+            return;
+        }
+
+        // Sync logic:
+        // 1. Hash match → skip (file content identical)
+        // 2. Hash mismatch + client timestamp older → sync
+        // 3. Hash mismatch + client timestamp newer → skip (client has newer data)
+        // 4. Client has no metadata for this region → sync (new region)
+        int hashMatchCount = 0;
+        int timestampSkipCount = 0;
+
+        // Determine which dimensions the client is requesting (based on their metadata keys)
+        Set<String> requestedDimensions = new java.util.HashSet<>();
+        for (String key : clientMeta.keySet()) {
+            LOGGER.debug("Client meta key: {}", key);
+            String[] parts = key.split("[/\\\\]");
+            if (parts.length > 1) {
+                String dim = parts[0];
+                if (!key.contains("_placeholder_")) {
+                    requestedDimensions.add(dim);
+                } else {
+                    requestedDimensions.add(dim);
+                    LOGGER.debug("Found placeholder for dimension {}, will sync all regions", dim);
+                }
+            }
+        }
+        LOGGER.debug("Client requesting dimensions (Xaero format): {}", requestedDimensions);
+
+        // Check if requested dimensions have cache data
+        Set<String> skippedDimensions = new HashSet<>();
+        DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+        boolean hasValidDimension = false;
+
+        for (String xaeroDim : requestedDimensions) {
+            Path dimCacheDir = cacheDir.resolve(xaeroDim);
+            if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
+                try (Stream<Path> stream = Files.walk(dimCacheDir)) {
+                    boolean hasZipFiles = stream.anyMatch(p -> p.toString().endsWith(".zip"));
+                    if (hasZipFiles) {
+                        hasValidDimension = true;
+                    }
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to check dimension {} cache directory", xaeroDim, e);
+                }
+            } else {
+                String friendlyDim = dimMapping.toServerDimension(xaeroDim);
+                enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                    serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim));
+                });
+                LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
+            }
+        }
+
+        if (!hasValidDimension) {
+            LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
+            // 在主线程发送数据包
+            enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
+                cleanupSyncState(playerId);
+            });
+            return;
+        }
+
+        // Compare server cache with client metadata to find differences
+        // 先收集所有 zip 路径再遍历，避免 Files.walk lazy stream 在遍历过程中
+        // relativize 路径时因目录树仍在迭代导致路径表示不一致（同一文件出现两次）
+        List<RegionSyncInfo> regionsToSync = new ArrayList<>();
+
+        Path absCacheDir = cacheDir.toAbsolutePath().normalize();
+        List<Path> allZipPaths;
+        try (Stream<Path> stream = Files.walk(absCacheDir)) {
+            allZipPaths = stream.filter(p -> p.toString().endsWith(".zip")).toList();
+        } catch (IOException e) {
+            LOGGER.error("Failed to walk cache directory", e);
+            allZipPaths = List.of();
+        }
+
+        allZipPaths.forEach(zipPath -> {
+                        String relativePath = absCacheDir.relativize(zipPath).toString();
+                        String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
+
+                        String[] parts = normalizedPath.split("[/\\\\]");
+                        String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
+
+                        String normalizedXaeroDim = dimMapping.toXaeroDimension(xaeroDimName);
+                        if (!normalizedXaeroDim.equals(xaeroDimName)) {
+                            normalizedPath = normalizedXaeroDim + normalizedPath.substring(xaeroDimName.length());
+                        }
+
+                        if (!requestedDimensions.contains(normalizedXaeroDim)) {
+                            if (!skippedDimensions.contains(normalizedXaeroDim)) {
+                                skippedDimensions.add(normalizedXaeroDim);
+                                LOGGER.debug("Skipping dimension {}: not requested", normalizedXaeroDim);
+                            }
+                            return;
+                        }
+
+                        RegionMeta serverMeta = serverCache.get(normalizedPath);
+                        ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
+
+                        // 判断是否需要同步
+                        boolean shouldSync = false;
+                        long timestamp = 0;
+
+                        // Server has no cache entry → compute hash from file
+                        if (serverMeta == null) {
+                            String serverHash = HashUtils.computeFileHash(zipPath);
+                            timestamp = System.currentTimeMillis() / 1000;
+
+                            if (clientMetaEntry == null) {
+                                shouldSync = true;
+                            } else if (!serverHash.equals(clientMetaEntry.hash())) {
+                                shouldSync = true;
+                            }
+                        } else {
+                            // Client has no metadata → sync (new region)
+                            if (clientMetaEntry == null) {
+                                shouldSync = true;
+                                timestamp = serverMeta.timestampSeconds();
+                            } else if (!serverMeta.hash().equals(clientMetaEntry.hash())) {
+                                // Hash mismatch → check timestamps
+                                if (clientMetaEntry.timestampSeconds() < serverMeta.timestampSeconds()) {
+                                    shouldSync = true;
+                                    timestamp = serverMeta.timestampSeconds();
+                                }
+                            }
+                        }
+
+                        if (shouldSync) {
+                            // 解析路径信息，但不读取数据
+                            RegionSyncInfo info = parseRegionInfo(zipPath, normalizedPath, timestamp);
+                            if (info != null) {
+                                regionsToSync.add(info);
+                            }
+                        }
+                    });
+
+        // Count hash matches and timestamp skips
+        for (Map.Entry<String, RegionMeta> entry : serverCache.entrySet()) {
+            ClientMeta cm = clientMeta.get(entry.getKey());
+            if (cm != null && entry.getValue().hash().equals(cm.hash())) {
+                hashMatchCount++;
+            } else if (cm != null && cm.timestampSeconds() >= entry.getValue().timestampSeconds()) {
+                timestampSkipCount++;
+            }
+        }
+
+        int total = regionsToSync.size();
+        // 创建 final 变量供 lambda 使用
+        final int finalHashMatchCount = hashMatchCount;
+        final int finalTimestampSkipCount = timestampSkipCount;
+
+        LOGGER.debug("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
+                serverPlayer.getName().getString(), total, finalHashMatchCount, finalTimestampSkipCount);
+
+        if (total == 0) {
+            enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
+                cleanupSyncState(playerId);
+            });
+            return;
+        }
+
+        // 按视距优先排序：视距内region最先发送，让玩家更快看到周围地图
+        sortByViewDistancePriority(regionsToSync, startBlockX, startBlockZ, viewDistanceRegions);
+
+        // 立即发送轻量的"开始同步"通知，避免客户端超时
+        // 这个包不含数据，仅通知客户端服务端已开始处理
+        final int initialTotal = total;
+        enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+            NetworkManager.sendToPlayer(serverPlayer,
+                    new SyncProgressPayload(0, initialTotal, "Sync started"));
+        });
+
+        // 流式处理：逐个读取数据并发送，避免一次性加载所有数据到内存
+        List<ChunkMapData> batch = new ArrayList<>();
+        int batchBytes = 0;
+        int processed = 0;
+        int batchThreshold = getBatchThreshold(); // 批次累积阈值（目标每秒发送量）
+
+        for (RegionSyncInfo info : regionsToSync) {
+            if (!isPlayerStillValid(serverPlayer)) {
+                LOGGER.info("Player {} disconnected during sync", playerId);
+                cleanupSyncState(playerId);
+                return;
+            }
+
+            // 读取单个region的数据（流式处理）
+            ChunkMapData chunk = readRegionData(info);
+            if (chunk == null) {
+                LOGGER.warn("Failed to read region data: {}", info.normalizedPath());
+                continue;
+            }
+
+            // 累积到批次阈值后发送（拆成多个包，每个包不超过maxPacketSize）
+            if (batchBytes + chunk.data.length > batchThreshold && !batch.isEmpty()) {
+                // 执行速度限制
+                if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                    LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
+                    cleanupSyncState(playerId);
+                    return;
+                }
+
+                // 拆包发送
+                sendBatchInChunks(batch, batchBytes, serverPlayer, worldId, processed, total, playerId, syncVersion);
+                processed += batch.size();
+
+                batch.clear();
+                batchBytes = 0;
+            }
+
+            batch.add(chunk);
+            batchBytes += chunk.data.length;
+        }
+
+        if (!isPlayerStillValid(serverPlayer)) {
+            LOGGER.info("Player {} disconnected before final batch", playerId);
+            cleanupSyncState(playerId);
+            return;
+        }
+
+        // Send final batch
+        if (!batch.isEmpty()) {
+            // 对最终批次也执行速度限制
+            if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
+                cleanupSyncState(playerId);
+                return;
+            }
+
+            final int maxPacketSize = getMaxPacketSize();
+            if (batchBytes <= maxPacketSize) {
+                final List<ChunkMapData> finalBatch = new ArrayList<>(batch);
+                final int finalTotal = total;
+                enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                    NetworkManager.sendToPlayer(serverPlayer,
+                            new SyncResponsePayload(finalBatch, true, worldId, "ok"));
+                    NetworkManager.sendToPlayer(serverPlayer,
+                            new SyncProgressPayload(finalTotal, finalTotal, "completed"));
+                    serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                    cleanupSyncState(playerId);
+                });
+            } else {
+                List<ChunkMapData> currentChunk = new ArrayList<>();
+                int currentSize = 0;
+
+                for (ChunkMapData chunk : batch) {
+                    if (currentSize + chunk.data.length > maxPacketSize && !currentChunk.isEmpty()) {
+                        final List<ChunkMapData> chunkToSend = new ArrayList<>(currentChunk);
+                        final int sentProgress = processed;
+                        enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                            NetworkManager.sendToPlayer(serverPlayer,
+                                    new SyncResponsePayload(chunkToSend, false, worldId, "ok"));
+                            NetworkManager.sendToPlayer(serverPlayer,
+                                    new SyncProgressPayload(sentProgress, total,
+                                            String.format("Sending regions %d/%d", sentProgress, total)));
+                        });
+                        processed += currentChunk.size();
+
+                        currentChunk.clear();
+                        currentSize = 0;
+                    }
+
+                    currentChunk.add(chunk);
+                    currentSize += chunk.data.length;
+                }
+
+                if (!currentChunk.isEmpty()) {
+                    final List<ChunkMapData> lastChunk = new ArrayList<>(currentChunk);
+                    final int finalTotal = total;
+                    enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                        NetworkManager.sendToPlayer(serverPlayer,
+                                new SyncResponsePayload(lastChunk, true, worldId, "ok"));
+                        NetworkManager.sendToPlayer(serverPlayer,
+                                new SyncProgressPayload(finalTotal, finalTotal, "completed"));
+                        serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                        cleanupSyncState(playerId);
+                    });
+                }
+            }
+        } else {
+            enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
+                NetworkManager.sendToPlayer(serverPlayer,
+                        new SyncProgressPayload(total, total, "completed"));
+                serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
+                cleanupSyncState(playerId);
+            });
+        }
+
+        LOGGER.info("Map sync complete for player {}: {} regions", serverPlayer.getName().getString(), total);
+    }
+
+    /**
+     * 解析 region 信息（不含数据）。
+     * 用于流式处理，先收集路径信息再排序发送。
+     *
+     * @param zipPath zip文件路径
+     * @param normalizedPath 规范化的相对路径
+     * @param timestampSeconds 时间戳（秒）
+     * @return RegionSyncInfo，如果解析失败返回 null
+     */
+    private static RegionSyncInfo parseRegionInfo(Path zipPath, String normalizedPath, long timestampSeconds) {
+        try {
+            String[] parts = normalizedPath.split("[/\\\\]");
+
+            String dimension;
+            int caveLayer = Integer.MAX_VALUE;
+            String fileName;
+
+            if (parts.length >= 4 && parts[1].equals("caves")) {
+                dimension = parts[0];
+                caveLayer = Integer.parseInt(parts[2]);
+                fileName = parts[3];
+            } else {
+                dimension = parts[0];
+                fileName = parts[parts.length - 1];
+            }
+
+            String[] coords = fileName.split("_");
+            int regionX = Integer.parseInt(coords[0]);
+            int regionZ = Integer.parseInt(coords[1]);
+
+            return new RegionSyncInfo(zipPath, normalizedPath, timestampSeconds, regionX, regionZ, dimension, caveLayer);
+        } catch (NumberFormatException e) {
+            LOGGER.error("Failed to parse path: {}", normalizedPath, e);
+            return null;
+        }
+    }
+
+    /**
+     * 读取单个 region 的数据。
+     * 流式处理中按需读取，避免一次性加载所有数据。
+     *
+     * @param info region同步信息
+     * @return ChunkMapData，如果读取失败返回 null
+     */
+    private static ChunkMapData readRegionData(RegionSyncInfo info) {
+        try {
+            byte[] data = Files.readAllBytes(info.zipPath());
+            return new ChunkMapData(info.regionX(), info.regionZ(), info.dimension(),
+                    data, info.timestampSeconds(), info.caveLayer());
+        } catch (IOException e) {
+            LOGGER.error("Failed to read zip file: {}", info.zipPath(), e);
+            return null;
+        }
+    }
+
+    /**
+     * 清除所有跟踪数据
+     *
+     * 在服务器停止时调用，防止内存泄漏。
+     */
+    public static void cleanup() {
+        syncingPlayers.clear();
+        playerSyncDimensions.clear();
+        playerSyncVersions.clear();
+        syncThreads.clear();
+        speedLimitBytesSent.clear();
+        speedLimitCycleStart.clear();
+        LOGGER.debug("ServerSyncHandler tracking data cleared");
+    }
+
+    /**
+     * 清理离线玩家的残留状态
+     *
+     * <p>玩家异常断线时，onPlayerDisconnect可能未被调用，导致状态残留。
+     * 此方法定期检查并清理不在在线列表中的玩家状态。</p>
+     *
+     * @param onlinePlayerIds 当前在线玩家的UUID集合
+     */
+    public static void cleanupOfflinePlayers(Set<UUID> onlinePlayerIds) {
+        // 检查syncingPlayers中的玩家是否仍然在线
+        Set<UUID> toRemove = new HashSet<>();
+        for (UUID playerId : syncingPlayers) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+
+        // 清理离线玩家的状态
+        for (UUID playerId : toRemove) {
+            LOGGER.debug("Cleaning up stale state for offline player {}", playerId);
+            cleanupSyncState(playerId);
+        }
+
+        // 清理已结束但未移除的线程引用（防止内存泄漏）
+        cleanupCompletedThreads();
+
+        if (!toRemove.isEmpty()) {
+            LOGGER.debug("Cleaned up {} stale player states", toRemove.size());
+        }
+    }
+
+    /**
+     * 清理已结束的同步线程引用。
+     *
+     * <p>线程正常完成后，Thread对象可能残留在syncThreads Map中。
+     * 此方法检查并清理所有已终止的线程，防止内存泄漏。</p>
+     */
+    private static void cleanupCompletedThreads() {
+        Set<UUID> completedThreads = new HashSet<>();
+
+        for (Map.Entry<UUID, Thread> entry : syncThreads.entrySet()) {
+            Thread thread = entry.getValue();
+            // 线程已终止（不再存活），标记为需要清理
+            if (thread == null || !thread.isAlive()) {
+                completedThreads.add(entry.getKey());
+            }
+        }
+
+        for (UUID playerId : completedThreads) {
+            LOGGER.debug("Cleaning up completed thread for player {}", playerId);
+            syncThreads.remove(playerId);
+            // 同时清理相关状态（如果线程已完成但状态未清理）
+            syncingPlayers.remove(playerId);
+            playerSyncDimensions.remove(playerId);
+            clearSpeedLimitState(playerId);
+        }
+
+        if (!completedThreads.isEmpty()) {
+            LOGGER.debug("Cleaned up {} completed thread references", completedThreads.size());
+        }
+    }
+
+    /**
+     * 按视距优先排序同步列表。
+     * 视距内的region排在最前面，让玩家最先收到周围的地图数据。
+     *
+     * <p>排序逻辑：</p>
+     * <ul>
+     *   <li>计算玩家当前位置对应的region坐标</li>
+     *   <li>视距内的region（与玩家region距离≤视距region数）排在最前</li>
+     *   <li>视距外的region按与玩家的距离排序（近者优先）</li>
+     * </ul>
+     *
+     * @param regions 待同步的region信息列表
+     * @param startBlockX 主线程预捕获的玩家 BlockX 坐标
+     * @param startBlockZ 主线程预捕获的玩家 BlockZ 坐标
+     * @param viewDistanceRegions 视距换算的区域数
+     */
+    private static void sortByViewDistancePriority(List<RegionSyncInfo> regions, int startBlockX, int startBlockZ, int viewDistanceRegions) {
+        // 使用主线程预捕获的玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
+        int playerChunkX = startBlockX >> 4;
+        int playerChunkZ = startBlockZ >> 4;
+        int playerRegionX = playerChunkX >> 5;
+        int playerRegionZ = playerChunkZ >> 5;
+
+        LOGGER.debug("Player region: ({}, {}), view distance regions: ~{}",
+                playerRegionX, playerRegionZ, viewDistanceRegions);
+
+        // 计算每个region到玩家的距离，并排序
+        regions.sort((a, b) -> {
+            int distA = Math.max(Math.abs(a.regionX() - playerRegionX), Math.abs(a.regionZ() - playerRegionZ));
+            int distB = Math.max(Math.abs(b.regionX() - playerRegionX), Math.abs(b.regionZ() - playerRegionZ));
+
+            // 视距内的region（距离≤视距）排在最前，视距外按距离排序
+            boolean aInView = distA <= viewDistanceRegions;
+            boolean bInView = distB <= viewDistanceRegions;
+
+            if (aInView && !bInView) return -1;  // a在视距内，排前面
+            if (!aInView && bInView) return 1;   // b在视距内，排前面
+            return Integer.compare(distA, distB); // 都在视距内或都在视距外，按距离排序
+        });
+
+        // 统计视距内region数量
+        int viewRegionCount = 0;
+        for (RegionSyncInfo info : regions) {
+            int dist = Math.max(Math.abs(info.regionX() - playerRegionX), Math.abs(info.regionZ() - playerRegionZ));
+            if (dist <= viewDistanceRegions) {
+                viewRegionCount++;
+            }
+        }
+
+        LOGGER.debug("Sorted {} regions: {} in view distance ({} region radius), rest by distance",
+                regions.size(), viewRegionCount, viewDistanceRegions);
+    }
+}

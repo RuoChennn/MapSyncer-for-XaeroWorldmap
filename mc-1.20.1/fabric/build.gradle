@@ -1,0 +1,79 @@
+plugins {
+    id 'fabric-loom' version '1.9.2'
+}
+
+version = mod_version + '-fabric-1.20.1'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Fabric 1.20.1 需要 Java 17
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    // Cloth Config
+    maven { url = 'https://maven.shedaniel.me/' }
+    // Mod Menu (optional)
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+// 引用版本特定的共享源码（不独立编译，由本模块提供 MC 依赖）
+sourceSets.main.java.srcDir '../shared/src/main/java'
+sourceSets.main.resources.srcDir '../shared/src/main/resources'
+sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/common/src/main/java"
+sourceSets.main.resources.srcDir "${rootProject.projectDir}/libs/common/src/main/resources"
+
+dependencies {
+    // Minecraft and Fabric
+    minecraft "com.mojang:minecraft:${minecraft_1201_version}"
+    // 使用 official mappings (Mojmap) 以保持与其他平台一致
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:0.15.11"
+
+    // Fabric API for 1.20.1 (0.92.2+ includes PayloadTypeRegistry/CustomPacketPayload/PacketCodec)
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1"
+
+    // Cloth Config (for configuration)
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:11.0.99"
+
+    // 依赖核心模块
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+    // include 会将依赖打包到 JAR 中
+    include project(':libs:core')
+    include project(':libs:platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", minecraft_1201_version
+    inputs.property "loader_version", "0.15.11"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": minecraft_1201_version,
+                "loader_version": "0.15.11"
+    }
+}
+
+publishing {
+    publications {
+        register('fabric120MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

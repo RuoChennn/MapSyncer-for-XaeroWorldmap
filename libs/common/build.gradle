@@ -1,0 +1,37 @@
+plugins {
+    id 'java-library'
+}
+
+group = mod_group_id
+version = mod_version
+
+// libs/common 模块：全版本共享的代码
+// 此模块不独立编译（依赖 MC 版本特定的类），仅作为源码仓库
+// 各平台模块通过 sourceSet 引用此模块的源码
+
+// 禁用所有编译任务
+tasks.withType(JavaCompile).configureEach {
+    enabled = false
+}
+
+// 禁用 jar 任务
+tasks.named('jar').configure {
+    enabled = false
+}
+
+// 禁用 classes 任务
+tasks.named('classes').configure {
+    enabled = false
+}
+
+// 只声明依赖关系（供 IDE 识别），不实际编译
+dependencies {
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+}
+
+// 让 IDE 能识别此模块为 Java 模块
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}

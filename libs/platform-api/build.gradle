@@ -1,0 +1,32 @@
+plugins {
+    id 'java-library'
+}
+
+group = mod_group_id
+version = mod_version
+
+// Platform API 模块兼容 Java 17（字节码），但使用 Java 21 编译
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+// Platform API 模块：平台抽象接口定义
+// 定义 Forge/NeoForge/Fabric 的统一抽象层
+// 不包含具体实现，仅定义接口
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':libs:core')
+
+    // SLF4J API（日志接口）
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

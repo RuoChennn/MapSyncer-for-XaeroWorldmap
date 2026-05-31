@@ -2,15 +2,58 @@ pluginManagement {
     repositories {
         mavenLocal()
         gradlePluginPortal()
+        // NeoForge 插件仓库
         maven { url = 'https://maven.neoforged.net/releases' }
-        // Aliyun mirror for better access in China
+        // Forge 插件仓库
+        maven { url = 'https://maven.minecraftforge.net/' }
+        // Fabric 插件仓库
+        maven { url = 'https://maven.fabricmc.net/' }
         maven { url = 'https://maven.aliyun.com/repository/public' }
     }
 }
 
 plugins {
-    // Removed foojay-resolver-convention to avoid network issues
-    // Using local Java 21 installation instead
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
 }
 
 rootProject.name = mod_id
+
+// ── 抽象库层（平台无关，编译为独立 JAR）──
+include 'libs:core'             // 纯 Java 核心（MCA/NBT/工具类）
+include 'libs:platform-api'     // 平台抽象接口
+include 'libs:common'           // 全版本共享的代码（source-only，不独立编译）
+
+// ── 按 MC 版本组织的模块 ──
+// 每个 MC 版本包含：
+//   shared/  — 版本特定的共享源码（source-only，不独立编译）
+//   fabric/  — Fabric 平台实现
+//   forge/   — Forge 平台实现
+//   neoforge/ — NeoForge 平台实现
+
+// MC 1.20.1
+include 'mc-1.20.1:shared'
+include 'mc-1.20.1:fabric'
+// include 'mc-1.20.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
+
+// MC 1.20.4 (目录暂未创建)
+// include 'mc-1.20.4:shared'
+// include 'mc-1.20.4:neoforge'
+// include 'mc-1.20.4:forge'
+// include 'mc-1.20.4:fabric'
+
+// MC 1.21.1
+include 'mc-1.21.1:shared'
+include 'mc-1.21.1:fabric'
+// include 'mc-1.21.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
+include 'mc-1.21.1:neoforge'
+
+// MC 1.21.11 (目录暂未创建)
+// include 'mc-1.21.11:shared'
+// include 'mc-1.21.11:neoforge'
+// include 'mc-1.21.11:forge'
+// include 'mc-1.21.11:fabric'
+
+// MC 26.1
+include 'mc-26.1:shared'
+include 'mc-26.1:neoforge'
+// include 'mc-26.1:fabric'  // Loom 版本冲突，使用 scripts/settings-26.gradle 单独构建
