@@ -151,6 +151,50 @@ public class RegionConverterStandalone {
         }
     }
 
+    /**
+     * 根据世界Y坐标查找对应的Section（跨section光照查询辅助）
+     *
+     * @param chunk Chunk数据
+     * @param worldY 世界Y坐标
+     * @return 包含该Y坐标的Section，如果不存在则返回null
+     */
+    private static ChunkSectionParser.SectionData findSectionAt(ChunkDataParser.ChunkInfo chunk, int worldY) {
+        int sectionY = worldY >> 4;
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.sectionY() == sectionY) return section;
+        }
+        return null;
+    }
+
+    /**
+     * 跨section读取方块光照（处理ly+1越界到下一个section的情况）
+     *
+     * @param chunk Chunk数据
+     * @param currentSection 当前Section
+     * @param lx 局部X (0-15)
+     * @param ly 局部Y (0-15，当前section内)
+     * @param lz 局部Z (0-15)
+     * @param worldY 世界Y坐标（要查询光照的位置）
+     * @return 方块光照值 (0-15)，如果无法查询则返回0
+     */
+    private static byte getBlockLightCrossSection(ChunkDataParser.ChunkInfo chunk,
+                                                   ChunkSectionParser.SectionData currentSection,
+                                                   int lx, int ly, int lz, int worldY) {
+        int sectionY = worldY >> 4;
+        if (sectionY == currentSection.sectionY()) {
+            int localY = worldY - (sectionY * 16);
+            if (localY >= 0 && localY <= 15) {
+                return ChunkSectionParser.getBlockLight(currentSection, lx, localY, lz);
+            }
+        }
+        ChunkSectionParser.SectionData targetSection = findSectionAt(chunk, worldY);
+        if (targetSection != null) {
+            int localY = worldY - (targetSection.sectionY() * 16);
+            return ChunkSectionParser.getBlockLight(targetSection, lx, localY, lz);
+        }
+        return 0;
+    }
+
     private record ScanRange(int startY, int scanBottomY) {}
 
     private record SurfaceResult(
@@ -215,11 +259,11 @@ public class RegionConverterStandalone {
 
             SurfaceResult sectionResult;
             if (section.blockPalette().size() == 1 && section.blockData() == null) {
-                sectionResult = processSinglePaletteSection(section, lx, lz, relX, relZ,
+                sectionResult = processSinglePaletteSection(chunk, section, lx, lz, relX, relZ,
                     sectionBaseY, effectiveStartY, scanRange.scanBottomY(), chunkBottomY,
                     isCaveMode, underair, worldHasSkylight, lightMode, heightMapValue, overlayList, blockLookup);
             } else {
-                sectionResult = processMultiPaletteSection(section, lx, lz, relX, relZ,
+                sectionResult = processMultiPaletteSection(chunk, section, lx, lz, relX, relZ,
                     sectionBaseY, effectiveStartY, scanRange.scanBottomY(), chunkBottomY,
                     isCaveMode, underair, worldHasSkylight, lightMode, heightMapValue, overlayList, blockLookup);
             }
@@ -256,7 +300,8 @@ public class RegionConverterStandalone {
         return effectiveStartY;
     }
 
-    private static SurfaceResult processSinglePaletteSection(ChunkSectionParser.SectionData section,
+    private static SurfaceResult processSinglePaletteSection(ChunkDataParser.ChunkInfo chunk,
+                                                              ChunkSectionParser.SectionData section,
                                                               int lx, int lz, int relX, int relZ,
                                                               int sectionBaseY, int effectiveStartY,
                                                               int scanBottomY, int chunkBottomY,
@@ -286,8 +331,8 @@ public class RegionConverterStandalone {
             // 参考 Xaero loadPixel：光照在 h+1 位置读取，overlay/surface 共享同一光照值
             if (blockLookup.isWaterInheriting(singleState.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
-                int lightLY = Math.min(ly + 1, 15);
-                byte effectiveLight = calculateSurfaceLight(section, lx, lightLY, lz, worldY + 1,
+                int aboveWorldY = worldY + 1;
+                byte effectiveLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                     heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
                 addOverlay(overlayList, "minecraft:water", worldY, opacity, effectiveLight, blockLookup);
 
@@ -298,7 +343,8 @@ public class RegionConverterStandalone {
             if (blockLookup.isWaterloggedSurface(singleState.name(), singleState.properties())
                 && !blockLookup.shouldOverlay(singleState.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                int aboveWorldY = worldY + 1;
+                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
 
                 byte surfaceLight = overlayLight;
@@ -308,12 +354,14 @@ public class RegionConverterStandalone {
 
             if (blockLookup.shouldOverlay(singleState.name())) {
                 int opacity = blockLookup.getLightBlock(singleState.name());
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                int aboveWorldY = worldY + 1;
+                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, singleState.name(), worldY, opacity, overlayLight, blockLookup);
                 continue;
             }
 
-            byte surfaceLight = calculateSurfaceLight(section, lx, Math.min(ly + 1, 15), lz, worldY + 1,
+            int aboveWorldY = worldY + 1;
+            byte surfaceLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                 heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
             String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
             return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
@@ -322,7 +370,8 @@ public class RegionConverterStandalone {
         return null;
     }
 
-    private static SurfaceResult processMultiPaletteSection(ChunkSectionParser.SectionData section,
+    private static SurfaceResult processMultiPaletteSection(ChunkDataParser.ChunkInfo chunk,
+                                                             ChunkSectionParser.SectionData section,
                                                              int lx, int lz, int relX, int relZ,
                                                              int sectionBaseY, int effectiveStartY,
                                                              int scanBottomY, int chunkBottomY,
@@ -357,8 +406,8 @@ public class RegionConverterStandalone {
             // 参考 Xaero loadPixel：光照在 h+1 位置读取，overlay/surface 共享同一光照值
             if (blockLookup.isWaterInheriting(state.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
-                int lightLY = Math.min(ly + 1, 15);
-                byte effectiveLight = calculateSurfaceLight(section, lx, lightLY, lz, worldY + 1,
+                int aboveWorldY = worldY + 1;
+                byte effectiveLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                     heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
                 addOverlay(overlayList, "minecraft:water", worldY, opacity, effectiveLight, blockLookup);
 
@@ -369,7 +418,8 @@ public class RegionConverterStandalone {
             if (blockLookup.isWaterloggedSurface(state.name(), state.properties())
                 && !blockLookup.shouldOverlay(state.name())) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                int aboveWorldY = worldY + 1;
+                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
 
                 byte surfaceLight = overlayLight;
@@ -379,7 +429,8 @@ public class RegionConverterStandalone {
 
             if (blockLookup.isTranslucentFluid(state.name())) {
                 int opacity = blockLookup.getLightBlock(state.name());
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                int aboveWorldY = worldY + 1;
+                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
                 if (highestBlockY < 0) highestBlockY = worldY;
                 continue;
@@ -389,10 +440,11 @@ public class RegionConverterStandalone {
             // 匹配 Xaero 的 fluid-state-first 处理顺序
             if (state.isWaterlogged() && blockLookup.shouldOverlay(state.name())) {
                 int waterOpacity = blockLookup.getLightBlock("minecraft:water");
-                byte waterLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                int aboveWorldY = worldY + 1;
+                byte waterLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, "minecraft:water", worldY, waterOpacity, waterLight, blockLookup);
                 int opacity = blockLookup.getLightBlock(state.name());
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
                 if (highestBlockY < 0) highestBlockY = worldY;
                 continue;
@@ -404,7 +456,8 @@ public class RegionConverterStandalone {
 
             if (blockLookup.isTransparent(state.name())) {
                 int opacity = blockLookup.getLightBlock(state.name());
-                byte overlayLight = ChunkSectionParser.getBlockLight(section, lx, Math.min(ly + 1, 15), lz);
+                int aboveWorldY = worldY + 1;
+                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
                 if (highestBlockY < 0) highestBlockY = worldY;
                 continue;
@@ -414,7 +467,8 @@ public class RegionConverterStandalone {
                 continue;
             }
 
-            byte surfaceLight = calculateSurfaceLight(section, lx, Math.min(ly + 1, 15), lz, worldY + 1,
+            int aboveWorldY = worldY + 1;
+            byte surfaceLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                 heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
             String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
             return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
@@ -471,23 +525,47 @@ public class RegionConverterStandalone {
         }
     }
 
-    private static byte calculateSurfaceLight(ChunkSectionParser.SectionData section,
+    private static byte calculateSurfaceLight(ChunkDataParser.ChunkInfo chunk,
+                                                ChunkSectionParser.SectionData currentSection,
                                                 int lx, int ly, int lz, int worldY,
                                                 int heightMapValue,
                                                 List<OverlayData> overlayList,
                                                 LightMode lightMode,
                                                 boolean worldHasSkylight,
                                                 BlockPropertyLookup blockLookup) {
-        byte blockLight = ChunkSectionParser.getBlockLight(section, lx, ly, lz);
-        byte skyLight = ChunkSectionParser.getSkyLight(section, lx, ly, lz);
+        // 跨section读取光照：worldY可能落在当前section之外
+        byte blockLight = getBlockLightCrossSection(chunk, currentSection, lx, ly, lz, worldY);
+        byte skyLight;
+        int worldYSkySectionY = worldY >> 4;
+        if (worldYSkySectionY == currentSection.sectionY()) {
+            int localY = worldY - (worldYSkySectionY * 16);
+            if (localY >= 0 && localY <= 15) {
+                skyLight = ChunkSectionParser.getSkyLight(currentSection, lx, localY, lz);
+            } else {
+                skyLight = 0;
+            }
+        } else {
+            ChunkSectionParser.SectionData targetSection = findSectionAt(chunk, worldY);
+            if (targetSection != null) {
+                int localY = worldY - (targetSection.sectionY() * 16);
+                skyLight = ChunkSectionParser.getSkyLight(targetSection, lx, localY, lz);
+            } else {
+                skyLight = 0;
+            }
+        }
 
         boolean hasFluidOverlay = overlayList.stream()
             .anyMatch(o -> blockLookup.isWater(o.blockName));
 
         boolean hasSkyAccess = worldY >= heightMapValue;
 
+        // 跨section获取方块状态用于发光检测
+        ChunkSectionParser.SectionData stateSection = findSectionAt(chunk, worldY);
+        if (stateSection == null) stateSection = currentSection;
+        int stateLocalY = worldY - (stateSection.sectionY() * 16);
+        if (stateLocalY < 0 || stateLocalY > 15) stateLocalY = ly;
         boolean isGlowing = blockLookup.isGlowing(
-            ChunkSectionParser.getBlockStateAt(section, lx, ly, lz).name());
+            ChunkSectionParser.getBlockStateAt(stateSection, lx, stateLocalY, lz).name());
 
         return lightMode.calculateEffectiveLight(
             blockLight, skyLight, hasSkyAccess, hasFluidOverlay, isGlowing, worldHasSkylight);
