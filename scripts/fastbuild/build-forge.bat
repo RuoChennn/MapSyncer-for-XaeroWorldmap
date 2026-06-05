@@ -8,7 +8,7 @@ set SETTINGS_FORGE=scripts\fastbuild\settings-forge.gradle
 set GRADLE_89=gradle-8.9\bin\gradle.bat
 
 echo ============================================
-echo   MapSyncer Build: Forge (1.20.1 + 1.21.1)
+echo   MapSyncer Build: Forge (1.20.1 + 1.21.1 + 1.21.11)
 echo   (ForgeGradle 6.x + Gradle 8.9, JDK 17/21)
 echo ============================================
 
@@ -25,24 +25,24 @@ set PATH=%JAVA_HOME%\bin;%PATH%
 call %GRADLE_89% :mc-1.20.1:forge:build -x test --no-daemon
 set FORGE1201=%errorlevel%
 
-:: Build mc-1.21.1:forge (needs JDK 21)
-echo [3/4] Building mc-1.21.1:forge (JDK 21)...
+:: Build mc-1.21.1:forge + mc-1.21.11:forge (needs JDK 21)
+echo [3/5] Building mc-1.21.1:forge + mc-1.21.11:forge (JDK 21)...
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot
 set PATH=%JAVA_HOME%\bin;%PATH%
 call %GRADLE_89% --stop >nul 2>&1
-call %GRADLE_89% :mc-1.21.1:forge:build -x test --no-daemon
-set FORGE1211=%errorlevel%
+call %GRADLE_89% :mc-1.21.1:forge:build :mc-1.21.11:forge:build -x test --no-daemon
+set FORGE121X=%errorlevel%
 
 :: Restore settings
-echo [4/4] Restoring settings.gradle...
+echo [4/5] Restoring settings.gradle...
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
 
 if %FORGE1201% neq 0 echo   mc-1.20.1:forge FAILED
-if %FORGE1211% neq 0 echo   mc-1.21.1:forge FAILED
+if %FORGE121X% neq 0 echo   mc-1.21.x:forge FAILED
 
 if %FORGE1201% neq 0 goto :fail
-if %FORGE1211% neq 0 goto :fail
+if %FORGE121X% neq 0 goto :fail
 
 :: Collect JARs
 echo.
@@ -50,6 +50,7 @@ echo Collecting JARs to output...
 if not exist output mkdir output
 copy /y mc-1.20.1\forge\build\libs\*.jar output\ >nul 2>&1
 copy /y mc-1.21.1\forge\build\libs\*.jar output\ >nul 2>&1
+copy /y mc-1.21.11\forge\build\libs\*.jar output\ >nul 2>&1
 
 echo.
 echo ============================================
