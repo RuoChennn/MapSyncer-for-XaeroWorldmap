@@ -67,21 +67,7 @@ public class ModConfig {
      * @return 默认维度配置字符串列表
      */
     private static List<String> getDefaultDimensionConfigStrings() {
-        List<String> defaults = new ArrayList<>();
-
-        // 主世界：地表模式，有天空光照
-        // hasSkylight=true, hasCeiling=false, minY=-64, height=384
-        defaults.add("minecraft:overworld|SURFACE|63|true|false|-64|384|384");
-
-        // 地狱：洞穴模式，有顶棚，无天空光照
-        // hasSkylight=false, hasCeiling=true, minY=0, height=256
-        defaults.add("minecraft:the_nether|CAVE|63|false|true|0|256|256");
-
-        // 末地：地表模式，无天空光照，无顶棚
-        // hasSkylight=false, hasCeiling=false, minY=0, height=256
-        defaults.add("minecraft:the_end|SURFACE|63|false|false|0|256|256");
-
-        return defaults;
+                return DimensionConfigParser.getDefaultDimensionConfigStrings();
     }
 
     /**
@@ -363,14 +349,7 @@ public class ModConfig {
          * @return DimensionScanConfig 对象列表
          */
         public List<DimensionScanConfig> parseDimensionConfigs() {
-            List<DimensionScanConfig> result = new ArrayList<>();
-            for (String configStr : dimensionConfigs.get()) {
-                DimensionScanConfig config = parseConfigString(configStr);
-                if (config != null) {
-                    result.add(config);
-                }
-            }
-            return result;
+                    return DimensionConfigParser.parseDimensionConfigs(dimensionConfigs.get());
         }
 
         /**
@@ -384,51 +363,7 @@ public class ModConfig {
          * @return DimensionScanConfig 对象，如果无效则返回 null
          */
         private DimensionScanConfig parseConfigString(String configStr) {
-            if (configStr == null || configStr.isEmpty()) {
-                return null;
-            }
-
-            String[] parts = configStr.split("\\|");
-            if (parts.length < 1) {
-                return null;
-            }
-
-            String dimension = parts[0];
-            int caveStart = 63;
-            DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimension);
-
-            try {
-                // 检测格式：如果 parts[1] 是扫描模式，则为新格式；否则为旧格式（跳过 region_folder）
-                boolean isNewFormat = parts.length > 1 &&
-                    (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
-
-                int scanModeIndex = isNewFormat ? 1 : 2;
-                int caveStartIndex = isNewFormat ? 2 : 3;
-                int dimTypeStartIndex = isNewFormat ? 3 : 4;
-
-                String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
-
-                if (parts.length > caveStartIndex) {
-                    caveStart = Integer.parseInt(parts[caveStartIndex]);
-                }
-
-                // 解析维度类型信息
-                if (parts.length >= dimTypeStartIndex + 5) {
-                    boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex]);
-                    boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1]);
-                    int minY = Integer.parseInt(parts[dimTypeStartIndex + 2]);
-                    int height = Integer.parseInt(parts[dimTypeStartIndex + 3]);
-                    int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4]);
-                    dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
-                }
-
-                ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
-                return new DimensionScanConfig(dimension, mode, caveStart, dimTypeInfo);
-            } catch (NumberFormatException e) {
-                return new DimensionScanConfig(dimension, ScanMode.SURFACE, 63, dimTypeInfo);
-            } catch (IllegalArgumentException e) {
-                return new DimensionScanConfig(dimension, ScanMode.SURFACE, caveStart, dimTypeInfo);
-            }
+            return DimensionConfigParser.parseConfigString(configStr);
         }
 
         /**
@@ -445,60 +380,8 @@ public class ModConfig {
          * @return DimensionScanConfig 对象
          */
         public DimensionScanConfig getConfigForDimension(String dimensionPath) {
-            // 规范化维度路径（移除 minecraft: 前缀）
-            String normalizedPath = dimensionPath.replace("minecraft:", "").toLowerCase();
-
-            // 原版维度的内置默认配置（使用标准名称）
-            if (normalizedPath.equals("the_nether")) {
-                // 检查用户是否自定义了地狱配置
-                for (DimensionScanConfig config : parseDimensionConfigs()) {
-                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
-                    if (configDim.equals("the_nether")) {
-                        return config;
-                    }
-                }
-                // 返回内置默认配置（地狱：洞穴模式，有顶棚）
-                return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, 63,
-                    DimensionTypeInfo.nether());
-            }
-
-            // 主世界：地表模式，有天空光照
-            if (normalizedPath.equals("overworld")) {
-                for (DimensionScanConfig config : parseDimensionConfigs()) {
-                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
-                    if (configDim.equals("overworld")) {
-                        return config;
-                    }
-                }
-                return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, 63,
-                    DimensionTypeInfo.overworld());
-            }
-
-            // 末地：地表模式，无天空光照，无顶棚
-            if (normalizedPath.equals("the_end")) {
-                for (DimensionScanConfig config : parseDimensionConfigs()) {
-                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
-                    if (configDim.equals("the_end")) {
-                        return config;
-                    }
-                }
-                return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, 63,
-                    DimensionTypeInfo.theEnd());
-            }
-
-            // 尝试匹配配置列表中的维度
-            for (DimensionScanConfig config : parseDimensionConfigs()) {
-                String configDim = config.dimension();
-                // 支持多种格式匹配：完整命名空间、简写、路径
-                if (configDim.equalsIgnoreCase(dimensionPath) ||
-                    configDim.equalsIgnoreCase("minecraft:" + dimensionPath) ||
-                    configDim.replace("minecraft:", "").equalsIgnoreCase(dimensionPath)) {
-                    return config;
-                }
-            }
-            // 未匹配则返回默认配置（维度类型信息自动推断）
-            DimensionTypeInfo inferredDimType = DimensionTypeInfo.fromDimensionId(dimensionPath);
-            return new DimensionScanConfig(dimensionPath, defaultScanMode.get(), defaultCaveStart.get(), inferredDimType);
+            return DimensionConfigParser.getConfigForDimension(
+                dimensionPath, dimensionConfigs.get(), defaultScanMode.get(), defaultCaveStart.get());
         }
     }
 }

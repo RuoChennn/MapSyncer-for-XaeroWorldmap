@@ -1,6 +1,6 @@
 package com.mapsyncer.client;
 
-import com.mapsyncer.client.ClientTimestampCache.CacheEntry;
+import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import com.mapsyncer.platform.PlatformManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -140,7 +140,7 @@ public class AutoSyncManager {
             if (cache == null) return 0;
 
             return cache.getAll().values().stream()
-                .mapToLong(CacheEntry::timestampSeconds)
+                .mapToLong(TimestampHashEntry::timestampSeconds)
                 .max().orElse(0);
         } catch (Exception e) {
             LOGGER.debug("Failed to get client last sync timestamp: {}", e.getMessage());

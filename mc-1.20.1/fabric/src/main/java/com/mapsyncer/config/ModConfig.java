@@ -223,7 +223,6 @@ public class ModConfig {
             int maxThreads = Runtime.getRuntime().availableProcessors();
             hashThreads = Math.max(1, Math.min(maxThreads, value));
         }
-
     }
 
     /**
@@ -275,11 +274,7 @@ public class ModConfig {
          * 获取原版维度的默认配置
          */
         private List<String> getDefaultDimensionConfigStrings() {
-            List<String> defaults = new ArrayList<>();
-            defaults.add("minecraft:overworld|SURFACE|63|true|false|-64|384|384");
-            defaults.add("minecraft:the_nether|CAVE|63|false|true|0|256|256");
-            defaults.add("minecraft:the_end|SURFACE|63|false|false|0|256|256");
-            return defaults;
+            return DimensionConfigParser.getDefaultDimensionConfigStrings();
         }
 
         /**
@@ -459,118 +454,22 @@ public class ModConfig {
          * 解析维度配置列表
          */
         public List<DimensionScanConfig> parseDimensionConfigs() {
-            List<DimensionScanConfig> result = new ArrayList<>();
-            for (String configStr : dimensionConfigs) {
-                DimensionScanConfig config = parseConfigString(configStr);
-                if (config != null) {
-                    result.add(config);
-                }
-            }
-            return result;
+            return DimensionConfigParser.parseDimensionConfigs(dimensionConfigs);
         }
 
         /**
          * 解析单个配置字符串
          */
         private DimensionScanConfig parseConfigString(String configStr) {
-            if (configStr == null || configStr.isEmpty()) {
-                return null;
-            }
-
-            String[] parts = configStr.split("\\|");
-            if (parts.length < 1) {
-                return null;
-            }
-
-            String dimension = parts[0];
-            int caveStart = 63;
-            DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimension);
-
-            try {
-                boolean isNewFormat = parts.length > 1 &&
-                    (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
-
-                int scanModeIndex = isNewFormat ? 1 : 2;
-                int caveStartIndex = isNewFormat ? 2 : 3;
-                int dimTypeStartIndex = isNewFormat ? 3 : 4;
-
-                String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
-
-                if (parts.length > caveStartIndex) {
-                    caveStart = Integer.parseInt(parts[caveStartIndex]);
-                }
-
-                if (parts.length >= dimTypeStartIndex + 5) {
-                    boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex]);
-                    boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1]);
-                    int minY = Integer.parseInt(parts[dimTypeStartIndex + 2]);
-                    int height = Integer.parseInt(parts[dimTypeStartIndex + 3]);
-                    int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4]);
-                    dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
-                }
-
-                ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
-                return new DimensionScanConfig(dimension, mode, caveStart, dimTypeInfo);
-            } catch (NumberFormatException e) {
-                return new DimensionScanConfig(dimension, ScanMode.SURFACE, 63, dimTypeInfo);
-            } catch (IllegalArgumentException e) {
-                return new DimensionScanConfig(dimension, ScanMode.SURFACE, caveStart, dimTypeInfo);
-            }
+            return DimensionConfigParser.parseConfigString(configStr);
         }
 
         /**
          * 获取特定维度的扫描配置
          */
         public DimensionScanConfig getConfigForDimension(String dimensionPath) {
-            String normalizedPath = dimensionPath.replace("minecraft:", "").toLowerCase();
-
-            // 原版维度的内置默认配置
-            if (normalizedPath.equals("the_nether")) {
-                for (DimensionScanConfig config : parseDimensionConfigs()) {
-                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
-                    if (configDim.equals("the_nether")) {
-                        return config;
-                    }
-                }
-                return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, 63,
-                    DimensionTypeInfo.nether());
-            }
-
-            if (normalizedPath.equals("overworld")) {
-                for (DimensionScanConfig config : parseDimensionConfigs()) {
-                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
-                    if (configDim.equals("overworld")) {
-                        return config;
-                    }
-                }
-                return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, 63,
-                    DimensionTypeInfo.overworld());
-            }
-
-            if (normalizedPath.equals("the_end")) {
-                for (DimensionScanConfig config : parseDimensionConfigs()) {
-                    String configDim = config.dimension().replace("minecraft:", "").toLowerCase();
-                    if (configDim.equals("the_end")) {
-                        return config;
-                    }
-                }
-                return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, 63,
-                    DimensionTypeInfo.theEnd());
-            }
-
-            // 尝试匹配配置列表中的维度
-            for (DimensionScanConfig config : parseDimensionConfigs()) {
-                String configDim = config.dimension();
-                if (configDim.equalsIgnoreCase(dimensionPath) ||
-                    configDim.equalsIgnoreCase("minecraft:" + dimensionPath) ||
-                    configDim.replace("minecraft:", "").equalsIgnoreCase(dimensionPath)) {
-                    return config;
-                }
-            }
-
-            // 未匹配则返回默认配置
-            DimensionTypeInfo inferredDimType = DimensionTypeInfo.fromDimensionId(dimensionPath);
-            return new DimensionScanConfig(dimensionPath, defaultScanMode, defaultCaveStart, inferredDimType);
+            return DimensionConfigParser.getConfigForDimension(
+                dimensionPath, dimensionConfigs, defaultScanMode, defaultCaveStart);
         }
     }
 }

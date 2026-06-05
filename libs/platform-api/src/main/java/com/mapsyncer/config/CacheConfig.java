@@ -13,7 +13,7 @@ package com.mapsyncer.config;
  *
  * <p>内存占用估算：</p>
  * <ul>
- *   <li>RegionMeta: 约 50 bytes/条目（路径字符串 + timestamp + hash）</li>
+ *   <li>TimestampHashEntry: 约 50 bytes/条目（路径字符串 + timestamp + hash）</li>
  *   <li>BlockProperties: 约 30 bytes/条目（多个布尔值 + 整数）</li>
  *   <li>颜色值: 约 20 bytes/条目（字符串 + RGB整数）</li>
  * </ul>
@@ -25,7 +25,7 @@ public final class CacheConfig {
     /**
      * Region 元数据缓存上限
      *
-     * <p>存储内容：relativePath -> RegionMeta(timestamp, CRC32 hash)</p>
+     * <p>存储内容：relativePath -> TimestampHashEntry(timestamp, CRC32 hash)</p>
      * <p>用途：GenerationCache 用于同步时比对判断是否需要重传</p>
      *
      * <p>上限选择依据：</p>

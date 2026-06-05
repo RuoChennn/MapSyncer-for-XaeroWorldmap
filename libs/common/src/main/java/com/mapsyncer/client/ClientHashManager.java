@@ -4,6 +4,7 @@ import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
+import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,7 +152,7 @@ public class ClientHashManager {
 
         // Load cached timestamps from previous sync
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
-        Map<String, ClientTimestampCache.CacheEntry> cachedTimestamps = tsCache.getAll();
+        Map<String, ClientTimestampCache.TimestampHashEntry> cachedTimestamps = tsCache.getAll();
         LOGGER.info("Loaded {} cached timestamps from previous sync", cachedTimestamps.size());
 
         // Collect all zip files from the specified directory (not entire server)
@@ -179,7 +180,7 @@ public class ClientHashManager {
                                     String relativePath = buildRelativePath(zipPath, serverDir);
                                     String hash = computeFileHash(zipPath);
 
-                                    ClientTimestampCache.CacheEntry cached = cachedTimestamps.get(relativePath);
+                                    ClientTimestampCache.TimestampHashEntry cached = cachedTimestamps.get(relativePath);
                                     long timestampSeconds;
                                     if (cached != null) {
                                         timestampSeconds = cached.timestampSeconds();

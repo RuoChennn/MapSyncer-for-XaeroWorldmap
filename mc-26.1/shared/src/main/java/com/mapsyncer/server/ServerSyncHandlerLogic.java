@@ -8,7 +8,7 @@ import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import com.mapsyncer.platform.PlatformManager;
-import com.mapsyncer.server.GenerationCache.RegionMeta;
+import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
@@ -540,7 +540,7 @@ public class ServerSyncHandlerLogic {
 
         // Get server generation cache (timestamp + hash)
         GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR);
-        Map<String, RegionMeta> serverCache = genCache.getAll();
+        Map<String, TimestampHashEntry> serverCache = genCache.getAll();
 
         Path cacheDir = ConversionOrchestrator.CACHE_DIR;
 
@@ -650,7 +650,7 @@ public class ServerSyncHandlerLogic {
                             return;
                         }
 
-                        RegionMeta serverMeta = serverCache.get(normalizedPath);
+                        TimestampHashEntry serverMeta = serverCache.get(normalizedPath);
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
 
                         // 判断是否需要同步
@@ -691,7 +691,7 @@ public class ServerSyncHandlerLogic {
                     });
 
         // Count hash matches and timestamp skips
-        for (Map.Entry<String, RegionMeta> entry : serverCache.entrySet()) {
+        for (Map.Entry<String, TimestampHashEntry> entry : serverCache.entrySet()) {
             ClientMeta cm = clientMeta.get(entry.getKey());
             if (cm != null && entry.getValue().hash().equals(cm.hash())) {
                 hashMatchCount++;
