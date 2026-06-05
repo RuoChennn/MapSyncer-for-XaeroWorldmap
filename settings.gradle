@@ -33,7 +33,7 @@ include 'libs:common'           // 全版本共享的代码（source-only，不�
 // MC 1.20.1
 include 'mc-1.20.1:shared'
 include 'mc-1.20.1:fabric'
-// include 'mc-1.20.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
+include 'mc-1.20.1:forge'
 
 // MC 1.20.4 (目录暂未创建)
 // include 'mc-1.20.4:shared'
@@ -44,7 +44,7 @@ include 'mc-1.20.1:fabric'
 // MC 1.21.1
 include 'mc-1.21.1:shared'
 include 'mc-1.21.1:fabric'
-// include 'mc-1.21.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
+include 'mc-1.21.1:forge'
 include 'mc-1.21.1:neoforge'
 
 // MC 1.21.11 (目录暂未创建)
