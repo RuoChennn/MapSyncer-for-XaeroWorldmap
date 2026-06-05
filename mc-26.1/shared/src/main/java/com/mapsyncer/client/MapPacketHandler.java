@@ -145,11 +145,11 @@ public class MapPacketHandler {
                 Object[] statusKey = AutoSyncManager.getStatusKey(payload.autoSyncIntervalMinutes());
                 String key = (String) statusKey[0];
                 if (statusKey.length > 1) {
-                    Minecraft.getInstance().player.displayClientMessage(
-                        ChatUtils.prefix().append(ChatUtils.desc(key, statusKey[1])), false);
+                    Minecraft.getInstance().player.sendSystemMessage(
+                        ChatUtils.prefix().append(ChatUtils.desc(key, statusKey[1])));
                 } else {
-                    Minecraft.getInstance().player.displayClientMessage(
-                        ChatUtils.prefix().append(ChatUtils.desc(key)), false);
+                    Minecraft.getInstance().player.sendSystemMessage(
+                        ChatUtils.prefix().append(ChatUtils.desc(key)));
                 }
 
                 if (AutoSyncManager.shouldAutoSync(
@@ -158,8 +158,8 @@ public class MapPacketHandler {
                         Minecraft.getInstance().execute(() -> {
                             if (Minecraft.getInstance().player != null
                                     && !MapPacketHandler.isSyncInProgress()) {
-                                Minecraft.getInstance().player.displayClientMessage(
-                                    ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
+                                Minecraft.getInstance().player.sendSystemMessage(
+                                    ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")));
                                 AutoSyncManager.markStarted();
                                 MapSyncerCommandLogic.executeSyncAll();
                             }
@@ -332,9 +332,8 @@ public class MapPacketHandler {
                     if (AutoSyncManager.isActive()) {
                         AutoSyncManager.markComplete();
                         if (Minecraft.getInstance().player != null) {
-                            Minecraft.getInstance().player.displayClientMessage(
-                                ChatUtils.prefix().append(ChatUtils.success("mapsyncer.autosync.complete")),
-                                false);
+                            Minecraft.getInstance().player.sendSystemMessage(
+                                ChatUtils.prefix().append(ChatUtils.success("mapsyncer.autosync.complete")));
                         }
                     }
 

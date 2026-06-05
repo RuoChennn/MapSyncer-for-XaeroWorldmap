@@ -34,7 +34,7 @@ public final class DimensionConfigParser {
      * 解析维度配置列表，带单键缓存。
      * 配置在服务端运行期间通常不变，缓存命中时 O(1) 返回。
      */
-    public static List<DimensionScanConfig> parseDimensionConfigs(List<String> dimensionConfigs) {
+    public static List<DimensionScanConfig> parseDimensionConfigs(List<? extends String> dimensionConfigs) {
         String key = String.join("\0", dimensionConfigs);
         if (key.equals(cachedKey)) {
             List<DimensionScanConfig> r = cachedResult;
@@ -105,7 +105,7 @@ public final class DimensionConfigParser {
      * @param defaultCave 默认洞穴起始高度（未匹配时使用）
      */
     public static DimensionScanConfig getConfigForDimension(String dimensionPath,
-            List<String> dimensionConfigs, ScanMode defaultMode, int defaultCave) {
+            List<? extends String> dimensionConfigs, ScanMode defaultMode, int defaultCave) {
         List<DimensionScanConfig> parsed = parseDimensionConfigs(dimensionConfigs);
 
         String normalizedPath = dimensionPath.replace("minecraft:", "").toLowerCase();

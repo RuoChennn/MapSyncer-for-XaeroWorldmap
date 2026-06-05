@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     id 'net.neoforged.moddev' version '2.0.141'
     id 'com.gradleup.shadow' version '8.3.5'
 }
@@ -23,7 +23,7 @@ repositories {
 
 neoForge {
     // NeoForge 21.1.x for Minecraft 1.21.11
-    version = "21.1.196"
+    version = "21.1.77"
 
     runs {
         client {

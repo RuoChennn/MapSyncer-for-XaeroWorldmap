@@ -152,7 +152,7 @@ public class ClientHashManager {
 
         // Load cached timestamps from previous sync
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
-        Map<String, ClientTimestampCache.TimestampHashEntry> cachedTimestamps = tsCache.getAll();
+        Map<String, TimestampHashEntry> cachedTimestamps = tsCache.getAll();
         LOGGER.info("Loaded {} cached timestamps from previous sync", cachedTimestamps.size());
 
         // Collect all zip files from the specified directory (not entire server)
@@ -180,7 +180,7 @@ public class ClientHashManager {
                                     String relativePath = buildRelativePath(zipPath, serverDir);
                                     String hash = computeFileHash(zipPath);
 
-                                    ClientTimestampCache.TimestampHashEntry cached = cachedTimestamps.get(relativePath);
+                                    TimestampHashEntry cached = cachedTimestamps.get(relativePath);
                                     long timestampSeconds;
                                     if (cached != null) {
                                         timestampSeconds = cached.timestampSeconds();
