@@ -239,6 +239,18 @@ public class GenerationCache {
     }
 
     /**
+     * 获取最后一次地图生成的时间戳。
+     * 遍历所有缓存的 region 取最大 timestamp。
+     *
+     * @return 最后生成时间戳（秒），无缓存时返回 0
+     */
+    public long getLastGenerationTime() {
+        return cache.values().stream()
+            .mapToLong(RegionMeta::timestampSeconds)
+            .max().orElse(0);
+    }
+
+    /**
      * 清除缓存
      */
     public void clear() {

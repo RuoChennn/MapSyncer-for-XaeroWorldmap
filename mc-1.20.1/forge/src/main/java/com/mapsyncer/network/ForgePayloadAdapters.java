@@ -131,10 +131,12 @@ public class ForgePayloadAdapters {
 
         public static void encode(ForgeServerInstalledMessage msg, FriendlyByteBuf buf) {
             buf.writeUtf(msg.data.version());
+            buf.writeLong(msg.data.lastGenerationTimestamp());
+            buf.writeInt(msg.data.autoSyncIntervalMinutes());
         }
 
         public static ForgeServerInstalledMessage decode(FriendlyByteBuf buf) {
-            return new ForgeServerInstalledMessage(new ServerInstalledPayload(buf.readUtf()));
+            return new ForgeServerInstalledMessage(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
         }
     }
 

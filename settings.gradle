@@ -47,11 +47,11 @@ include 'mc-1.21.1:fabric'
 include 'mc-1.21.1:forge'
 include 'mc-1.21.1:neoforge'
 
-// MC 1.21.11 (目录暂未创建)
-// include 'mc-1.21.11:shared'
-// include 'mc-1.21.11:neoforge'
-// include 'mc-1.21.11:forge'
-// include 'mc-1.21.11:fabric'
+// MC 1.21.11
+include 'mc-1.21.11:shared'
+include 'mc-1.21.11:neoforge'
+include 'mc-1.21.11:forge'
+include 'mc-1.21.11:fabric'
 
 // MC 26.1
 include 'mc-26.1:shared'

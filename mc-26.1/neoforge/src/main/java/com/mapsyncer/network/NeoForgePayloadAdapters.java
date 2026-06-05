@@ -139,10 +139,12 @@ public class NeoForgePayloadAdapters {
 
         public static void encode(RegistryFriendlyByteBuf buf, NeoForgeServerInstalledPayload payload) {
             buf.writeUtf(payload.data.version());
+            buf.writeLong(payload.data.lastGenerationTimestamp());
+            buf.writeInt(payload.data.autoSyncIntervalMinutes());
         }
 
         public static NeoForgeServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
-            return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf()));
+            return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
         }
     }
 

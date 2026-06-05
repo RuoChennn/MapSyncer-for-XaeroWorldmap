@@ -112,6 +112,7 @@ public class MapPacketHandler {
      * 清理所有同步状态、反射缓存、哈希计算线程池和时间戳缓存。
      */
     public static void onDisconnect() {
+        AutoSyncManager.cancel();
         resetServerStatus();
         clearSyncData();
         XaeroReflectionHelper.clearCache();
@@ -140,6 +141,21 @@ public class MapPacketHandler {
                 serverInstalled = true;
                 serverVersion = payload.version();
                 LOGGER.info("Server has MapSyncer installed, version: {}", serverVersion);
+
+                if (AutoSyncManager.shouldAutoSync(
+                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes())) {
+                    AutoSyncManager.schedule(() -> {
+                        Minecraft.getInstance().execute(() -> {
+                            if (Minecraft.getInstance().player != null
+                                    && !MapPacketHandler.isSyncInProgress()) {
+                                Minecraft.getInstance().player.displayClientMessage(
+                                    ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
+                                AutoSyncManager.markStarted();
+                                MapSyncerCommandLogic.executeSyncAll();
+                            }
+                        });
+                    }, 5);
+                }
             });
         });
 
@@ -303,6 +319,15 @@ public class MapPacketHandler {
                     XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.completeWithCount(totalReceived);
 
+                    if (AutoSyncManager.isActive()) {
+                        AutoSyncManager.markComplete();
+                        if (Minecraft.getInstance().player != null) {
+                            Minecraft.getInstance().player.displayClientMessage(
+                                ChatUtils.prefix().append(ChatUtils.success("mapsyncer.autosync.complete")),
+                                false);
+                        }
+                    }
+
                     resumeChunkUpdates();
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
@@ -326,6 +351,9 @@ public class MapPacketHandler {
      */
     private static void handleProgressUpdate(SyncProgressPayload payload, PayloadContext context) {
         context.enqueueWork(() -> {
+            // 自动同步时静默，不显示进度
+            if (AutoSyncManager.isActive()) return;
+
             // 进度去重：相同 (processed, total) 在 100ms 内到达视为重复
             int processed = payload.processed();
             int total = payload.total();

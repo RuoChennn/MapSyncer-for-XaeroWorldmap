@@ -96,10 +96,12 @@ public class FabricPayloadAdapters {
 
     public static void writeServerInstalled(FriendlyByteBuf buf, ServerInstalledPayload payload) {
         buf.writeUtf(payload.version());
+        buf.writeLong(payload.lastGenerationTimestamp());
+        buf.writeInt(payload.autoSyncIntervalMinutes());
     }
 
     public static ServerInstalledPayload readServerInstalled(FriendlyByteBuf buf) {
-        return new ServerInstalledPayload(buf.readUtf());
+        return new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt());
     }
 
     // ===== ChunkMapData 序列化 =====

@@ -43,7 +43,12 @@ public class PlayerJoinHandlerLogic {
         if (server == null) return;
 
         // 鍙戦€佹湇鍔＄宸插畨瑁呴€氱煡缁欏鎴风锛堣法鍔犺浇鍣ㄥ吋瀹癸細鏃犺瀹㈡埛绔娇鐢ㄤ粈涔堝姞杞藉櫒閮借兘鎺ユ敹锛?
-        NetworkManager.sendToPlayer(player, new ServerInstalledPayload(getModVersion()));
+                long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR).getLastGenerationTime();
+        int autoInterval = AutoSyncConfig.computeInterval(
+            PlatformManager.getPlatform().getIncrementalUpdateMode(),
+            PlatformManager.getPlatform().getIncrementalUpdateIntervalTicks());
+        NetworkManager.sendToPlayer(player,
+            new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval));
 
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {

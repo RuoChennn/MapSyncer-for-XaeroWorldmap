@@ -1,0 +1,86 @@
+﻿plugins {
+    id 'fabric-loom-remap' version '1.9.2'
+}
+
+version = mod_version + '-fabric-1.21.11'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Fabric 1.21.11 需要 Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    // Cloth Config
+    maven { url = 'https://maven.shedaniel.me/' }
+    // Mod Menu (optional)
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+// 引用版本特定的共享源码（不独立编译，由本模块提供 MC 依赖）
+sourceSets.main.java.srcDirs(
+    '../shared/src/main/java',
+    "${rootProject.projectDir}/libs/common/src/main/java",
+    'src/main/java',
+)
+sourceSets.main.resources.srcDirs(
+    '../shared/src/main/resources',
+    "${rootProject.projectDir}/libs/common/src/main/resources",
+    'src/main/resources',
+)
+
+dependencies {
+    // Minecraft and Fabric 1.21.11
+    minecraft "com.mojang:minecraft:1.21.11"
+    // 使用官方 mappings (Mojmap) — 1.21.11 是最后的混淆版本，必须使用 loom-remap
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:0.18.1"
+
+    // Fabric API for 1.21.11 (includes networking-api-v1 transitively)
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.141.4+1.21.11"
+
+    // Cloth Config (for configuration)
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:15.0.127"
+
+    // 依赖核心模块
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+    // include 会将依赖打包到 JAR 中
+    include project(':libs:core')
+    include project(':libs:platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", "1.21.11"
+    inputs.property "loader_version", "0.18.1"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": "1.21.11",
+                "loader_version": "0.18.1"
+    }
+}
+
+publishing {
+    publications {
+        register('fabric12111MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

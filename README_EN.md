@@ -14,6 +14,7 @@ A multi-platform Minecraft mod that syncs server-side explored areas to clients'
 |------------|:-----:|:--------:|:------:|
 | 1.20.1 | ✅ | — | ✅ |
 | 1.21.1 | ✅ | ✅ | ✅ |
+| 1.21.11 | ✅ | ✅ | ✅ |
 | 26.1 | — | ✅ | ✅ |
 
 ### Client Dependencies
@@ -44,6 +45,7 @@ This mod is designed for client-server network communication and does not suppor
 | **Incremental Update** | Server-side periodic/scheduled map cache regeneration |
 | **Cave Mode** | Scans downward from a configurable height, outputs to caves subdirectory |
 | **Multi-Threaded Hash** | Configurable parallel CRC32 computation on the client |
+| **Auto Sync** | Automatically checks for newer server maps on join, no manual command needed |
 
 ---
 
