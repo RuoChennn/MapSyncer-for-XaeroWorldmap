@@ -33,6 +33,18 @@ public class AutoSyncManager {
     private static volatile boolean active = false;
 
     /**
+     * 根据 autoSyncIntervalMinutes 获取状态消息翻译键和参数。
+     * 0=禁用, <1440=每X分钟, ≥1440=每天。
+     *
+     * @return Object[]{translationKey, arg} 或 Object[]{translationKey}
+     */
+    public static Object[] getStatusKey(int intervalMinutes) {
+        if (intervalMinutes <= 0) return new Object[]{"mapsyncer.autosync.status.disabled"};
+        if (intervalMinutes < 1440) return new Object[]{"mapsyncer.autosync.status.minutes", intervalMinutes};
+        return new Object[]{"mapsyncer.autosync.status.daily"};
+    }
+
+    /**
      * 评估是否应该触发自动同步。
      *
      * @param serverGenTime   服务端最后地图生成时间戳（秒）

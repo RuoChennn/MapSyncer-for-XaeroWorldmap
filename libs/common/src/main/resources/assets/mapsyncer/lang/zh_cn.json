@@ -83,6 +83,9 @@
 
   "mapsyncer.autosync.start": "正在自动同步地图...",
   "mapsyncer.autosync.complete": "地图自动同步完成",
+  "mapsyncer.autosync.status.disabled": "自动同步：已关闭",
+  "mapsyncer.autosync.status.minutes": "自动同步：每 %d 分钟",
+  "mapsyncer.autosync.status.daily": "自动同步：每天",
 
   "option.mapsyncer.hash_threads.tooltip": "控制计算区域文件哈希时的并行线程数。较高值可能加快同步速度，但会增加 CPU 使用率。",
   "option.mapsyncer.debug.tooltip": "启用后会在日志中输出详细的地图生成调试信息。",

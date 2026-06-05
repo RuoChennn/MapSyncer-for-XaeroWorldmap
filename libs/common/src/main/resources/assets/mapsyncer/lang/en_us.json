@@ -83,6 +83,9 @@
 
   "mapsyncer.autosync.start": "Auto-syncing maps...",
   "mapsyncer.autosync.complete": "Auto-sync complete",
+  "mapsyncer.autosync.status.disabled": "Auto-sync: Disabled",
+  "mapsyncer.autosync.status.minutes": "Auto-sync: Every %d min",
+  "mapsyncer.autosync.status.daily": "Auto-sync: Daily",
 
   "option.mapsyncer.hash_threads.tooltip": "Number of parallel threads used when computing region file hashes. Higher values may speed up sync but increase CPU usage.",
   "option.mapsyncer.debug.tooltip": "When enabled, detailed map generation debug information will be output to the log.",

@@ -142,6 +142,17 @@ public class MapPacketHandler {
                 serverVersion = payload.version();
                 LOGGER.info("Server has MapSyncer installed, version: {}", serverVersion);
 
+                // 显示自动同步状态
+                Object[] statusKey = AutoSyncManager.getStatusKey(payload.autoSyncIntervalMinutes());
+                String key = (String) statusKey[0];
+                if (statusKey.length > 1) {
+                    Minecraft.getInstance().player.displayClientMessage(
+                        ChatUtils.prefix().append(ChatUtils.desc(key, statusKey[1])), false);
+                } else {
+                    Minecraft.getInstance().player.displayClientMessage(
+                        ChatUtils.prefix().append(ChatUtils.desc(key)), false);
+                }
+
                 if (AutoSyncManager.shouldAutoSync(
                         payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes())) {
                     AutoSyncManager.schedule(() -> {
