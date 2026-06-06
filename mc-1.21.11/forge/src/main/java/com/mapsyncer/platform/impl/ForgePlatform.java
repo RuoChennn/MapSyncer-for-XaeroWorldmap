@@ -12,7 +12,7 @@ import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
@@ -77,7 +77,7 @@ public class ForgePlatform implements Platform {
         }
 
         try {
-            ResourceLocation loc = ResourceLocation.parse(blockName);
+            Identifier loc = Identifier.parse(blockName);
             // Forge 1.21: BuiltInRegistries 鍙敤
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 

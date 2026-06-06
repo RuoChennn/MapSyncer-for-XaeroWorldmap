@@ -4,9 +4,9 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.DimensionArgument;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 
@@ -19,9 +19,9 @@ public class MapSyncerCommand {
 
         dispatcher.register(
                 net.minecraft.commands.Commands.literal("mapsyncer")
-                        .executes(ctx -> { MapSyncerCommandLogic.showHelp(ctx.getSource().hasPermission(4)); return Command.SINGLE_SUCCESS; })
+                        .executes(ctx -> { MapSyncerCommandLogic.showHelp(true); return Command.SINGLE_SUCCESS; })
                         .then(net.minecraft.commands.Commands.literal("help")
-                                .executes(ctx -> { MapSyncerCommandLogic.showHelp(ctx.getSource().hasPermission(4)); return Command.SINGLE_SUCCESS; }))
+                                .executes(ctx -> { MapSyncerCommandLogic.showHelp(true); return Command.SINGLE_SUCCESS; }))
                         .then(net.minecraft.commands.Commands.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
                                 .then(net.minecraft.commands.Commands.literal("all")
@@ -29,7 +29,7 @@ public class MapSyncerCommand {
                                 .then(net.minecraft.commands.Commands.argument("dimension", DimensionArgument.dimension())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> {
-                                            ResourceLocation loc = ctx.getArgument("dimension", ResourceLocation.class);
+                                            Identifier loc = ctx.getArgument("dimension", Identifier.class);
                                             return MapSyncerCommandLogic.executeSyncDimension(loc.toString());
                                         })))
                         .then(net.minecraft.commands.Commands.literal("clearstate")

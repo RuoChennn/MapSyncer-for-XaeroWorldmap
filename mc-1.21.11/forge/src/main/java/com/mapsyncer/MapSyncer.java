@@ -19,8 +19,8 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.eventbus.api.bus.EventBus;
+import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
 import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
@@ -44,7 +44,7 @@ public class MapSyncer {
     public static String VERSION = "unknown";
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
 
-    public MapSyncer(IEventBus modBus, ModContainer modContainer) {
+    public MapSyncer(EventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
         // 初始化 Platform（Forge 1.21.1 实现）
@@ -100,7 +100,6 @@ public class MapSyncer {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        MinecraftForge.EVENT_BUS.unregister(this);
         IncrementalUpdateHandlerLogic.getInstance().stop();
     }
 

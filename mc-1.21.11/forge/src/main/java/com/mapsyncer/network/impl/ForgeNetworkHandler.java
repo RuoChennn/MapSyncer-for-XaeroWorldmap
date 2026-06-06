@@ -13,7 +13,7 @@ import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraftforge.network.ChannelBuilder;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.PacketDistributor;
@@ -32,7 +32,7 @@ import java.util.function.BiConsumer;
 public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
     private static final SimpleChannel CHANNEL = ChannelBuilder
-        .named(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "main"))
+        .named(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, "main"))
         .networkProtocolVersion(1)
         .simpleChannel();
 
