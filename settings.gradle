@@ -51,7 +51,7 @@ include 'mc-1.21.1:neoforge'
 include 'mc-1.21.11:shared'
 include 'mc-1.21.11:neoforge'
 // include 'mc-1.21.11:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
-// include 'mc-1.21.11:fabric'  // Loom 版本待调整 (Javadoc namespace error)
+// include 'mc-1.21.11:fabric'  // MC 1.21.11 API 与 1.21.1 不兼容 (ResourceLocation→Identifier 等)，需独立 shared 源码
 
 // MC 26.1
 include 'mc-26.1:shared'
