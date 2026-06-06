@@ -28,7 +28,7 @@ public class MapSyncerCommand {
                                 .then(ClientCommandManager.argument("dimension", DimensionArgument.dimension())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> {
-                                            ResourceLocation loc = ctx.getArgument("dimension", ResourceLocation.class);
+                                            Identifier loc = ctx.getArgument("dimension", Identifier.class);
                                             return MapSyncerCommandLogic.executeSyncDimension(loc.toString());
                                         })))
                         .then(ClientCommandManager.literal("clearstate")

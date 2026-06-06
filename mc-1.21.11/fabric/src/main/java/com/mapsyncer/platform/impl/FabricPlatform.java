@@ -80,7 +80,7 @@ public class FabricPlatform implements Platform {
         }
 
         try {
-            ResourceLocation loc = ResourceLocation.parse(blockName);
+            Identifier loc = Identifier.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {

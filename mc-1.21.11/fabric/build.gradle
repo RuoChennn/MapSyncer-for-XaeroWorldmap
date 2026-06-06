@@ -37,7 +37,6 @@ sourceSets.main.resources.srcDirs(
 dependencies {
     // Minecraft and Fabric 1.21.11
     minecraft "com.mojang:minecraft:1.21.11"
-    // 使用官方 mappings (Mojmap) — 1.21.11 是最后的混淆版本，必须使用 loom-remap
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:0.18.1"
 
