@@ -32,9 +32,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer模组的主类 - Forge 1.21.1 版本
+ * MapSyncer模组的主类 - FML 3.0 / eventbus 7.0 版本
  *
- * Forge 1.21.1 使用 ChannelBuilder API 进行网络注册，
+ * FML 3.0 / eventbus 7.0 使用 ChannelBuilder API 进行网络注册，
  * 网络层在 ForgeNetworkHandler 的静态初始化中完成注册。
  */
 @Mod(MapSyncer.MOD_ID)
@@ -47,7 +47,7 @@ public class MapSyncer {
     public MapSyncer(EventBus modBus, ModContainer modContainer) {
         VERSION = modContainer.getModInfo().getVersion().toString();
 
-        // 初始化 Platform（Forge 1.21.1 实现）
+        // 初始化 Platform（FML 3.0 / eventbus 7.0 实现）
         PlatformManager.initialize(new ForgePlatform());
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
@@ -55,27 +55,27 @@ public class MapSyncer {
         DimensionPathMapping.getInstance().initialize(21);
         LOGGER.info("DimensionPathMapping initialized for version 1.21.X");
 
-        // 注册配置文件（Forge 1.21.1 使用 ModLoadingContext）
+        // 注册配置（FML 3.0 eventbus 7.0: 保留 ModLoadingContext 兼容层）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         // 创建网络处理器实例
         ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();
         NetworkManager.initialize(networkHandler);
-        LOGGER.info("NetworkManager initialized for Forge 1.21.1");
+        LOGGER.info("NetworkManager initialized for FML 3.0 / eventbus 7.0");
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // 客户端：注册网络处理器和包接收器
             networkHandler.registerHandlers(null);
             MapPacketReceiver.register(null);
             MinecraftForge.EVENT_BUS.register(ClientEventHandler.class);
-            LOGGER.info("MapSyncer initialized (client mode, Forge 1.21.1)");
+            LOGGER.info("MapSyncer initialized (client mode, FML 3.0 / eventbus 7.0)");
         } else {
             // 服务端：注册网络处理器
             networkHandler.registerHandlers(null);
             ServerSyncHandlerLogic.registerHandlers();
             MinecraftForge.EVENT_BUS.register(this);
-            LOGGER.info("MapSyncer initialized (server mode, Forge 1.21.1)");
+            LOGGER.info("MapSyncer initialized (server mode, FML 3.0 / eventbus 7.0)");
         }
     }
 
