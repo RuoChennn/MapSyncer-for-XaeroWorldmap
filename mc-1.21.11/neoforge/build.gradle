@@ -12,8 +12,10 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
-// NeoForge 1.21.11 子项目（NeoForge 21.1.x）
-// 依赖 core 和 platform-api 模块
+// NeoForge 21.1.x（MC 1.21.1 API，ResourceLocation 可用）
+// TODO: 升级 21.11.0-beta → 三平台共享 fabric-shared
+// NeoForge 21.11.x 使用 Identifier API
+// 参考: https://neoforged.net/news/21.11release/
 
 repositories {
     mavenCentral()
@@ -22,7 +24,10 @@ repositories {
 }
 
 neoForge {
-    // NeoForge 21.1.x for Minecraft 1.21.11
+    // NeoForge 21.11.x for Minecraft 1.21.11 (Identifier API)
+    // NeoForge 21.1.x (Minecraft 1.21.1 API 兼容层)
+    // TODO: 切换 21.11.0-beta (Maven 需网络访问)
+    // NeoForge 21.11.x 使用 Identifier API → 可合并 fabric-shared
     version = "21.1.77"
 
     runs {
