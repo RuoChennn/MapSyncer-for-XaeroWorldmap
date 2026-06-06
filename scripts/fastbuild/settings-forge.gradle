@@ -16,14 +16,14 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
 }
 
-rootProject.name = mod_id
+rootProject.name = 'mapsyncer'
 
 // ── 抽象库层 ──
 include 'libs:core'
 include 'libs:platform-api'
 include 'libs:common'
 
-// ── Forge 模块 ──
+// ── Forge 模块（仅 Forge 相关，不含 Fabric/NeoForge/Loom）──
 include 'mc-1.20.1:shared'
 include 'mc-1.20.1:forge'
 
