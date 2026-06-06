@@ -20,7 +20,7 @@ repositories {
 }
 
 sourceSets.main.java.srcDirs(
-    '../fabric-shared/src/main/java',
+    '../shared/src/main/java',
     "${rootProject.projectDir}/libs/common/src/main/java",
     'src/main/java',
 )
