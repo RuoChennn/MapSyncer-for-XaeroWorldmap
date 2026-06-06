@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.15.4'
+    id 'net.fabricmc.fabric-loom-remap' version '1.15.4'
 }
 
 version = mod_version + '-fabric-1.21.11'
