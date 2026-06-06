@@ -10,7 +10,7 @@ import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,13 +28,13 @@ public class FabricPayloadAdapters {
     // ===== CustomPacketPayload.Type 常量 =====
 
     public static final CustomPacketPayload.Type<SyncRequestWrapper> SYNC_REQUEST_TYPE =
-            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "sync_request"));
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, "sync_request"));
     public static final CustomPacketPayload.Type<SyncResponseWrapper> SYNC_RESPONSE_TYPE =
-            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "sync_response"));
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, "sync_response"));
     public static final CustomPacketPayload.Type<SyncProgressWrapper> SYNC_PROGRESS_TYPE =
-            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "sync_progress"));
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, "sync_progress"));
     public static final CustomPacketPayload.Type<ServerInstalledWrapper> SERVER_INSTALLED_TYPE =
-            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, "server_installed"));
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, "server_installed"));
 
     // ===== StreamCodec 定义 =====
 

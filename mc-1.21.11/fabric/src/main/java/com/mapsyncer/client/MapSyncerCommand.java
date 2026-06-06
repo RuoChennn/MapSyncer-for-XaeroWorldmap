@@ -5,7 +5,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.commands.arguments.DimensionArgument;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * 客户端命令注册。
@@ -28,7 +28,7 @@ public class MapSyncerCommand {
                                 .then(ClientCommandManager.argument("dimension", DimensionArgument.dimension())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> {
-                                            ResourceLocation loc = ctx.getArgument("dimension", ResourceLocation.class);
+                                            Identifier loc = ctx.getArgument("dimension", Identifier.class);
                                             return MapSyncerCommandLogic.executeSyncDimension(loc.toString());
                                         })))
                         .then(ClientCommandManager.literal("clearstate")
