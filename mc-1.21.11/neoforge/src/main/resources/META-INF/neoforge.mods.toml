@@ -12,7 +12,7 @@ authors="Ruo_Chen"
 [[dependencies.mapsyncer]]
 modId="neoforge"
 type="required"
-versionRange="[21.1,22)"
+versionRange="[21.11,22)"
 ordering="NONE"
 side="BOTH"
 

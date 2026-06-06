@@ -10,7 +10,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
  *
  * 核心逻辑委托给 {@link SyncResumeHelper}。
  */
-@EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+@EventBusSubscriber(value = Dist.CLIENT)
 public class ClientJoinHandler {
 
     @SubscribeEvent

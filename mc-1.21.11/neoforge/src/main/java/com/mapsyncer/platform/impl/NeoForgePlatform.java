@@ -12,7 +12,7 @@ import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
@@ -59,7 +59,7 @@ public class NeoForgePlatform implements Platform {
 
     @Override
     public boolean isClientEnvironment() {
-        return net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT;
+        return net.neoforged.fml.loading.FMLEnvironment.getDist() == net.neoforged.api.distmarker.Dist.CLIENT;
     }
 
     // ===== 鏂瑰潡灞炴€?=====
@@ -73,7 +73,7 @@ public class NeoForgePlatform implements Platform {
         }
 
         try {
-            ResourceLocation loc = ResourceLocation.parse(blockName);
+            Identifier loc = Identifier.parse(blockName);
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {

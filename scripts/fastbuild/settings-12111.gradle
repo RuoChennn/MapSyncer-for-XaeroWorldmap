@@ -23,5 +23,5 @@ include 'libs:platform-api'
 include 'libs:common'
 
 // ── Fabric 1.21.11 ──
-include 'mc-1.21.11:shared'
+// shared removed - merged to fabric-shared
 include 'mc-1.21.11:fabric'

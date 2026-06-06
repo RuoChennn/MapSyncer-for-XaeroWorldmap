@@ -48,10 +48,10 @@ include 'mc-1.21.1:fabric'
 include 'mc-1.21.1:neoforge'
 
 // MC 1.21.11
-include 'mc-1.21.11:shared'
+// include 'mc-1.21.11:shared'  // 已合并到 fabric-shared（三平台统一）
 include 'mc-1.21.11:neoforge'
 // include 'mc-1.21.11:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
-// include 'mc-1.21.11:fabric'  // 跨层差异大: Identifier/ResourceLocation + Fabric API 版本不兼容，需独立隔离构建
+// include 'mc-1.21.11:fabric'  // Loom 1.15.4 隔离，使用 settings-12111.gradle
 
 // MC 26.1
 include 'mc-26.1:shared'

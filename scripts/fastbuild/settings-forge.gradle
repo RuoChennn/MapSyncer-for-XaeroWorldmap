@@ -30,5 +30,5 @@ include 'mc-1.20.1:forge'
 include 'mc-1.21.1:shared'
 include 'mc-1.21.1:forge'
 
-include 'mc-1.21.11:shared'
+// shared removed - merged to fabric-shared
 include 'mc-1.21.11:forge'
