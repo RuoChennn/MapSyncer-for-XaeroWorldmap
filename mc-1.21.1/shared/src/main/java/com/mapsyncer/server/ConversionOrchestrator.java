@@ -20,6 +20,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,7 +99,7 @@ public class ConversionOrchestrator {
      */
     public static void tryInitIntegratedServerCache(MinecraftServer server, Path gameDir) {
         if (!server.isDedicatedServer()) {
-            String worldName = server.getWorldData().getLevelName();
+            String worldName = server.getWorldPath(LevelResource.ROOT).getParent().getFileName().toString();
             setCacheDir(XaeroPathResolver.getWorldMapDir(gameDir).resolve(worldName));
         }
     }
