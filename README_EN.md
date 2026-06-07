@@ -19,7 +19,7 @@ A multi-platform Minecraft mod that syncs server-side explored areas to clients'
 
 ### Client Dependencies
 
-This mod is designed for client-server network communication and does not support single-player with integrated server.
+Supports both dedicated servers and integrated servers (single-player LAN sharing). On integrated servers, the host's Xaero's World Map save directory is reused as the map cache, eliminating redundant conversion.
 
 | Dependency | Requirement |
 |------------|-------------|

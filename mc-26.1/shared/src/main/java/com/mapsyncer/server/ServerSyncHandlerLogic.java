@@ -539,10 +539,10 @@ public class ServerSyncHandlerLogic {
         LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
 
         // Get server generation cache (timestamp + hash)
-        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR);
+        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir());
         Map<String, TimestampHashEntry> serverCache = genCache.getAll();
 
-        Path cacheDir = ConversionOrchestrator.CACHE_DIR;
+        Path cacheDir = ConversionOrchestrator.getCacheDir();
 
         if (!Files.exists(cacheDir)) {
             // 在主线程发送消息和数据包
@@ -633,6 +633,8 @@ public class ServerSyncHandlerLogic {
         allZipPaths.forEach(zipPath -> {
                         String relativePath = absCacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
+                        // 剥离 Xaero 客户端 mw$worldId 子目录（dim/mw$0/r_x_z → dim/r_x_z）
+                        normalizedPath = stripMwWorldId(normalizedPath);
 
                         String[] parts = normalizedPath.split("[/\\\\]");
                         String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
@@ -1030,5 +1032,17 @@ public class ServerSyncHandlerLogic {
 
         LOGGER.debug("Sorted {} regions: {} in view distance ({} region radius), rest by distance",
                 regions.size(), viewRegionCount, viewDistanceRegions);
+    }
+
+    private static String stripMwWorldId(String path) {
+        String[] parts = path.split("/");
+        if (parts.length >= 3 && parts[1].startsWith("mw$")) {
+            StringBuilder sb = new StringBuilder(parts[0]);
+            for (int i = 2; i < parts.length; i++) {
+                sb.append("/").append(parts[i]);
+            }
+            return sb.toString();
+        }
+        return path;
     }
 }

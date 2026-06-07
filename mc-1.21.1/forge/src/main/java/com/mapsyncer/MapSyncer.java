@@ -9,6 +9,7 @@ import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.ForgePlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
+import com.mapsyncer.server.ConversionOrchestrator;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
@@ -27,6 +28,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,19 +66,19 @@ public class MapSyncer {
         NetworkManager.initialize(networkHandler);
         LOGGER.info("NetworkManager initialized for Forge 1.21.1");
 
+        // 注册网络处理器（客户端和服务端共用）
+        networkHandler.registerHandlers(null);
+
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            // 客户端：注册网络处理器和包接收器
-            networkHandler.registerHandlers(null);
             MapPacketReceiver.register(null);
             MinecraftForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode, Forge 1.21.1)");
-        } else {
-            // 服务端：注册网络处理器
-            networkHandler.registerHandlers(null);
-            ServerSyncHandlerLogic.registerHandlers();
-            MinecraftForge.EVENT_BUS.register(this);
-            LOGGER.info("MapSyncer initialized (server mode, Forge 1.21.1)");
         }
+
+        // 服务端处理器始终注册，内置服务器/纯客户端上无副作用（事件不触发）
+        ServerSyncHandlerLogic.registerHandlers();
+        MinecraftForge.EVENT_BUS.register(this);
+        LOGGER.info("MapSyncer server handlers registered (integrated server support)");
     }
 
     @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.FORGE)
@@ -89,6 +91,8 @@ public class MapSyncer {
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        ConversionOrchestrator.tryInitIntegratedServerCache(event.getServer(), FMLPaths.GAMEDIR.get());
+
         DimensionRegistry.registerAllDimensions(event.getServer());
 
         Platform platform = PlatformManager.getPlatform();

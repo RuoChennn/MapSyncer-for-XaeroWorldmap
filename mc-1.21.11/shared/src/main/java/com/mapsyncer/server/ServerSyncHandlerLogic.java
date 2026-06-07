@@ -539,10 +539,10 @@ public class ServerSyncHandlerLogic {
         LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
 
         // Get server generation cache (timestamp + hash)
-        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR);
+        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir());
         Map<String, TimestampHashEntry> serverCache = genCache.getAll();
 
-        Path cacheDir = ConversionOrchestrator.CACHE_DIR;
+        Path cacheDir = ConversionOrchestrator.getCacheDir();
 
         if (!Files.exists(cacheDir)) {
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
@@ -631,6 +631,8 @@ public class ServerSyncHandlerLogic {
         allZipPaths.forEach(zipPath -> {
                         String relativePath = absCacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
+                        // 剥离 Xaero 客户端 mw$worldId 子目录（dim/mw$0/r_x_z → dim/r_x_z）
+                        normalizedPath = stripMwWorldId(normalizedPath);
 
                         String[] parts = normalizedPath.split("[/\\\\]");
                         String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
@@ -1026,5 +1028,22 @@ public class ServerSyncHandlerLogic {
 
         LOGGER.debug("Sorted {} regions: {} in view distance ({} region radius), rest by distance",
                 regions.size(), viewRegionCount, viewDistanceRegions);
+    }
+
+    /**
+     * 剥离 Xaero 客户端 mw$worldId 子目录。
+     * 内置服务器复用 Xaero 目录时，文件路径为 dim/mw$0/region_x_z，
+     * 需要规范化为 dim/region_x_z 以匹配 GenerationCache 和客户端元数据键格式。
+     */
+    private static String stripMwWorldId(String path) {
+        String[] parts = path.split("/");
+        if (parts.length >= 3 && parts[1].startsWith("mw$")) {
+            StringBuilder sb = new StringBuilder(parts[0]);
+            for (int i = 2; i < parts.length; i++) {
+                sb.append("/").append(parts[i]);
+            }
+            return sb.toString();
+        }
+        return path;
     }
 }

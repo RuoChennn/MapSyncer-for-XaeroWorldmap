@@ -9,7 +9,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER)
+@EventBusSubscriber(value = {Dist.CLIENT, Dist.DEDICATED_SERVER})
 public class PlayerJoinHandler {
 
     @SubscribeEvent

@@ -8,11 +8,13 @@ import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.FabricPlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
+import com.mapsyncer.server.ConversionOrchestrator;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import com.mapsyncer.server.ServerSyncHandler;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -91,6 +93,9 @@ public class MapSyncer implements ModInitializer {
 
             // 设置平台的服务器实例
             platform.setServer(server);
+
+            // 内置服务器：复用 Xaero 客户端地图目录作缓存
+            ConversionOrchestrator.tryInitIntegratedServerCache(server, FabricLoader.getInstance().getGameDir());
 
             // 注册所有维度
             DimensionRegistry.registerAllDimensions(server);

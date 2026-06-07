@@ -9,6 +9,7 @@ import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.NeoForge26Platform;
 import com.mapsyncer.server.CacheGenerateCommand;
+import com.mapsyncer.server.ConversionOrchestrator;
 import com.mapsyncer.server.DimensionRegistry;
 import com.mapsyncer.server.IncrementalUpdateHandler;
 import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
@@ -22,6 +23,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.config.ModConfig.Type;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -65,16 +67,15 @@ public class MapSyncer {
         modContainer.registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
 
         if (FMLEnvironment.getDist() == Dist.CLIENT) {
-            // 客户端初始化：注册网络包接收器
             modBus.addListener(MapPacketReceiver::register);
             NeoForge.EVENT_BUS.register(ClientEventHandler.class);
             LOGGER.info("MapSyncer initialized (client mode)");
-        } else {
-            // 服务端初始化：注册网络包处理器
-            modBus.addListener(ServerSyncHandler::register);
-            NeoForge.EVENT_BUS.register(this);
-            LOGGER.info("MapSyncer initialized (server mode)");
         }
+
+        // 服务端处理器始终注册，内置服务器/纯客户端上无副作用（事件不触发）
+        modBus.addListener(ServerSyncHandler::register);
+        NeoForge.EVENT_BUS.register(this);
+        LOGGER.info("MapSyncer server handlers registered (integrated server support)");
     }
 
     /**
@@ -113,6 +114,8 @@ public class MapSyncer {
      */
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        ConversionOrchestrator.tryInitIntegratedServerCache(event.getServer(), FMLPaths.GAMEDIR.get());
+
         // 注册所有已加载维度到配置文件
         DimensionRegistry.registerAllDimensions(event.getServer());
 

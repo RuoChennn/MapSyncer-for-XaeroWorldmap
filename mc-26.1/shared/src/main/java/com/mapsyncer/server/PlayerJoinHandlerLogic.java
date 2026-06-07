@@ -43,7 +43,7 @@ public class PlayerJoinHandlerLogic {
         if (server == null) return;
 
         // 鍙戦€佹湇鍔＄宸插畨瑁呴€氱煡缁欏鎴风锛堣法鍔犺浇鍣ㄥ吋瀹癸細鏃犺瀹㈡埛绔娇鐢ㄤ粈涔堝姞杞藉櫒閮借兘鎺ユ敹锛?
-                long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.CACHE_DIR).getLastGenerationTime();
+                long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir()).getLastGenerationTime();
         int autoInterval = AutoSyncConfig.computeInterval(
             PlatformManager.getPlatform().getIncrementalUpdateMode(),
             PlatformManager.getPlatform().getIncrementalUpdateIntervalTicks());

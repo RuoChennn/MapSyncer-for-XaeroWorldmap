@@ -6,7 +6,7 @@ import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.event.TickEvent;
 
-@Mod.EventBusSubscriber(modid = "mapsyncer", value = Dist.DEDICATED_SERVER, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@Mod.EventBusSubscriber(modid = "mapsyncer", value = {Dist.CLIENT, Dist.DEDICATED_SERVER}, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class IncrementalUpdateHandler {
 
     @SubscribeEvent
