@@ -11,7 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer 客户端初始化类 - Fabric 1.21.1 版本
+ * MapSyncer 客户端初始化类 - Fabric 1.21.11 版本
  *
  * 实现 ClientModInitializer 接口，在客户端初始化时注册网络接收器和命令。
  */

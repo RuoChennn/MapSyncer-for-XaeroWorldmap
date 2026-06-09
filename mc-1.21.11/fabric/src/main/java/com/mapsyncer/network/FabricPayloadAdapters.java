@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Fabric 1.21.1 Payload 适配器
+ * Fabric 1.21.11 Payload 适配器
  *
  * 将 platform-api 中的平台无关 Payload 包装为 Fabric CustomPacketPayload，
  * 并提供 StreamCodec 用于序列化/反序列化。

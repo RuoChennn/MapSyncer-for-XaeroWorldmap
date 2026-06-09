@@ -33,7 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MapSyncer模组的主类 - NeoForge 1.21.1 版本
+ * MapSyncer模组的主类 - NeoForge 1.21.11 版本
  *
  * 使用抽象网络层进行跨平台网络通信。
  */

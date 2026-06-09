@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 
 /**
- * MapSyncer模组的主类 - Fabric 1.21.1 版本
+ * MapSyncer模组的主类 - Fabric 1.21.11 版本
  *
  * 实现 FabricModInitializer 接口，在模组初始化时设置平台和网络处理器。
  */

@@ -26,15 +26,12 @@ import java.util.Set;
 import java.util.HashSet;
 
 /**
- * NeoForge 1.21.1 骞冲彴瀹炵幇
- *
- * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 NeoForge 21.1.x 鐨?API銆?
+ * NeoForge 1.21.1 平台实现
  */
 public class NeoForgePlatform implements Platform {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NeoForgePlatform.class);
 
-    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     @Override
@@ -62,11 +59,10 @@ public class NeoForgePlatform implements Platform {
         return net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT;
     }
 
-    // ===== 鏂瑰潡灞炴€?=====
+    // ===== 方块属性 =====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 妫€鏌ョ紦瀛?
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
@@ -89,7 +85,6 @@ public class NeoForgePlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€э紙鏈嶅姟绔彲鐢級
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -123,7 +118,7 @@ public class NeoForgePlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 涓栫晫淇℃伅 =====
+    // ===== 世界信息 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -135,7 +130,7 @@ public class NeoForgePlatform implements Platform {
         return 320;
     }
 
-    // ===== 缁村害淇℃伅 =====
+    // ===== 维度信息 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -147,7 +142,7 @@ public class NeoForgePlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 閰嶇疆绯荤粺 =====
+    // ===== 配置系统 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
@@ -239,24 +234,21 @@ public class NeoForgePlatform implements Platform {
         return ModConfig.SERVER.getConfigForDimension(dimensionPath);
     }
 
-    // ===== 鏂囦欢璺緞 =====
+    // ===== 文件路径 =====
 
     @Override
     public Path getServerMapCacheDir() {
-        // 鏈嶅姟绔紦瀛樼洰褰?
         return Path.of("server_map_cache");
     }
 
     @Override
     public Path getClientXaeroWorldMapDir() {
         try {
-            // 浣跨敤 XaeroMapIntegrator 鑾峰彇褰撳墠鏈嶅姟鍣ㄧ洰褰?
             Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
             if (serverDir != null) {
                 return serverDir;
             }
 
-            // 鍥為€€锛氳繑鍥為粯璁?Xaero 鐩綍
             Minecraft mc = Minecraft.getInstance();
             if (mc.gameDirectory != null) {
                 return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
@@ -280,14 +272,14 @@ public class NeoForgePlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 鏃ュ織 =====
+    // ===== 日志 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 宸ュ叿鏂规硶 =====
+    // ===== 工具方法 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -320,7 +312,6 @@ public class NeoForgePlatform implements Platform {
     @Override
     public void recordUpdatedRegions(Set<RegionCoord> regions) {
         try {
-            // 杞崲 Platform.RegionCoord 鍒?XaeroMapDataHandler.RegionCoord
             Set<com.mapsyncer.client.XaeroMapDataHandler.RegionCoord> xaeroRegions = new HashSet<>();
             for (RegionCoord coord : regions) {
                 xaeroRegions.add(new com.mapsyncer.client.XaeroMapDataHandler.RegionCoord(
@@ -334,17 +325,11 @@ public class NeoForgePlatform implements Platform {
         }
     }
 
-    /**
-     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
-     */
     @Override
     public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 
-    /**
-     * 鑾峰彇缂撳瓨澶у皬
-     */
     public static int getCacheSize() {
         return blockPropertiesCache.size();
     }

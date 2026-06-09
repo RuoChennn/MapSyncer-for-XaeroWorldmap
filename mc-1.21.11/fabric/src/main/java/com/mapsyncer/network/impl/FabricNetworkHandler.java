@@ -16,9 +16,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 /**
- * Fabric 1.21.1 网络处理器实现
+ * Fabric 1.21.11 网络处理器实现
  *
- * <p>Fabric 1.21.1 使用 Fabric Networking API v1 (PayloadTypeRegistry + CustomPacketPayload + StreamCodec)</p>
+ * <p>Fabric 1.21.11 使用 Fabric Networking API v1 (PayloadTypeRegistry + CustomPacketPayload + StreamCodec)</p>
  * <p>Payload DTOs 在 platform-api 中定义为平台无关的纯 record，通过 FabricPayloadAdapters 包装为 CustomPacketPayload。</p>
  * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object</p>
  */

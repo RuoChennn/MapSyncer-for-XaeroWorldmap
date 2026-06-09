@@ -26,19 +26,17 @@ import java.util.Set;
 import java.util.HashSet;
 
 /**
- * Forge 1.21.1 骞冲彴瀹炵幇
+ * Forge 1.21.11 平台实现
  *
- * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 Forge 52.x 鐨?API銆?
- * 涓昏宸紓鐐癸細
- * - Forge 1.21.1 浣跨敤 Java 21
- * - SimpleNetworkWrapper 缃戠粶锛堥潪 StreamCodec锛?
- * - BuiltInRegistries 娉ㄥ唽琛?
+ * 主要差异点：
+ * - Forge 1.21.11 使用 Java 21
+ * - SimpleNetworkWrapper 网络（非 StreamCodec）
+ * - BuiltInRegistries 注册表
  */
 public class ForgePlatform implements Platform {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ForgePlatform.class);
 
-    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     @Override
@@ -48,7 +46,7 @@ public class ForgePlatform implements Platform {
 
     @Override
     public String getMinecraftVersion() {
-        return "1.21.1";
+        return "1.21.11";
     }
 
     @Override
@@ -58,7 +56,7 @@ public class ForgePlatform implements Platform {
 
     @Override
     public String getPlatformName() {
-        return "Forge 1.21.1";
+        return "Forge 1.21.11";
     }
 
     @Override
@@ -66,11 +64,10 @@ public class ForgePlatform implements Platform {
         return net.minecraftforge.fml.loading.FMLEnvironment.dist == net.minecraftforge.api.distmarker.Dist.CLIENT;
     }
 
-    // ===== 鏂瑰潡灞炴€?=====
+    // ===== 方块属性 =====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 妫€鏌ョ紦瀛?
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
@@ -78,7 +75,6 @@ public class ForgePlatform implements Platform {
 
         try {
             Identifier loc = Identifier.parse(blockName);
-            // Forge 1.21: BuiltInRegistries 鍙敤
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {
@@ -94,7 +90,6 @@ public class ForgePlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€?
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -128,7 +123,7 @@ public class ForgePlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 涓栫晫淇℃伅 =====
+    // ===== 世界信息 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -140,7 +135,7 @@ public class ForgePlatform implements Platform {
         return 320;
     }
 
-    // ===== 缁村害淇℃伅 =====
+    // ===== 维度信息 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -152,7 +147,7 @@ public class ForgePlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 閰嶇疆绯荤粺 =====
+    // ===== 配置系统 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
@@ -244,7 +239,7 @@ public class ForgePlatform implements Platform {
         return ModConfig.SERVER.getConfigForDimension(dimensionPath);
     }
 
-    // ===== 鏂囦欢璺緞 =====
+    // ===== 文件路径 =====
 
     @Override
     public Path getServerMapCacheDir() {
@@ -282,14 +277,14 @@ public class ForgePlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 鏃ュ織 =====
+    // ===== 日志 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 宸ュ叿鏂规硶 =====
+    // ===== 工具方法 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -335,17 +330,11 @@ public class ForgePlatform implements Platform {
         }
     }
 
-    /**
-     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
-     */
     @Override
     public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 
-    /**
-     * 鑾峰彇缂撳瓨澶у皬
-     */
     public static int getCacheSize() {
         return blockPropertiesCache.size();
     }
