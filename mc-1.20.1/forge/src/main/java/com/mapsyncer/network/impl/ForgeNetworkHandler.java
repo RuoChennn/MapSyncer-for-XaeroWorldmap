@@ -105,7 +105,8 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
 
     @Override
     public void registerHandlers(Object event) {
-        // Forge 1.20 在构造时直接注册，不需要事件
+        if (registered) return;
+        registered = true;
         init();
     }
 

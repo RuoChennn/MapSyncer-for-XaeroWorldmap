@@ -36,6 +36,8 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
         .networkProtocolVersion(1)
         .simpleChannel();
 
+    private static volatile boolean initialized = false;
+
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
@@ -90,7 +92,8 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
 
     @Override
     public void registerHandlers(Object event) {
-        // Forge 1.21 在构造时直接注册，不需要事件
+        if (initialized) return;
+        initialized = true;
         init();
     }
 

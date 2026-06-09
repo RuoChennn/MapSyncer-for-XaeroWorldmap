@@ -25,6 +25,8 @@ import java.util.function.BiConsumer;
  */
 public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, RegisterPayloadHandlersEvent> {
 
+    private volatile boolean payloadsRegistered = false;
+
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
@@ -32,6 +34,9 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
 
     @Override
     public void registerHandlers(RegisterPayloadHandlersEvent event) {
+        if (payloadsRegistered) return;
+        payloadsRegistered = true;
+
         PayloadRegistrar registrar = event.registrar("1").optional();
 
         // 同步请求（客户端 -> 服务端）
