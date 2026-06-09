@@ -29,6 +29,7 @@ import net.minecraft.world.level.block.FlowerBlock;
 import net.minecraft.world.level.block.GrowingPlantBlock;
 import net.minecraft.world.level.block.GrowingPlantBodyBlock;
 import net.minecraft.world.level.block.GrowingPlantHeadBlock;
+import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.MushroomBlock;
 import net.minecraft.world.level.block.NetherWartBlock;
@@ -374,6 +375,15 @@ public class BlockPropertyResolver {
             return true;
         }
 
+        // StainedGlassPaneBlock extends IronBarsBlock（非 HalfTransparentBlock），
+        // 但应作为 overlay 处理。普通铁栏杆不在此列。
+        if (block instanceof IronBarsBlock) {
+            String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
+            if (blockId.contains("stained_glass")) {
+                return true;
+            }
+        }
+
         // 2. 流体方块（水、熔岩）- 使用 translucent 渲染
         FluidState fluidState = state.getFluidState();
         if (!fluidState.isEmpty()) {
@@ -432,7 +442,13 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 4. 检查是否为花
+        // 4. 普通玻璃/玻璃板（完全透明，不在画面中渲染）
+        // 彩色玻璃由 TransparentBlock → shouldOverlay() 路径处理
+        if (block == Blocks.GLASS || block == Blocks.GLASS_PANE) {
+            return true;
+        }
+
+        // 5. 检查是否为花
         boolean isFlower = checkIsFlower(block, state);
 
         // 6. DoublePlantBlock 非花类型（高草、大型蕨）
