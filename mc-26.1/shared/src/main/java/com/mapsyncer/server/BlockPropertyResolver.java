@@ -450,13 +450,7 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 4. 玻璃类（Xaero 作为隐形处理）
-        if (block == Blocks.GLASS || block == Blocks.GLASS_PANE ||
-            blockId.contains("stained_glass") || blockId.contains("stained_glass_pane")) {
-            return true;
-        }
-
-        // 5. 检查是否为花
+        // 4. 检查是否为花
         boolean isFlower = checkIsFlower(block, state);
 
         // 6. DoublePlantBlock 非花类型（高草、大型蕨）
