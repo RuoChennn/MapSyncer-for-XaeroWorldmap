@@ -217,7 +217,7 @@ public class NeoForge26Platform implements Platform {
 
     @Override
     public void saveConfig() {
-        // NeoForge 鑷姩绠＄悊閰嶇疆鎸佷箙鍖栵紝鏃犻渶鎵嬪姩淇濆瓨
+        ModConfig.SERVER_SPEC.save();
     }
 
     @Override
