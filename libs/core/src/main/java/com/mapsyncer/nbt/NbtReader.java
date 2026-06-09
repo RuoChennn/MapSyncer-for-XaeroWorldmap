@@ -43,10 +43,10 @@ public class NbtReader implements AutoCloseable {
     /**
      * 列表长度上限
      *
-     * <p>实际最大需求约 1,000（block palette），
-     * 此限制设为5倍 = 5,000，足够容纳正常数据。</p>
+     * <p>原版 block palette 约 1000，大型模组包可能达到 10,000-20,000+，
+     * 此限制设为 100,000，足够容纳极端 Mod 环境。</p>
      */
-    private static final int MAX_LIST_SIZE = 5_000;
+    private static final int MAX_LIST_SIZE = 100_000;
 
     /**
      * Compound嵌套深度上限
