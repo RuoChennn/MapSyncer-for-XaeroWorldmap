@@ -28,7 +28,6 @@ import net.minecraft.world.level.block.FlowerBlock;
 import net.minecraft.world.level.block.GrowingPlantBlock;
 import net.minecraft.world.level.block.GrowingPlantBodyBlock;
 import net.minecraft.world.level.block.GrowingPlantHeadBlock;
-import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.MushroomBlock;
 import net.minecraft.world.level.block.NetherWartBlock;
@@ -393,13 +392,9 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // StainedGlassPaneBlock extends IronBarsBlock（非 HalfTransparentBlock），
-        // 但应作为 overlay 处理。普通铁栏杆不在此列。
-        if (block instanceof IronBarsBlock) {
-            String blockId = BuiltInRegistries.BLOCK.getKey(block).getPath();
-            if (blockId.contains("stained_glass")) {
-                return true;
-            }
+        // 彩色玻璃板继承自 StainedGlassPaneBlock（非 HalfTransparentBlock），应作为 overlay
+        if (block instanceof net.minecraft.world.level.block.StainedGlassPaneBlock) {
+            return true;
         }
 
         // 2. 流体方块（水、熔岩）- 使用 translucent 渲染
