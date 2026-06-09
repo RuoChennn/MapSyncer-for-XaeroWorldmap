@@ -31,19 +31,35 @@ public class SyncResumeHelper {
             return;
         }
 
-        // 使用异步线程延迟检测，避免阻塞主线程
+        // 异步延迟检测 + 自动探针，避免阻塞主线程
         Thread resumeCheckThread = new Thread(() -> {
             try {
-                Thread.sleep(1000); // 等待1秒让 Xaero 目录初始化
+                Thread.sleep(2000); // 等待2秒让 Xaero 目录和网络通道初始化
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             }
-            // 在主线程执行检查（因为涉及 Minecraft API）
-            mc.execute(() -> checkInterruptedSync(mc));
+            mc.execute(() -> {
+                checkInterruptedSync(mc);
+                // 发送自动探针：告知服务端此客户端已安装 MapSyncer
+                sendAutoProbe(mc);
+            });
         }, "mapsyncer-resume-check");
         resumeCheckThread.setDaemon(true);
         resumeCheckThread.start();
+    }
+
+    /**
+     * 发送自动探针 SyncRequest，使服务端确认此客户端安装了 MapSyncer。
+     * 未安装 mod 的原版客户端不会发送此请求，服务端从而可以区分。
+     */
+    private static void sendAutoProbe(Minecraft mc) {
+        try {
+            MapSyncerCommandLogic.sendSyncRequest(mc, "all", true);
+            LOGGER.debug("Auto-probe SyncRequest sent");
+        } catch (Exception e) {
+            LOGGER.warn("Auto-probe failed: {}", e.getMessage());
+        }
     }
 
     /**

@@ -231,6 +231,12 @@ public class MapPacketHandler {
             ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
                     ? ClientTimestampCache.getInstance(serverDir) : null;
 
+            // 收到服务端任何响应即确认服务端已安装 MapSyncer
+            if (!serverInstalled) {
+                serverInstalled = true;
+                LOGGER.info("Server confirmed (SyncResponse received), MapSyncer detected");
+            }
+
             // 根据状态决定处理方式
             if ("no_cache".equals(status) || "dim_not_available".equals(status)) {
                 LOGGER.info("Server returned error status: {}, no sync needed", status);

@@ -2,7 +2,6 @@ package com.mapsyncer.network.impl;
 
 import com.mapsyncer.network.NeoForgePayloadAdapters;
 import com.mapsyncer.network.NetworkHandler;
-import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
@@ -15,18 +14,20 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /**
  * NeoForge 网络处理器实现
- *
- * <p>实现 NetworkHandler 泛型接口，适配 NeoForge 1.21 的网络 API。</p>
- * <p>使用 NeoForgePayloadAdapters 将平台无关 Payload 转换为 NeoForge 特定类型。</p>
- * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=RegisterPayloadHandlersEvent</p>
  */
 public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, RegisterPayloadHandlersEvent> {
 
     private volatile boolean payloadsRegistered = false;
+
+    /** 已确认安装了 MapSyncer 的玩家 — 仅对这些玩家发送自定义 payload */
+    private final Set<UUID> confirmedPlayers = ConcurrentHashMap.newKeySet();
 
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
@@ -40,11 +41,14 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
 
         PayloadRegistrar registrar = event.registrar("1").optional();
 
-        // 同步请求（客户端 -> 服务端）
+        // 同步请求（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
         registrar.playToServer(
             NeoForgePayloadAdapters.NeoForgeSyncRequestPayload.TYPE,
             NeoForgePayloadAdapters.NeoForgeSyncRequestPayload.STREAM_CODEC,
             (payload, ctx) -> {
+                if (ctx.player() instanceof ServerPlayer sp) {
+                    confirmedPlayers.add(sp.getUUID());
+                }
                 if (syncRequestHandler != null) {
                     syncRequestHandler.accept(payload.data(), new PayloadContext(ctx));
                 }
@@ -92,20 +96,28 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
 
     @Override
     public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
         PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeSyncResponsePayload(payload));
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
         PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeSyncProgressPayload(payload));
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
         PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeServerInstalledPayload(payload));
+    }
+
+    /** 玩家断线时清理确认状态 */
+    public void onPlayerDisconnect(UUID playerId) {
+        confirmedPlayers.remove(playerId);
     }
 
     @Override
