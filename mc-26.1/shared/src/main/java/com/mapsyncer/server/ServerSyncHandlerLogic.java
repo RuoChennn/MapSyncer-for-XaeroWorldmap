@@ -772,6 +772,7 @@ public class ServerSyncHandlerLogic {
         List<ChunkMapData> batch = new ArrayList<>();
         int batchBytes = 0;
         int processed = 0;
+        int batchRegionCount = 0; // 批次中的原始 region 数量（不含分片展开）
         int batchThreshold = getBatchThreshold(); // 批次累积阈值（目标每秒发送量）
 
         for (RegionSyncInfo info : regionsToSync) {
@@ -802,15 +803,17 @@ public class ServerSyncHandlerLogic {
 
                     // 拆包发送
                     sendBatchInChunks(batch, batchBytes, serverPlayer, worldId, processed, total, playerId, syncVersion);
-                    processed += batch.size();
+                    processed += batchRegionCount;
 
                     batch.clear();
                     batchBytes = 0;
+                    batchRegionCount = 0;
                 }
 
                 batch.add(part);
                 batchBytes += part.data.length;
             }
+            batchRegionCount++;
         }
 
         if (!isPlayerStillValid(serverPlayer)) {
@@ -855,7 +858,7 @@ public class ServerSyncHandlerLogic {
                                     new SyncProgressPayload(sentProgress, total,
                                             String.format("Sending regions %d/%d", sentProgress, total)));
                         });
-                        processed += currentChunk.size();
+                        // processed 不在此增量（最终批次的分片间不做精确进度）
 
                         currentChunk.clear();
                         currentSize = 0;
