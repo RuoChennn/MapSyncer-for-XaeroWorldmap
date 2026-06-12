@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -202,6 +203,11 @@ public class ServerSyncHandlerLogic {
 
     /** 每个玩家当前的同步版本号，server.execute() 任务通过版本号判断是否过期 */
     private static final Map<UUID, Integer> playerSyncVersions = new ConcurrentHashMap<>();
+
+    /** SyncRequestPayload 分片组装缓冲区：playerId → { partIndex → payload } */
+    private static final Map<UUID, Map<Integer, SyncRequestPayload>> requestPartBuffer = new ConcurrentHashMap<>();
+    /** 记录每个玩家当前组装请求的总分片数（用于判断是否到齐） */
+    private static final Map<UUID, Integer> requestTotalParts = new ConcurrentHashMap<>();
 
     /**
      * 轻量级的 region 同步信息。
@@ -445,6 +451,8 @@ public class ServerSyncHandlerLogic {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
         playerSyncVersions.remove(playerId);
+        requestPartBuffer.remove(playerId);
+        requestTotalParts.remove(playerId);
 
         // 清理线程引用并确保线程已停止
         Thread syncThread = syncThreads.remove(playerId);
@@ -471,6 +479,36 @@ public class ServerSyncHandlerLogic {
         if (!(player instanceof ServerPlayer serverPlayer)) return;
 
         UUID playerId = serverPlayer.getUUID();
+
+        // 组装分片 SyncRequestPayload
+        if (payload.totalParts() > 1) {
+            Integer existingTotal = requestTotalParts.get(playerId);
+            if (existingTotal != null && existingTotal != payload.totalParts()) {
+                // 新请求的分片数不同于旧请求，丢弃旧缓冲区（用户快速重复请求）
+                requestPartBuffer.remove(playerId);
+                LOGGER.debug("SyncRequest totalParts changed {}→{}, resetting buffer for player {}",
+                        existingTotal, payload.totalParts(), playerId);
+            }
+
+            Map<Integer, SyncRequestPayload> parts = requestPartBuffer.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
+            parts.put(payload.partIndex(), payload);
+            requestTotalParts.put(playerId, payload.totalParts());
+
+            if (parts.size() < payload.totalParts()) {
+                LOGGER.debug("SyncRequest part {}/{} from player {}", payload.partIndex() + 1, payload.totalParts(), playerId);
+                return; // 分片尚未到齐
+            }
+
+            // 全部到齐，合并 metaMap
+            Map<String, ClientMeta> merged = new HashMap<>();
+            for (SyncRequestPayload part : parts.values()) {
+                merged.putAll(part.clientMeta());
+            }
+            requestPartBuffer.remove(playerId);
+            requestTotalParts.remove(playerId);
+            payload = new SyncRequestPayload(merged);
+            LOGGER.debug("SyncRequest assembled from {} parts, {} entries total", parts.size(), merged.size());
+        }
 
         // 递增版本号，用于标记此次请求（旧请求的 server.execute() 任务会通过版本号自过滤）
         int syncVersion = globalSyncVersion.incrementAndGet();
@@ -749,25 +787,29 @@ public class ServerSyncHandlerLogic {
                 continue;
             }
 
-            // 累积到批次阈值后发送（拆成多个包，每个包不超过maxPacketSize）
-            if (batchBytes + chunk.data.length > batchThreshold && !batch.isEmpty()) {
-                // 执行速度限制
-                if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
-                    LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
-                    cleanupSyncState(playerId);
-                    return;
+            // 拆分超大的 region 数据为多个小包（每个<28KB），逐个累积到批次
+            ChunkMapData[] parts = ChunkMapData.split(chunk);
+            for (ChunkMapData part : parts) {
+                // 累积到批次阈值后发送（拆成多个包，每个包不超过maxPacketSize）
+                if (batchBytes + part.data.length > batchThreshold && !batch.isEmpty()) {
+                    // 执行速度限制
+                    if (!applySpeedLimit(batchBytes, serverPlayer, playerId)) {
+                        LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
+                        cleanupSyncState(playerId);
+                        return;
+                    }
+
+                    // 拆包发送
+                    sendBatchInChunks(batch, batchBytes, serverPlayer, worldId, processed, total, playerId, syncVersion);
+                    processed += batch.size();
+
+                    batch.clear();
+                    batchBytes = 0;
                 }
 
-                // 拆包发送
-                sendBatchInChunks(batch, batchBytes, serverPlayer, worldId, processed, total, playerId, syncVersion);
-                processed += batch.size();
-
-                batch.clear();
-                batchBytes = 0;
+                batch.add(part);
+                batchBytes += part.data.length;
             }
-
-            batch.add(chunk);
-            batchBytes += chunk.data.length;
         }
 
         if (!isPlayerStillValid(serverPlayer)) {

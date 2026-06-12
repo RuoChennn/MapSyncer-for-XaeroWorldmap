@@ -43,6 +43,11 @@ public class ForgePayloadAdapters {
                 buf.writeLong(entry.getValue().timestampSeconds());
                 buf.writeUtf(entry.getValue().hash());
             }
+            buf.writeBoolean(msg.data.totalParts() > 1);
+            if (msg.data.totalParts() > 1) {
+                buf.writeInt(msg.data.partIndex());
+                buf.writeInt(msg.data.totalParts());
+            }
         }
 
         public static ForgeSyncRequestMessage decode(FriendlyByteBuf buf) {
@@ -54,7 +59,18 @@ public class ForgePayloadAdapters {
                 String hash = buf.readUtf();
                 metaMap.put(path, new ClientMeta(timestampSeconds, hash));
             }
-            return new ForgeSyncRequestMessage(new SyncRequestPayload(metaMap));
+
+            int partIndex = 0;
+            int totalParts = 0;
+            if (buf.isReadable()) {
+                boolean isSplit = buf.readBoolean();
+                if (isSplit) {
+                    partIndex = buf.readInt();
+                    totalParts = buf.readInt();
+                }
+            }
+
+            return new ForgeSyncRequestMessage(new SyncRequestPayload(metaMap, partIndex, totalParts));
         }
     }
 
@@ -156,6 +172,11 @@ public class ForgePayloadAdapters {
         if (hasCaveLayer) {
             buf.writeInt(data.caveLayer);
         }
+        buf.writeBoolean(data.totalParts > 1);
+        if (data.totalParts > 1) {
+            buf.writeInt(data.partIndex);
+            buf.writeInt(data.totalParts);
+        }
     }
 
     private static ChunkMapData decodeChunkMapData(FriendlyByteBuf buf) {
@@ -173,6 +194,16 @@ public class ForgePayloadAdapters {
             }
         }
 
-        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer);
+        int partIndex = 0;
+        int totalParts = 0;
+        if (buf.isReadable()) {
+            boolean isSplit = buf.readBoolean();
+            if (isSplit) {
+                partIndex = buf.readInt();
+                totalParts = buf.readInt();
+            }
+        }
+
+        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer, partIndex, totalParts);
     }
 }

@@ -275,7 +275,10 @@ public class MapSyncerCommandLogic {
             tsCache.markSyncStart(dimensions, command);
         }
 
-        NetworkManager.sendToServer(new SyncRequestPayload(metaMap));
+        SyncRequestPayload[] parts = SyncRequestPayload.split(metaMap);
+        for (SyncRequestPayload part : parts) {
+            NetworkManager.sendToServer(part);
+        }
         SyncProgressTracker.startTracking();
     }
 

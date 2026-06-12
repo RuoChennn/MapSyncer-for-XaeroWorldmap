@@ -42,6 +42,11 @@ public class FabricPayloadAdapters {
             buf.writeLong(entry.getValue().timestampSeconds());
             buf.writeUtf(entry.getValue().hash());
         }
+        buf.writeBoolean(payload.totalParts() > 1);
+        if (payload.totalParts() > 1) {
+            buf.writeInt(payload.partIndex());
+            buf.writeInt(payload.totalParts());
+        }
     }
 
     public static SyncRequestPayload readSyncRequest(FriendlyByteBuf buf) {
@@ -53,7 +58,18 @@ public class FabricPayloadAdapters {
             String hash = buf.readUtf();
             metaMap.put(path, new ClientMeta(timestampSeconds, hash));
         }
-        return new SyncRequestPayload(metaMap);
+
+        int partIndex = 0;
+        int totalParts = 0;
+        if (buf.readableBytes() > 0) {
+            boolean isSplit = buf.readBoolean();
+            if (isSplit) {
+                partIndex = buf.readInt();
+                totalParts = buf.readInt();
+            }
+        }
+
+        return new SyncRequestPayload(metaMap, partIndex, totalParts);
     }
 
     // ===== 同步响应 =====
@@ -118,6 +134,11 @@ public class FabricPayloadAdapters {
         if (hasCaveLayer) {
             buf.writeInt(data.caveLayer);
         }
+        buf.writeBoolean(data.totalParts > 1);
+        if (data.totalParts > 1) {
+            buf.writeInt(data.partIndex);
+            buf.writeInt(data.totalParts);
+        }
     }
 
     private static ChunkMapData readChunkMapData(FriendlyByteBuf buf) {
@@ -135,6 +156,16 @@ public class FabricPayloadAdapters {
             }
         }
 
-        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer);
+        int partIndex = 0;
+        int totalParts = 0;
+        if (buf.readableBytes() > 0) {
+            boolean isSplit = buf.readBoolean();
+            if (isSplit) {
+                partIndex = buf.readInt();
+                totalParts = buf.readInt();
+            }
+        }
+
+        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer, partIndex, totalParts);
     }
 }
