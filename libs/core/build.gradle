@@ -19,12 +19,78 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    packagerLogging {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
 dependencies {
-    // 无外部依赖
-    // SLF4J API（日志接口，实际日志由平台模块提供）
     implementation 'org.slf4j:slf4j-api:2.0.9'
+    packagerLogging 'org.slf4j:slf4j-simple:2.0.9'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// ============================================================
+// MapPackager CLI 工具（独立可运行 fat JAR）
+// ============================================================
+def packagerMainClass = 'com.mapsyncer.tool.MapPackager'
+
+task mapPackagerJar(type: Jar) {
+    archiveClassifier = ''
+    archiveBaseName = 'mapsyncer-packager'
+    archiveVersion = mod_version
+    destinationDirectory = layout.buildDirectory.dir('dist')
+
+    manifest {
+        attributes 'Main-Class': packagerMainClass
+        attributes 'Multi-Release': 'true'
+    }
+
+    // 包含 core 模块的编译输出
+    from sourceSets.main.output
+
+    // 打包 SLF4J API 运行时依赖
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+
+    // 打包 slf4j-simple（独立于 Minecraft 模块的 logging 实现）
+    from {
+        configurations.packagerLogging.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+
+    // 排除签名文件避免 fat JAR 签名冲突
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+
+    zip64 = true
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+task mapPackagerDist(type: Zip) {
+    dependsOn mapPackagerJar
+
+    archiveFileName = "mapsyncer-packager-${mod_version}.zip"
+    destinationDirectory = layout.buildDirectory.dir('dist')
+
+    from(mapPackagerJar.archiveFile) {
+        into '.'
+    }
+    from('scripts') {
+        into '.'
+    }
+
+    doLast {
+        logger.lifecycle("MapPackager 发布包: ${archiveFile.get().asFile.absolutePath}")
+    }
 }

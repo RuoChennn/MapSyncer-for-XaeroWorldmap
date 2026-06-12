@@ -50,3 +50,19 @@ tasks.register('collectJars', Copy) {
     // 排除 libs 模块的 JAR（不需要分发）
     outputs.upToDateWhen { false }
 }
+
+// 构建 MapPackager 独立打包工具并收集到 output 目录
+tasks.register('buildPackager') {
+    description = '构建 MapPackager 打包工具并输出到 output 目录'
+    group = 'distribution'
+    dependsOn ':libs:core:mapPackagerDist'
+    doLast {
+        copy {
+            from(rootProject.layout.projectDirectory.dir('libs/core/build/dist')) {
+                include 'mapsyncer-packager-*.zip'
+            }
+            into layout.projectDirectory.dir('output')
+        }
+        logger.lifecycle('MapPackager 产物已输出到 output/ 目录')
+    }
+}
