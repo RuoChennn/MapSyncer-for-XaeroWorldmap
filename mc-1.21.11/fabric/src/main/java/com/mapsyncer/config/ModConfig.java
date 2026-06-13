@@ -192,12 +192,35 @@ public class ModConfig {
             try {
                 Files.createDirectories(configFile.getParent());
 
-                Properties props = new Properties();
-                props.setProperty("hashThreads", String.valueOf(hashThreads));
+                int maxThreads = Runtime.getRuntime().availableProcessors();
 
-                try (OutputStream os = Files.newOutputStream(configFile)) {
-                    props.store(os, "MapSyncer Client Configuration\nHash computation thread count for map sync");
-                }
+                StringBuilder sb = new StringBuilder();
+                sb.append("# MapSyncer Client Configuration\n");
+                sb.append("#\n");
+                sb.append("# Client settings / 客户端设置\n");
+                sb.append("#\n");
+                sb.append("# Number of threads for hash computation during map sync\n");
+                sb.append("# 哈希计算线程数（用于地图同步时的并行计算）\n");
+                sb.append("#\n");
+                sb.append("# Default uses half of available processors to avoid blocking game main thread\n");
+                sb.append("# 默认使用可用处理器数的一半，避免阻塞游戏主线程\n");
+                sb.append("#\n");
+                sb.append("# Thread count recommendations:\n");
+                sb.append("# 线程数选择建议：\n");
+                sb.append("#   1-2 cores: use 1 thread\n");
+                sb.append("#   1-2 核：使用 1 线程\n");
+                sb.append("#   4 cores: use 2 threads (default for most setups)\n");
+                sb.append("#   4 核：使用 2 线程（大多数配置的默认值）\n");
+                sb.append("#   8+ cores: use 4-8 threads for faster sync\n");
+                sb.append("#   8+ 核：使用 4-8 线程加快同步速度\n");
+                sb.append("#\n");
+                sb.append("# Default: " + hashThreads + " (half of " + maxThreads + " available processors)\n");
+                sb.append("# 默认：" + hashThreads + "（可用 " + maxThreads + " 个处理器的一半）\n");
+                sb.append("# Range: 1 - " + maxThreads + "\n");
+                sb.append("# 范围：1 - " + maxThreads + "\n");
+                sb.append("hashThreads=" + hashThreads + "\n");
+
+                Files.writeString(configFile, sb.toString());
 
                 LOGGER.info("Saved client config to: {} (hashThreads={})", configFile, hashThreads);
             } catch (Exception e) {
@@ -329,28 +352,116 @@ public class ModConfig {
             try {
                 Files.createDirectories(configFile.getParent());
 
-                Properties props = new Properties();
+                StringBuilder sb = new StringBuilder();
+                sb.append("# MapSyncer Server Configuration\n");
+                sb.append("#\n");
 
-                // 通用设置
-                props.setProperty("enableDebugLogging", String.valueOf(enableDebugLogging));
-                props.setProperty("maxConcurrentRegions", String.valueOf(maxConcurrentRegions));
-                props.setProperty("maxSyncPacketSize", String.valueOf(maxSyncPacketSize));
-                props.setProperty("syncSpeedLimitKBps", String.valueOf(syncSpeedLimitKBps));
+                // ========== 通用设置 ==========
+                sb.append("# ========================================\n");
+                sb.append("# General settings / 通用设置\n");
+                sb.append("# ========================================\n");
+                sb.append("#\n");
+                sb.append("# Enable debug logging for map generation\n");
+                sb.append("# 启用调试日志记录（用于地图生成过程调试）\n");
+                sb.append("enableDebugLogging=" + enableDebugLogging + "\n");
+                sb.append("\n");
+                sb.append("# Maximum number of regions to convert concurrently\n");
+                sb.append("# 同时转换的最大区域数量\n");
+                sb.append("# Range: 1 - 16 / 范围：1 - 16\n");
+                sb.append("maxConcurrentRegions=" + maxConcurrentRegions + "\n");
+                sb.append("\n");
+                sb.append("# Maximum sync packet size in bytes\n");
+                sb.append("# 同步数据包最大字节数\n");
+                sb.append("#\n");
+                sb.append("# Size options for quick reference (all divide 1024KB/s evenly):\n");
+                sb.append("#   65536  = 64KB  (conservative, 16 packets/s at 1024KB/s)\n");
+                sb.append("#   131072 = 128KB (balanced, 8 packets/s at 1024KB/s)\n");
+                sb.append("#   262144 = 256KB (recommended, 4 packets/s at 1024KB/s)\n");
+                sb.append("#   524288 = 512KB (efficient, 2 packets/s at 1024KB/s)\n");
+                sb.append("#   1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)\n");
+                sb.append("#\n");
+                sb.append("# 大小选项供快速参考（均能被 1024KB/s 整除）：\n");
+                sb.append("#   65536  = 64KB  （保守，1024KB/s 时每秒 16 包）\n");
+                sb.append("#   131072 = 128KB （平衡，1024KB/s 时每秒 8 包）\n");
+                sb.append("#   262144 = 256KB （推荐，1024KB/s 时每秒 4 包）\n");
+                sb.append("#   524288 = 512KB （高效，1024KB/s 时每秒 2 包）\n");
+                sb.append("#   1048576 = 1MB  （最大，1024KB/s 时每秒 1 包）\n");
+                sb.append("#\n");
+                sb.append("# Default: 256KB (recommended), Range: 64KB - 1MB\n");
+                sb.append("# 默认：256KB（推荐），范围：64KB - 1MB\n");
+                sb.append("maxSyncPacketSize=" + maxSyncPacketSize + "\n");
+                sb.append("\n");
+                sb.append("# Sync speed limit in KB/s (0 = unlimited)\n");
+                sb.append("# 同步速度限制 KB/s（0 = 无限制）\n");
+                sb.append("#\n");
+                sb.append("# Speed options for quick reference:\n");
+                sb.append("#   100  = 100KB/s  (slow, suitable for limited bandwidth)\n");
+                sb.append("#   512  = 512KB/s  (moderate, half MiB)\n");
+                sb.append("#   1024 = 1024KB/s = 1MiB/s (default, recommended)\n");
+                sb.append("#   5120 = 5120KB/s = 5MiB/s (fast, suitable for LAN)\n");
+                sb.append("#   10240 = 10240KB/s = 10MiB/s (very fast)\n");
+                sb.append("#\n");
+                sb.append("# 速度选项供快速参考：\n");
+                sb.append("#   100  = 100KB/s  （慢速，适合带宽受限）\n");
+                sb.append("#   512  = 512KB/s  （中等，半 MiB）\n");
+                sb.append("#   1024 = 1024KB/s = 1MiB/s （默认，推荐）\n");
+                sb.append("#   5120 = 5120KB/s = 5MiB/s （快速，适合局域网）\n");
+                sb.append("#   10240 = 10240KB/s = 10MiB/s （非常快）\n");
+                sb.append("#\n");
+                sb.append("# Default: 1024 (1MiB/s), Range: 0 - 10240\n");
+                sb.append("# 默认：1024（1MiB/s），范围：0 - 10240\n");
+                sb.append("syncSpeedLimitKBps=" + syncSpeedLimitKBps + "\n");
+                sb.append("\n");
 
-                // 增量更新设置
-                props.setProperty("incrementalUpdateMode", incrementalUpdateMode.name());
-                props.setProperty("incrementalUpdateIntervalTicks", String.valueOf(incrementalUpdateIntervalTicks));
-                props.setProperty("scheduledUpdateHour", String.valueOf(scheduledUpdateHour));
-                props.setProperty("scheduledUpdateMinute", String.valueOf(scheduledUpdateMinute));
+                // ========== 增量更新设置 ==========
+                sb.append("# ========================================\n");
+                sb.append("# Incremental update settings / 增量更新设置\n");
+                sb.append("# ========================================\n");
+                sb.append("#\n");
+                sb.append("# Incremental update mode: DISABLED (off), TICK (periodic by ticks), SCHEDULED (daily at specific time)\n");
+                sb.append("# 增量更新模式：DISABLED（禁用），TICK（按 tick 周期更新），SCHEDULED（每日定时更新）\n");
+                sb.append("incrementalUpdateMode=" + incrementalUpdateMode.name() + "\n");
+                sb.append("\n");
+                sb.append("# Interval in server ticks for TICK mode (20 ticks = 1 second, default 200 = 10 seconds)\n");
+                sb.append("# TICK 模式的更新间隔（20 ticks = 1 秒，默认 200 = 10 秒）\n");
+                sb.append("# Range: 20 - 72000 / 范围：20 - 72000\n");
+                sb.append("incrementalUpdateIntervalTicks=" + incrementalUpdateIntervalTicks + "\n");
+                sb.append("\n");
+                sb.append("# Hour of day for SCHEDULED mode (0-23, uses server's local timezone)\n");
+                sb.append("# SCHEDULED 模式的更新时间（小时，0-23，使用服务器本地时区）\n");
+                sb.append("scheduledUpdateHour=" + scheduledUpdateHour + "\n");
+                sb.append("\n");
+                sb.append("# Minute of hour for SCHEDULED mode (0-59)\n");
+                sb.append("# SCHEDULED 模式的更新时间（分钟，0-59）\n");
+                sb.append("scheduledUpdateMinute=" + scheduledUpdateMinute + "\n");
+                sb.append("\n");
 
-                // 维度扫描配置
-                props.setProperty("defaultScanMode", defaultScanMode.name());
-                props.setProperty("defaultCaveStart", String.valueOf(defaultCaveStart));
-                props.setProperty("dimensionConfigs", String.join(";", dimensionConfigs));
+                // ========== 维度扫描配置 ==========
+                sb.append("# ========================================\n");
+                sb.append("# Dimension scan settings / 维度扫描设置\n");
+                sb.append("# ========================================\n");
+                sb.append("#\n");
+                sb.append("# Default scan mode for dimensions not in the dimension_configs list\n");
+                sb.append("# 未在维度配置列表中的维度的默认扫描模式\n");
+                sb.append("defaultScanMode=" + defaultScanMode.name() + "\n");
+                sb.append("\n");
+                sb.append("# Default cave start height for CAVE mode (ignored for SURFACE mode)\n");
+                sb.append("# CAVE 模式的洞穴起始高度（SURFACE 模式忽略此项）\n");
+                sb.append("# Range: -512 - 512 / 范围：-512 - 512\n");
+                sb.append("defaultCaveStart=" + defaultCaveStart + "\n");
+                sb.append("\n");
+                sb.append("# Per-dimension scan configuration list (string format)\n");
+                sb.append("# Format: \"dimension|scan_mode|cave_start|dim_type_info\"\n");
+                sb.append("# dim_type_info format: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
+                sb.append("# Example: \"minecraft:the_nether|CAVE|63|false|true|0|256|256\"\n");
+                sb.append("#\n");
+                sb.append("# 维度扫描配置列表（字符串格式）\n");
+                sb.append("# 格式：\"dimension|scan_mode|cave_start|dim_type_info\"\n");
+                sb.append("# dim_type_info 格式：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
+                sb.append("# 例如：\"minecraft:the_nether|CAVE|63|false|true|0|256|256\"\n");
+                sb.append("dimensionConfigs=" + String.join(";", dimensionConfigs) + "\n");
 
-                try (OutputStream os = Files.newOutputStream(configFile)) {
-                    props.store(os, "MapSyncer Server Configuration");
-                }
+                Files.writeString(configFile, sb.toString());
 
                 LOGGER.info("Saved config to: {}", configFile);
             } catch (Exception e) {
