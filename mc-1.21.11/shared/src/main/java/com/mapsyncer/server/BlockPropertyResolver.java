@@ -399,6 +399,11 @@ public class BlockPropertyResolver {
             return false;  // 树叶不作为 overlay，是实体方块
         }
 
+        // 排除雪片：雪层方块虽然 lightBlock 很低，但应作为表面渲染
+        if (block == Blocks.SNOW) {
+            return false;
+        }
+
         // 其他 lightBlock < 15 的方块可能是 translucent
         int lightBlock = getLightBlock(state);
         if (lightBlock > 0 && lightBlock < 15) {
