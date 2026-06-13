@@ -280,8 +280,8 @@ public class BlockPropertyResolver {
             // 检查是否有有效的 MapColor
             boolean hasMapColor = checkHasMapColor(defaultState, blockName);
 
-            // 检查是否有地图颜色（非空气、非隐形、非问题方块）
-            boolean hasVanillaColor = !isAir && !isInvisible && !buggedBlocks.containsKey(blockName);
+            // 检查是否有地图颜色（非空气、非隐形、非问题方块，且必须有有效的MapColor）
+            boolean hasVanillaColor = !isAir && !isInvisible && !buggedBlocks.containsKey(blockName) && hasMapColor;
 
             return new BlockProperties(
                 isAir, isWater, isLava, isFluid,
