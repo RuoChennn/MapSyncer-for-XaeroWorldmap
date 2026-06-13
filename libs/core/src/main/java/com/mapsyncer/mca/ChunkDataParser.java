@@ -98,7 +98,9 @@ public class ChunkDataParser {
         int chunkBottomY,           // Chunk底部世界Y坐标
         String status,              // Chunk状态 ("minecraft:full", ...)
         int[][] heightmap,          // 高度图 (16x16, 世界绝对Y坐标)
-        List<ChunkSectionParser.SectionData> sections
+        List<ChunkSectionParser.SectionData> sections,
+        int minSectionY,            // 最底section的Y，用于sectionLookup偏移
+        ChunkSectionParser.SectionData[] sectionLookup  // O(1) section查询
     ) {}
 
     /**
@@ -162,7 +164,21 @@ public class ChunkDataParser {
         // 按Y坐标从高到低排序（用于从上到下扫描）
         sections.sort((a, b) -> Integer.compare(b.sectionY(), a.sectionY()));
 
-        return new ChunkInfo(localX, localZ, yPos, chunkBottomY, status, heightmap, sections);
+        // 构建 O(1) section lookup 数组
+        int minSectionY = 0;
+        ChunkSectionParser.SectionData[] sectionLookup = null;
+        if (!sections.isEmpty()) {
+            int maxY = sections.get(0).sectionY();
+            minSectionY = sections.get(sections.size() - 1).sectionY();
+            int range = maxY - minSectionY + 1;
+            sectionLookup = new ChunkSectionParser.SectionData[range];
+            for (ChunkSectionParser.SectionData sec : sections) {
+                int idx = sec.sectionY() - minSectionY;
+                if (idx >= 0 && idx < range) sectionLookup[idx] = sec;
+            }
+        }
+
+        return new ChunkInfo(localX, localZ, yPos, chunkBottomY, status, heightmap, sections, minSectionY, sectionLookup);
     }
 
     
@@ -317,13 +333,13 @@ public class ChunkDataParser {
     public static ChunkSectionParser.BlockState getBlockStateAt(ChunkInfo chunk, int x, int worldY, int z) {
         int sectionY = worldY >> 4;
         int localY = worldY & 0xF;
-
-        for (ChunkSectionParser.SectionData section : chunk.sections()) {
-            if (section.sectionY() == sectionY) {
-                return ChunkSectionParser.getBlockStateAt(section, x, localY, z);
+        ChunkSectionParser.SectionData[] lookup = chunk.sectionLookup();
+        if (lookup != null) {
+            int idx = sectionY - chunk.minSectionY();
+            if (idx >= 0 && idx < lookup.length && lookup[idx] != null) {
+                return ChunkSectionParser.getBlockStateAt(lookup[idx], x, localY, z);
             }
         }
-
         return new ChunkSectionParser.BlockState("minecraft:air", Map.of());
     }
 
@@ -353,13 +369,13 @@ public class ChunkDataParser {
     public static String getBiomeAt(ChunkInfo chunk, int x, int worldY, int z, boolean smoothBoundary) {
         int sectionY = worldY >> 4;
         int localY = worldY & 0xF;
-
-        for (ChunkSectionParser.SectionData section : chunk.sections()) {
-            if (section.sectionY() == sectionY) {
-                return ChunkSectionParser.getBiomeAt(section, x, localY, z, smoothBoundary);
+        ChunkSectionParser.SectionData[] lookup = chunk.sectionLookup();
+        if (lookup != null) {
+            int idx = sectionY - chunk.minSectionY();
+            if (idx >= 0 && idx < lookup.length && lookup[idx] != null) {
+                return ChunkSectionParser.getBiomeAt(lookup[idx], x, localY, z, smoothBoundary);
             }
         }
-
         return null;
     }
 

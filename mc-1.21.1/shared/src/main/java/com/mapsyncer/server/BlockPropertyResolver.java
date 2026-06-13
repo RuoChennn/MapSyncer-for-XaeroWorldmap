@@ -76,6 +76,7 @@ public class BlockPropertyResolver {
 
     /** BlockPropertyLookup 适配器实例，供 core 模块的 RegionConverterStandalone 使用 */
     public static final BlockPropertyLookup INSTANCE = new BlockPropertyLookup() {
+        @Override public int getFlags(String name) { return BlockPropertyResolver.getFlags(name); }
         @Override public boolean isWater(String name) { return BlockPropertyResolver.isWater(name); }
         @Override public boolean isTransparent(String name) { return BlockPropertyResolver.isTransparent(name); }
         @Override public boolean isInvisible(String name) { return BlockPropertyResolver.isInvisible(name); }
@@ -1024,5 +1025,19 @@ public class BlockPropertyResolver {
      */
     public static boolean isWaterInheriting(String blockName) {
         return getProperties(blockName).isAquaticPlant();
+    }
+
+    public static int getFlags(String blockName) {
+        BlockProperties p = getProperties(blockName);
+        int flags = 0;
+        if (p.isWater()) flags |= BlockPropertyLookup.FLAG_WATER;
+        if (p.isTransparent()) flags |= BlockPropertyLookup.FLAG_TRANSPARENT;
+        if (p.isInvisible()) flags |= BlockPropertyLookup.FLAG_INVISIBLE;
+        if (p.shouldOverlay()) flags |= BlockPropertyLookup.FLAG_SHOULD_OVERLAY;
+        if (p.hasVanillaColor()) flags |= BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR;
+        if (p.isGlowing()) flags |= BlockPropertyLookup.FLAG_GLOWING;
+        if (p.isTranslucentFluid()) flags |= BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID;
+        if (p.isAquaticPlant()) flags |= BlockPropertyLookup.FLAG_WATER_INHERITING;
+        return flags;
     }
 }

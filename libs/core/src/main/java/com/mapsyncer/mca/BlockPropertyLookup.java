@@ -10,6 +10,22 @@ import java.util.Map;
  */
 public interface BlockPropertyLookup {
 
+    // flags bit definitions
+    int FLAG_WATER = 1;
+    int FLAG_TRANSPARENT = 2;
+    int FLAG_INVISIBLE = 4;
+    int FLAG_SHOULD_OVERLAY = 8;
+    int FLAG_HAS_VANILLA_COLOR = 16;
+    int FLAG_GLOWING = 32;
+    int FLAG_TRANSLUCENT_FLUID = 64;
+    int FLAG_WATER_INHERITING = 128;
+
+    /**
+     * 批量查询方块属性标志（位掩码），避免多次 HashMap 查询。
+     * @return 按上述 FLAG_* 定义的位掩码
+     */
+    int getFlags(String blockName);
+
     boolean isWater(String blockName);
 
     boolean isTransparent(String blockName);

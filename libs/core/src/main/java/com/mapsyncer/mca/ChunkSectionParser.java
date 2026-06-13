@@ -229,7 +229,11 @@ public class ChunkSectionParser {
         long[] biomeData,                   // 位压缩的生物群系索引数据
         int biomeBitsPerEntry,              // 每个生物群系索引的位数
         byte[] blockLight,                  // 方块光照数组 (2048字节)
-        byte[] skyLight                     // 天空光照数组 (2048字节)
+        byte[] skyLight,                    // 天空光照数组 (2048字节)
+        int blockUVal,                      // floor(64 / blockBitsPerEntry)，预计算
+        long blockMask,                     // (1L << blockBitsPerEntry) - 1，预计算
+        byte[] decodedBlockLight,           // 预解码的方块光照 (4096字节)
+        byte[] decodedSkyLight              // 预解码的天空光照 (4096字节)
     ) {
         // record 自动提供 blockNames() 访问方法，无需额外定义
     }
@@ -304,11 +308,43 @@ public class ChunkSectionParser {
         byte[] blockLight = sectionTag.getByteArray("BlockLight");
         byte[] skyLight = sectionTag.getByteArray("SkyLight");
 
+        // 预计算 blockData bit-reading 参数
+        int blockUVal = 0;
+        long blockMask = 0;
+        if (blockData != null && blockData.length > 0 && blockBitsPerEntry > 0) {
+            blockUVal = 64 / blockBitsPerEntry;
+            blockMask = (1L << blockBitsPerEntry) - 1L;
+        }
+
+        // 预解码光照 nibble arrays
+        byte[] decodedBlockLight = null;
+        byte[] decodedSkyLight = null;
+        byte[] rawBlockLight = blockLight.length == 2048 ? blockLight : null;
+        byte[] rawSkyLight = skyLight.length == 2048 ? skyLight : null;
+        if (rawBlockLight != null) {
+            decodedBlockLight = new byte[4096];
+            for (int i = 0; i < 2048; i++) {
+                int b = rawBlockLight[i] & 0xFF;
+                int idx = i << 1;
+                decodedBlockLight[idx] = (byte) (b & 0xF);
+                decodedBlockLight[idx + 1] = (byte) ((b >> 4) & 0xF);
+            }
+        }
+        if (rawSkyLight != null) {
+            decodedSkyLight = new byte[4096];
+            for (int i = 0; i < 2048; i++) {
+                int b = rawSkyLight[i] & 0xFF;
+                int idx = i << 1;
+                decodedSkyLight[idx] = (byte) (b & 0xF);
+                decodedSkyLight[idx + 1] = (byte) ((b >> 4) & 0xF);
+            }
+        }
+
         return new SectionData(
             sectionY, blockPalette, blockNames, blockData, blockBitsPerEntry,
             biomePalette, biomeData, biomeBitsPerEntry,
-            blockLight.length == 2048 ? blockLight : null,
-            skyLight.length == 2048 ? skyLight : null
+            rawBlockLight, rawSkyLight,
+            blockUVal, blockMask, decodedBlockLight, decodedSkyLight
         );
     }
 
@@ -410,8 +446,10 @@ public class ChunkSectionParser {
         // 计算索引 (YZX顺序)
         int blockIndex = (y << 8) | (z << 4) | x;
 
-        // 从位数组读取palette索引
-        int paletteIndex = readBitsFromArray(section.blockData, blockIndex, section.blockBitsPerEntry);
+        // 从位数组读取palette索引（使用预计算值避免重复除法/掩码）
+        int u = section.blockUVal();
+        long mask = section.blockMask();
+        int paletteIndex = readBitsFast(section.blockData, blockIndex, u, section.blockBitsPerEntry(), mask);
 
         if (paletteIndex < 0 || paletteIndex >= section.blockPalette.size()) {
             return new BlockState("minecraft:air", Map.of());
@@ -553,21 +591,16 @@ public class ChunkSectionParser {
         if (data == null || data.length == 0 || bitsPerEntry <= 0) {
             return 0;
         }
-
-        // u = floor(64/b)，一个long能存储的元素数量
         int u = 64 / bitsPerEntry;
+        long mask = (1L << bitsPerEntry) - 1L;
+        return readBitsFast(data, index, u, bitsPerEntry, mask);
+    }
 
-        // Wiki公式：data[i/u] >>> ((i%u)*b) & ((1L<<b)-1)
+    public static int readBitsFast(long[] data, int index, int u, int bitsPerEntry, long mask) {
         int longIndex = index / u;
-        int posInLong = index % u;
-        int bitOffset = posInLong * bitsPerEntry;
-
-        if (longIndex >= data.length) {
-            return 0;
-        }
-
-        // 使用无符号右移，然后掩码取b位
-        return (int) ((data[longIndex] >>> bitOffset) & ((1L << bitsPerEntry) - 1L));
+        if (longIndex >= data.length) return 0;
+        int bitOffset = (index % u) * bitsPerEntry;
+        return (int) ((data[longIndex] >>> bitOffset) & mask);
     }
 
     /**
@@ -580,6 +613,9 @@ public class ChunkSectionParser {
      * @return 方块光照值 (0-15)
      */
     public static byte getBlockLight(SectionData section, int x, int y, int z) {
+        if (section.decodedBlockLight() != null) {
+            return section.decodedBlockLight()[(y << 8) | (z << 4) | x];
+        }
         return getLightValue(section.blockLight(), x, y, z);
     }
 
@@ -593,6 +629,9 @@ public class ChunkSectionParser {
      * @return 天空光照值 (0-15)
      */
     public static byte getSkyLight(SectionData section, int x, int y, int z) {
+        if (section.decodedSkyLight() != null) {
+            return section.decodedSkyLight()[(y << 8) | (z << 4) | x];
+        }
         return getLightValue(section.skyLight(), x, y, z);
     }
 
