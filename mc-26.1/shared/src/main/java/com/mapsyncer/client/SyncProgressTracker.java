@@ -208,9 +208,9 @@ public class SyncProgressTracker {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && tracking) {
             if (total > 0) {
-                mc.player.sendSystemMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent));
+                mc.player.sendOverlayMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent));
             } else {
-                mc.player.sendSystemMessage(ChatUtils.prefix().append(Component.literal(status)));
+                mc.player.sendOverlayMessage(ChatUtils.prefix().append(Component.literal(status)));
             }
         }
     }
