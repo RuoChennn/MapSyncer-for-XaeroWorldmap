@@ -206,10 +206,9 @@ public class ChunkDataParser {
         if (rootTag.contains("Heightmaps", Tag.TAG_COMPOUND)) {
             Tag.Compound heightmaps = rootTag.getCompound("Heightmaps");
 
-            // 优先使用 MOTION_BLOCKING_NO_LEAVES（包括水方块）
-            // 这样能正确检测上方的水方块
-            if (heightmaps.contains("MOTION_BLOCKING_NO_LEAVES", Tag.TAG_LONG_ARRAY)) {
-                long[] data = heightmaps.getLongArray("MOTION_BLOCKING_NO_LEAVES");
+            // 优先使用 WORLD_SURFACE（与 Xaero 一致，树冠计入高度，树叶渲染更饱满）
+            if (heightmaps.contains("WORLD_SURFACE", Tag.TAG_LONG_ARRAY)) {
+                long[] data = heightmaps.getLongArray("WORLD_SURFACE");
                 int bitsPerHeight = calculateBitsPerHeight(data.length, worldHeightRange);
                 if (bitsPerHeight > 0 && bitsPerHeight <= 10) {
                     decodeHeightmapLongArray(data, bitsPerHeight, chunkBottomY, heightmap);
@@ -217,8 +216,8 @@ public class ChunkDataParser {
                 }
             }
 
-            // 备用 WORLD_SURFACE（不包括水方块）
-            if (heightmaps.contains("WORLD_SURFACE", Tag.TAG_LONG_ARRAY)) {
+            // 备用 MOTION_BLOCKING_NO_LEAVES
+            if (heightmaps.contains("MOTION_BLOCKING_NO_LEAVES", Tag.TAG_LONG_ARRAY)) {
                 long[] data = heightmaps.getLongArray("WORLD_SURFACE");
                 int bitsPerHeight = calculateBitsPerHeight(data.length, worldHeightRange);
                 if (bitsPerHeight > 0 && bitsPerHeight <= 10) {
