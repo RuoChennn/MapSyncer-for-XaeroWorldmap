@@ -395,7 +395,7 @@ public class MapPacketHandler {
                         AutoSyncManager.markComplete();
                         if (Minecraft.getInstance().player != null) {
                             Minecraft.getInstance().player.displayClientMessage(
-                                ChatUtils.prefix().append(ChatUtils.success("mapsyncer.autosync.complete")),
+                                ChatUtils.success("mapsyncer.autosync.complete"),
                                 false);
                         }
                     }

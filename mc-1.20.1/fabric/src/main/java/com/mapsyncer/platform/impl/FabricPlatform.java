@@ -260,12 +260,8 @@ public class FabricPlatform implements Platform {
                 return serverDir;
             }
 
-            Object mc = Class.forName("net.minecraft.client.Minecraft")
-                    .getMethod("getInstance").invoke(null);
-            java.io.File gameDir = (java.io.File) mc.getClass().getField("gameDirectory").get(mc);
-            if (gameDir != null) {
-                return com.mapsyncer.client.XaeroMapIntegrator.getWorldMapDir(gameDir.toPath());
-            }
+            Path gameDir = Path.of(System.getProperty("user.dir"));
+            return com.mapsyncer.util.XaeroPathResolver.getWorldMapDir(gameDir);
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
         }
