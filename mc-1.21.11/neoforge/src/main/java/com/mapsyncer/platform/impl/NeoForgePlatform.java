@@ -251,7 +251,7 @@ public class NeoForgePlatform implements Platform {
 
             Minecraft mc = Minecraft.getInstance();
             if (mc.gameDirectory != null) {
-                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
+                return com.mapsyncer.util.XaeroPathResolver.getWorldMapDir(mc.gameDirectory.toPath());
             }
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());

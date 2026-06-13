@@ -263,7 +263,7 @@ public class FabricPlatform implements Platform {
             }
 
             Path gameDir = Path.of(System.getProperty("user.dir"));
-            return gameDir.resolve("xaero").resolve("world-map");
+            return com.mapsyncer.util.XaeroPathResolver.getWorldMapDir(gameDir);
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
         }
