@@ -101,6 +101,11 @@ public class FabricPayloadAdapters {
             buf.writeLong(entry.getValue().timestampSeconds());
             buf.writeUtf(entry.getValue().hash());
         }
+        buf.writeBoolean(payload.totalParts() > 1);
+        if (payload.totalParts() > 1) {
+            buf.writeInt(payload.partIndex());
+            buf.writeInt(payload.totalParts());
+        }
     }
 
     private static SyncRequestPayload readSyncRequest(RegistryFriendlyByteBuf buf) {
@@ -112,7 +117,18 @@ public class FabricPayloadAdapters {
             String hash = buf.readUtf();
             metaMap.put(path, new ClientMeta(timestampSeconds, hash));
         }
-        return new SyncRequestPayload(metaMap);
+
+        int partIndex = 0;
+        int totalParts = 0;
+        if (buf.readableBytes() > 0) {
+            boolean isSplit = buf.readBoolean();
+            if (isSplit) {
+                partIndex = buf.readInt();
+                totalParts = buf.readInt();
+            }
+        }
+
+        return new SyncRequestPayload(metaMap, partIndex, totalParts);
     }
 
     // ===== 同步响应序列化 =====
@@ -155,10 +171,12 @@ public class FabricPayloadAdapters {
 
     private static void writeServerInstalled(RegistryFriendlyByteBuf buf, ServerInstalledPayload payload) {
         buf.writeUtf(payload.version());
+        buf.writeLong(payload.lastGenerationTimestamp());
+        buf.writeInt(payload.autoSyncIntervalMinutes());
     }
 
     private static ServerInstalledPayload readServerInstalled(RegistryFriendlyByteBuf buf) {
-        return new ServerInstalledPayload(buf.readUtf());
+        return new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt());
     }
 
     // ===== ChunkMapData 序列化 =====
@@ -174,6 +192,11 @@ public class FabricPayloadAdapters {
         buf.writeBoolean(hasCaveLayer);
         if (hasCaveLayer) {
             buf.writeInt(data.caveLayer);
+        }
+        buf.writeBoolean(data.totalParts > 1);
+        if (data.totalParts > 1) {
+            buf.writeInt(data.partIndex);
+            buf.writeInt(data.totalParts);
         }
     }
 
@@ -192,6 +215,16 @@ public class FabricPayloadAdapters {
             }
         }
 
-        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer);
+        int partIndex = 0;
+        int totalParts = 0;
+        if (buf.readableBytes() > 0) {
+            boolean isSplit = buf.readBoolean();
+            if (isSplit) {
+                partIndex = buf.readInt();
+                totalParts = buf.readInt();
+            }
+        }
+
+        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer, partIndex, totalParts);
     }
 }

@@ -16,9 +16,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 客户端断开连接时的统一清理入口。
@@ -76,6 +80,50 @@ public class MapPacketHandler {
     /** 已加载的区域集合（避免重复加载） */
     private static volatile Set<XaeroMapDataHandler.RegionCoord> loadedRegions = new HashSet<>();
 
+    /** 分片重组缓冲区：key = "regionX,regionZ,dimension,caveLayer"，value = 分片数组 */
+    private static final Map<String, ChunkMapData[]> partBuffer = new ConcurrentHashMap<>();
+
+    private static String partKey(ChunkMapData chunk) {
+        return chunk.regionX + "," + chunk.regionZ + "," + chunk.dimension + "," + chunk.caveLayer;
+    }
+
+    /**
+     * 将收到的分片存入缓冲区，全部到达后组装完整 ChunkMapData 返回。
+     * 未分片的数据直接返回。
+     *
+     * @return 组装完成的 ChunkMapData，如果分片尚未到齐则返回 null
+     */
+    private static ChunkMapData assemblePart(ChunkMapData chunk) {
+        if (chunk.totalParts <= 1) {
+            return chunk;
+        }
+
+        String key = partKey(chunk);
+        ChunkMapData[] parts = partBuffer.computeIfAbsent(key, k -> new ChunkMapData[chunk.totalParts]);
+        parts[chunk.partIndex] = chunk;
+
+        for (ChunkMapData p : parts) {
+            if (p == null) return null;
+        }
+
+        partBuffer.remove(key);
+
+        int totalLen = 0;
+        for (ChunkMapData p : parts) {
+            totalLen += p.data.length;
+        }
+        byte[] assembled = new byte[totalLen];
+        int offset = 0;
+        for (ChunkMapData p : parts) {
+            System.arraycopy(p.data, 0, assembled, offset, p.data.length);
+            offset += p.data.length;
+        }
+
+        ChunkMapData first = parts[0];
+        return new ChunkMapData(first.regionX, first.regionZ, first.dimension,
+                assembled, first.timestampSeconds, first.caveLayer);
+    }
+
     /**
      * 检查当前同步是否陈旧（运行时间过长）。
      */
@@ -95,6 +143,7 @@ public class MapPacketHandler {
         syncStartTime = 0;
         clearReceivedChunks();
         loadedRegions.clear();
+        partBuffer.clear();
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
@@ -112,6 +161,7 @@ public class MapPacketHandler {
      * 清理所有同步状态、反射缓存、哈希计算线程池和时间戳缓存。
      */
     public static void onDisconnect() {
+        AutoSyncManager.cancel();
         resetServerStatus();
         clearSyncData();
         XaeroReflectionHelper.clearCache();
@@ -140,6 +190,32 @@ public class MapPacketHandler {
                 serverInstalled = true;
                 serverVersion = payload.version();
                 LOGGER.info("Server has MapSyncer installed, version: {}", serverVersion);
+
+                // 显示自动同步状态
+                Object[] statusKey = AutoSyncManager.getStatusKey(payload.autoSyncIntervalMinutes());
+                String key = (String) statusKey[0];
+                if (statusKey.length > 1) {
+                    Minecraft.getInstance().player.displayClientMessage(
+                        ChatUtils.prefix().append(ChatUtils.desc(key, statusKey[1])), false);
+                } else {
+                    Minecraft.getInstance().player.displayClientMessage(
+                        ChatUtils.prefix().append(ChatUtils.desc(key)), false);
+                }
+
+                if (AutoSyncManager.shouldAutoSync(
+                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes())) {
+                    AutoSyncManager.schedule(() -> {
+                        Minecraft.getInstance().execute(() -> {
+                            if (Minecraft.getInstance().player != null
+                                    && !MapPacketHandler.isSyncInProgress()) {
+                                Minecraft.getInstance().player.displayClientMessage(
+                                    ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
+                                AutoSyncManager.markStarted();
+                                MapSyncerCommandLogic.executeSyncAll();
+                            }
+                        });
+                    }, 5);
+                }
             });
         });
 
@@ -204,6 +280,12 @@ public class MapPacketHandler {
             ClientTimestampCache tsCache = serverDir != null && serverDir.toFile().exists()
                     ? ClientTimestampCache.getInstance(serverDir) : null;
 
+            // 收到服务端任何响应即确认服务端已安装 MapSyncer
+            if (!serverInstalled) {
+                serverInstalled = true;
+                LOGGER.info("Server confirmed (SyncResponse received), MapSyncer detected");
+            }
+
             // 根据状态决定处理方式
             if ("no_cache".equals(status) || "dim_not_available".equals(status)) {
                 LOGGER.info("Server returned error status: {}, no sync needed", status);
@@ -251,39 +333,45 @@ public class MapPacketHandler {
 
             // 流式处理：写入后立即处理
             for (ChunkMapData chunk : chunks) {
+                // 组装分片
+                ChunkMapData assembled = assemblePart(chunk);
+                if (assembled == null) {
+                    continue; // 分片尚未到齐，等待后续包
+                }
+
                 XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
-                    chunk.regionX, chunk.regionZ, chunk.caveLayer);
+                    assembled.regionX, assembled.regionZ, assembled.caveLayer);
                 updatedRegionCoords.add(coord);
 
                 // 写入文件
-                Path mwDir = XaeroMapIntegrator.writeChunkDataAndGetMwDir(chunk, serverWorldId);
+                Path mwDir = XaeroMapIntegrator.writeChunkDataAndGetMwDir(assembled, serverWorldId);
                 if (mwDir != null) {
                     lastMwDir = mwDir;
                 }
 
                 // 根据维度类型决定处理哪个层
                 boolean shouldProcess = isCaveDimension
-                    ? (chunk.caveLayer != Integer.MAX_VALUE)  // 地狱：洞穴层
-                    : (chunk.caveLayer == Integer.MAX_VALUE); // 主世界/末地：地表层
+                    ? (assembled.caveLayer != Integer.MAX_VALUE)  // 地狱：洞穴层
+                    : (assembled.caveLayer == Integer.MAX_VALUE); // 主世界/末地：地表层
 
                 // 判断是否在视距内
                 Set<XaeroMapDataHandler.RegionCoord> viewRegionsForLayer =
-                    XaeroMapIntegrator.getViewDistanceRegions(chunk.caveLayer);
+                    XaeroMapIntegrator.getViewDistanceRegions(assembled.caveLayer);
                 boolean inViewDistance = viewRegionsForLayer.contains(coord);
 
                 if (shouldProcess) {
                     // 清除缓存文件并立即触发加载
                     clearSingleRegionCache(coord);
-                    triggerSingleRegionLoad(coord, chunk.caveLayer, inViewDistance);
+                    triggerSingleRegionLoad(coord, assembled.caveLayer, inViewDistance);
                     LOGGER.debug("区域 ({}, {}) layer={} inView={} 已清除缓存并触发加载",
-                        coord.x(), coord.z(), chunk.caveLayer, inViewDistance);
+                        coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
                 }
 
                 // 更新时间戳缓存
                 if (tsCache != null) {
-                    String relativePath = buildRelativePathForCache(chunk);
-                    String hash = HashUtils.computeHash(chunk.data);
-                    tsCache.update(relativePath, chunk.timestampSeconds, hash);
+                    String relativePath = buildRelativePathForCache(assembled);
+                    String hash = HashUtils.computeHash(assembled.data);
+                    tsCache.update(relativePath, assembled.timestampSeconds, hash);
                 }
             }
 
@@ -302,6 +390,15 @@ public class MapPacketHandler {
                 if (!updatedRegionCoords.isEmpty()) {
                     XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.completeWithCount(totalReceived);
+
+                    if (AutoSyncManager.isActive()) {
+                        AutoSyncManager.markComplete();
+                        if (Minecraft.getInstance().player != null) {
+                            Minecraft.getInstance().player.displayClientMessage(
+                                ChatUtils.success("mapsyncer.autosync.complete"),
+                                false);
+                        }
+                    }
 
                     resumeChunkUpdates();
                     if (tsCache != null) {
@@ -326,6 +423,9 @@ public class MapPacketHandler {
      */
     private static void handleProgressUpdate(SyncProgressPayload payload, PayloadContext context) {
         context.enqueueWork(() -> {
+            // 自动同步时静默，不显示进度
+            if (AutoSyncManager.isActive()) return;
+
             // 进度去重：相同 (processed, total) 在 100ms 内到达视为重复
             int processed = payload.processed();
             int total = payload.total();
@@ -355,6 +455,7 @@ public class MapPacketHandler {
     private static void clearSyncState() {
         updatedRegionCoords.clear();
         loadedRegions.clear();
+        partBuffer.clear();
         lastMwDir = null;
         syncStartTime = 0;
     }

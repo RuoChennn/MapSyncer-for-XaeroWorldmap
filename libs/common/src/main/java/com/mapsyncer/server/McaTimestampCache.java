@@ -328,6 +328,11 @@ public class McaTimestampCache {
             LOGGER.error("Failed to scan region directory: {}", regionDir, e);
         }
 
+        // 扫描后清理已不存在的 MCA 条目，防止缓存无限增长
+        if (getTotalCachedRegions() > MAX_CACHE_REGIONS) {
+            trimStaleEntries(dimension, regionDir);
+        }
+
         return needsRegeneration;
     }
 

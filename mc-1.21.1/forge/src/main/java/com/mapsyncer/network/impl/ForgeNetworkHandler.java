@@ -20,14 +20,13 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.SimpleChannel;
 import net.minecraftforge.event.network.CustomPayloadEvent;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /**
  * Forge 1.21 网络处理器实现
- *
- * <p>实现 NetworkHandler 泛型接口，适配 Forge 1.21 的网络 API。</p>
- * <p>Forge 1.21 使用 ChannelBuilder/SimpleChannel API，使用 FriendlyByteBuf 和 CustomPayloadEvent.Context。</p>
- * <p>类型安全：PLAYER_TYPE=ServerPlayer, EVENT_TYPE=Object（Forge不需要事件）</p>
  */
 public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
 
@@ -36,18 +35,25 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
         .networkProtocolVersion(1)
         .simpleChannel();
 
+    private static volatile boolean initialized = false;
+
+    /** 已确认安装 MapSyncer 的客户端 — 仅对这些玩家发送自定义 payload */
+    static final Set<UUID> confirmedPlayers = ConcurrentHashMap.newKeySet();
+
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
-    // 初始化：注册所有消息类型
     public void init() {
-        // 同步请求（客户端 -> 服务端）
+        // 同步请求（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
         CHANNEL.messageBuilder(ForgeSyncRequestMessage.class, 0, NetworkDirection.PLAY_TO_SERVER)
             .encoder(ForgeSyncRequestMessage::encode)
             .decoder(ForgeSyncRequestMessage::decode)
             .consumerMainThread((msg, ctx) -> {
+                if (ctx.getSender() != null) {
+                    confirmPlayer(ctx.getSender().getUUID());
+                }
                 if (syncRequestHandler != null) {
                     syncRequestHandler.accept(msg.getData(), new PayloadContext(ctx));
                 }
@@ -90,7 +96,8 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
 
     @Override
     public void registerHandlers(Object event) {
-        // Forge 1.21 在构造时直接注册，不需要事件
+        if (initialized) return;
+        initialized = true;
         init();
     }
 
@@ -101,16 +108,19 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
 
     @Override
     public void sendToPlayer(ServerPlayer player, SyncResponsePayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
         CHANNEL.send(new ForgeSyncResponseMessage(payload), PacketDistributor.PLAYER.with(player));
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, SyncProgressPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
         CHANNEL.send(new ForgeSyncProgressMessage(payload), PacketDistributor.PLAYER.with(player));
     }
 
     @Override
     public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
         CHANNEL.send(new ForgeServerInstalledMessage(payload), PacketDistributor.PLAYER.with(player));
     }
 
@@ -151,5 +161,15 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
             return forgeCtx.getSender();
         }
         return null;
+    }
+
+    /** 确认客户端安装了 MapSyncer（收到客户端请求时调用） */
+    public static void confirmPlayer(UUID playerId) {
+        confirmedPlayers.add(playerId);
+    }
+
+    /** 玩家断线时清理确认状态 */
+    public static void onPlayerDisconnect(UUID playerId) {
+        confirmedPlayers.remove(playerId);
     }
 }

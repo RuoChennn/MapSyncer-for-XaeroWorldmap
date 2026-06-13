@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.network.impl.ForgeNetworkHandler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
@@ -9,7 +10,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.TickEvent;
 
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(value = {Dist.CLIENT, Dist.DEDICATED_SERVER}, bus = EventBusSubscriber.Bus.FORGE)
 public class PlayerJoinHandler {
 
     @SubscribeEvent
@@ -22,6 +23,7 @@ public class PlayerJoinHandler {
     @SubscribeEvent
     public static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
         PlayerJoinHandlerLogic.onPlayerLeave(event.getEntity().getUUID());
+        ForgeNetworkHandler.onPlayerDisconnect(event.getEntity().getUUID());
     }
 
     @SubscribeEvent

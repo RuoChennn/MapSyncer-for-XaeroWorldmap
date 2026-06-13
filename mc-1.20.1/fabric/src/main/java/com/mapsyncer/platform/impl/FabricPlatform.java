@@ -27,9 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fabric 1.20.1 骞冲彴瀹炵幇
- *
- * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 Fabric 1.20.1 鐨?API銆?
+ * Fabric 1.20.1 平台实现
  */
 public class FabricPlatform implements Platform {
 
@@ -37,7 +35,6 @@ public class FabricPlatform implements Platform {
 
     private MinecraftServer server;
 
-    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     public void setServer(MinecraftServer server) {
@@ -69,11 +66,10 @@ public class FabricPlatform implements Platform {
         return net.fabricmc.loader.api.FabricLoader.getInstance().getEnvironmentType() == net.fabricmc.api.EnvType.CLIENT;
     }
 
-    // ===== 鏂瑰潡灞炴€?=====
+    // ===== 方块属性 =====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 妫€鏌ョ紦瀛?
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
@@ -96,7 +92,6 @@ public class FabricPlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€э紙鏈嶅姟绔彲鐢級
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -130,7 +125,7 @@ public class FabricPlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 涓栫晫淇℃伅 =====
+    // ===== 世界信息 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -142,7 +137,7 @@ public class FabricPlatform implements Platform {
         return 320;
     }
 
-    // ===== 缁村害淇℃伅 =====
+    // ===== 维度信息 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -154,7 +149,7 @@ public class FabricPlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 閰嶇疆绯荤粺 =====
+    // ===== 配置系统 =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
@@ -246,7 +241,7 @@ public class FabricPlatform implements Platform {
         return ModConfig.SERVER().getConfigForDimension(dimensionPath);
     }
 
-    // ===== 鏂囦欢璺緞 =====
+    // ===== 文件路径 =====
 
     @Override
     public Path getServerMapCacheDir() {
@@ -260,19 +255,13 @@ public class FabricPlatform implements Platform {
     @Override
     public Path getClientXaeroWorldMapDir() {
         try {
-            // 浣跨敤 XaeroMapIntegrator 鑾峰彇褰撳墠鏈嶅姟鍣ㄧ洰褰?
             Path serverDir = com.mapsyncer.client.XaeroMapIntegrator.getCurrentServerDirectory();
             if (serverDir != null) {
                 return serverDir;
             }
 
-            // 鍥為€€锛氳繑鍥為粯璁?Xaero 鐩綍锛堥€氳繃鍙嶅皠閬垮厤鏈嶅姟绔姞杞藉鎴风绫伙級
-            Object mc = Class.forName("net.minecraft.client.Minecraft")
-                    .getMethod("getInstance").invoke(null);
-            java.io.File gameDir = (java.io.File) mc.getClass().getField("gameDirectory").get(mc);
-            if (gameDir != null) {
-                return com.mapsyncer.client.XaeroMapIntegrator.getWorldMapDir(gameDir.toPath());
-            }
+            Path gameDir = Path.of(System.getProperty("user.dir"));
+            return com.mapsyncer.util.XaeroPathResolver.getWorldMapDir(gameDir);
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
         }
@@ -292,14 +281,14 @@ public class FabricPlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 鏃ュ織 =====
+    // ===== 日志 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 宸ュ叿鏂规硶 =====
+    // ===== 工具方法 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -332,7 +321,6 @@ public class FabricPlatform implements Platform {
     @Override
     public void recordUpdatedRegions(Set<RegionCoord> regions) {
         try {
-            // 杞崲 Platform.RegionCoord 鍒?XaeroMapDataHandler.RegionCoord
             Set<com.mapsyncer.client.XaeroMapDataHandler.RegionCoord> xaeroRegions = new HashSet<>();
             for (RegionCoord coord : regions) {
                 xaeroRegions.add(new com.mapsyncer.client.XaeroMapDataHandler.RegionCoord(
@@ -346,17 +334,11 @@ public class FabricPlatform implements Platform {
         }
     }
 
-    /**
-     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
-     */
     @Override
     public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 
-    /**
-     * 鑾峰彇缂撳瓨澶у皬
-     */
     public static int getCacheSize() {
         return blockPropertiesCache.size();
     }

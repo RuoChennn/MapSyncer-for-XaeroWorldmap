@@ -27,6 +27,8 @@ afterEvaluate {
         dependsOn ':libs:platform-api:build'
         dependsOn ':mc-1.21.1:neoforge:build'
         dependsOn ':mc-1.21.11:neoforge:build'
+        dependsOn ':mc-1.21.11:forge:build'
+        dependsOn ':mc-1.21.11:fabric:build'
         dependsOn ':mc-1.21.1:forge:build'
         dependsOn ':mc-1.21.1:fabric:build'
         dependsOn ':mc-1.20.1:forge:build'
@@ -47,4 +49,20 @@ tasks.register('collectJars', Copy) {
     }
     // 排除 libs 模块的 JAR（不需要分发）
     outputs.upToDateWhen { false }
+}
+
+// 构建 MapPackager 独立打包工具并收集到 output 目录
+tasks.register('buildPackager') {
+    description = '构建 MapPackager 打包工具并输出到 output 目录'
+    group = 'distribution'
+    dependsOn ':libs:core:mapPackagerDist'
+    doLast {
+        copy {
+            from(rootProject.layout.projectDirectory.dir('libs/core/build/dist')) {
+                include 'mapsyncer-packager-*.zip'
+            }
+            into layout.projectDirectory.dir('output')
+        }
+        logger.lifecycle('MapPackager 产物已输出到 output/ 目录')
+    }
 }

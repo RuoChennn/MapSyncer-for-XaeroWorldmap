@@ -1,0 +1,72 @@
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version '1.15.4'
+}
+
+version = mod_version + '-fabric-1.21.11'
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    maven { url = 'https://maven.shedaniel.me/' }
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+sourceSets.main.java.srcDirs(
+    '../shared/src/main/java',
+    "${rootProject.projectDir}/libs/common/src/main/java",
+    'src/main/java',
+)
+sourceSets.main.resources.srcDirs(
+    '../shared/src/main/resources',
+    "${rootProject.projectDir}/libs/common/src/main/resources",
+    'src/main/resources',
+)
+
+dependencies {
+    minecraft "com.mojang:minecraft:1.21.11"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:0.18.1"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.141.4+1.21.11"
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:15.0.127"
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+    include project(':libs:core')
+    include project(':libs:platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", "1.21.11"
+    inputs.property "loader_version", "0.18.1"
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": "1.21.11",
+                "loader_version": "0.18.1"
+    }
+}
+
+publishing {
+    publications {
+        register('fabric12111MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

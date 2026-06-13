@@ -21,7 +21,7 @@ import java.util.Map;
  * - 哈希值不一致 → 检查时间戳，客户端旧于服务端则同步
  *
  * 缓存格式：
- * - 存储：relativePath -> RegionMeta
+ * - 存储：relativePath -> TimestampHashEntry
  * - 文件：generation_cache.properties
  * - 格式：dimension/region_x_z = timestamp_seconds:hash
  *
@@ -42,41 +42,9 @@ public class GenerationCache {
     /** 缓存文件路径 */
     private final Path cacheFile;
 
-    /** 缓存数据：relativePath -> RegionMeta */
-    private final Map<String, RegionMeta> cache = new HashMap<>();
+    /** 缓存数据：relativePath -> TimestampHashEntry */
+    private final Map<String, TimestampHashEntry> cache = new HashMap<>();
 
-    /**
-     * Region元数据：时间戳(秒) + CRC32哈希
-     *
-     * 与TimestampHashEntry功能相同，保留此类型用于兼容。
-     */
-    public record RegionMeta(long timestampSeconds, String hash) {
-        /**
-         * 从字符串解析Region元数据
-         *
-         * @param value 字符串值（格式：timestamp:hash）
-         * @return 解析后的RegionMeta，解析失败返回null
-         */
-        public static RegionMeta parse(String value) {
-            TimestampHashEntry entry = PropertiesCacheIO.parseTimestampHash(value);
-            return entry != null ? new RegionMeta(entry.timestampSeconds(), entry.hash()) : null;
-        }
-
-        /**
-         * 格式化Region元数据为字符串
-         *
-         * @return 格式化字符串（timestamp:hash）
-         */
-        public String format() {
-            return timestampSeconds + ":" + hash;
-        }
-    }
-
-    /**
-     * 私有构造方法
-     *
-     * @param cacheDir 缓存目录路径
-     */
     private GenerationCache(Path cacheDir) {
         this.cacheFile = cacheDir.resolve("generation_cache.properties");
         load();
@@ -106,9 +74,7 @@ public class GenerationCache {
      */
     private void load() {
         Map<String, TimestampHashEntry> loaded = PropertiesCacheIO.load(cacheFile, PropertiesCacheIO::parseTimestampHash);
-        for (Map.Entry<String, TimestampHashEntry> entry : loaded.entrySet()) {
-            cache.put(entry.getKey(), new RegionMeta(entry.getValue().timestampSeconds(), entry.getValue().hash()));
-        }
+        cache.putAll(loaded);
     }
 
     /**
@@ -117,11 +83,7 @@ public class GenerationCache {
      * 使用PropertiesCacheIO保存缓存数据。
      */
     public void save() {
-        Map<String, TimestampHashEntry> toSave = new HashMap<>();
-        for (Map.Entry<String, RegionMeta> entry : cache.entrySet()) {
-            toSave.put(entry.getKey(), new TimestampHashEntry(entry.getValue().timestampSeconds(), entry.getValue().hash()));
-        }
-        PropertiesCacheIO.save(cacheFile, toSave, TimestampHashEntry::format,
+        PropertiesCacheIO.save(cacheFile, new HashMap<>(cache), TimestampHashEntry::format,
             "Generation cache for map regions\nFormat: dimension/region_x_z = timestamp_seconds:hash\nHash is CRC32 of file content");
     }
 
@@ -133,7 +95,7 @@ public class GenerationCache {
      * @param hash CRC32哈希值
      */
     public void update(String relativePath, long timestampSeconds, String hash) {
-        cache.put(relativePath, new RegionMeta(timestampSeconds, hash));
+        cache.put(relativePath, new TimestampHashEntry(timestampSeconds, hash));
         trimIfOverLimit();
     }
 
@@ -172,7 +134,7 @@ public class GenerationCache {
      */
     public void updateWithHash(String relativePath, Path filePath, long timestampSeconds) {
         String hash = HashUtils.computeFileHash(filePath);
-        cache.put(relativePath, new RegionMeta(timestampSeconds, hash));
+        cache.put(relativePath, new TimestampHashEntry(timestampSeconds, hash));
         LOGGER.debug("Updated cache for {}: ts={}, hash={}", relativePath, timestampSeconds, hash);
     }
 
@@ -182,7 +144,7 @@ public class GenerationCache {
      * @param relativePath 相对路径
      * @return Region元数据，不存在返回null
      */
-    public RegionMeta getMeta(String relativePath) {
+    public TimestampHashEntry getMeta(String relativePath) {
         return cache.get(relativePath);
     }
 
@@ -194,7 +156,7 @@ public class GenerationCache {
      *
      * @return 缓存数据的不可修改视图
      */
-    public Map<String, RegionMeta> getAll() {
+    public Map<String, TimestampHashEntry> getAll() {
         return Collections.unmodifiableMap(cache);
     }
 
@@ -212,8 +174,8 @@ public class GenerationCache {
      * @param clientMeta 客户端元数据
      * @return true表示需要同步
      */
-    public boolean needsSync(String relativePath, RegionMeta clientMeta) {
-        RegionMeta serverMeta = cache.get(relativePath);
+    public boolean needsSync(String relativePath, TimestampHashEntry clientMeta) {
+        TimestampHashEntry serverMeta = cache.get(relativePath);
 
         if (serverMeta == null) {
             return false;
@@ -236,6 +198,18 @@ public class GenerationCache {
 
         LOGGER.debug("Skip sync {}: client has newer data", relativePath);
         return false;
+    }
+
+    /**
+     * 获取最后一次地图生成的时间戳。
+     * 遍历所有缓存的 region 取最大 timestamp。
+     *
+     * @return 最后生成时间戳（秒），无缓存时返回 0
+     */
+    public long getLastGenerationTime() {
+        return cache.values().stream()
+            .mapToLong(TimestampHashEntry::timestampSeconds)
+            .max().orElse(0);
     }
 
     /**

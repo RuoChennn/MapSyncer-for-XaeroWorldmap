@@ -46,6 +46,11 @@ public class NeoForgePayloadAdapters {
                 buf.writeLong(entry.getValue().timestampSeconds());
                 buf.writeUtf(entry.getValue().hash());
             }
+            buf.writeBoolean(payload.data.totalParts() > 1);
+            if (payload.data.totalParts() > 1) {
+                buf.writeInt(payload.data.partIndex());
+                buf.writeInt(payload.data.totalParts());
+            }
         }
 
         public static NeoForgeSyncRequestPayload decode(RegistryFriendlyByteBuf buf) {
@@ -57,7 +62,18 @@ public class NeoForgePayloadAdapters {
                 String hash = buf.readUtf();
                 metaMap.put(path, new ClientMeta(timestampSeconds, hash));
             }
-            return new NeoForgeSyncRequestPayload(new SyncRequestPayload(metaMap));
+
+            int partIndex = 0;
+            int totalParts = 0;
+            if (buf.isReadable()) {
+                boolean isSplit = buf.readBoolean();
+                if (isSplit) {
+                    partIndex = buf.readInt();
+                    totalParts = buf.readInt();
+                }
+            }
+
+            return new NeoForgeSyncRequestPayload(new SyncRequestPayload(metaMap, partIndex, totalParts));
         }
     }
 
@@ -139,10 +155,12 @@ public class NeoForgePayloadAdapters {
 
         public static void encode(RegistryFriendlyByteBuf buf, NeoForgeServerInstalledPayload payload) {
             buf.writeUtf(payload.data.version());
+            buf.writeLong(payload.data.lastGenerationTimestamp());
+            buf.writeInt(payload.data.autoSyncIntervalMinutes());
         }
 
         public static NeoForgeServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
-            return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf()));
+            return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
         }
     }
 
@@ -159,6 +177,11 @@ public class NeoForgePayloadAdapters {
         buf.writeBoolean(hasCaveLayer);
         if (hasCaveLayer) {
             buf.writeInt(data.caveLayer);
+        }
+        buf.writeBoolean(data.totalParts > 1);
+        if (data.totalParts > 1) {
+            buf.writeInt(data.partIndex);
+            buf.writeInt(data.totalParts);
         }
     }
 
@@ -177,6 +200,16 @@ public class NeoForgePayloadAdapters {
             }
         }
 
-        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer);
+        int partIndex = 0;
+        int totalParts = 0;
+        if (buf.isReadable()) {
+            boolean isSplit = buf.readBoolean();
+            if (isSplit) {
+                partIndex = buf.readInt();
+                totalParts = buf.readInt();
+            }
+        }
+
+        return new ChunkMapData(regionX, regionZ, dimension, data, timestampSeconds, caveLayer, partIndex, totalParts);
     }
 }

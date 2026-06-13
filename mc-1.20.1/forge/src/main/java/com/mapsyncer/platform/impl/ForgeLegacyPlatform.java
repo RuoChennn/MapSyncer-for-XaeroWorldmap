@@ -1,12 +1,12 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.DimensionScanConfig;
+import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.BlockProperties;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
-import com.mapsyncer.config.DimensionScanConfig;
-import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.server.BlockPropertyResolver;
 import com.mapsyncer.util.BlockColorMapper;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -27,19 +27,17 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Forge 1.20.1 骞冲彴瀹炵幇
+ * Forge 1.20.1 平台实现
  *
- * 瀹炵幇 Platform 鎺ュ彛锛岄€傞厤 Forge 1.20.1 鐨?API銆?
- * 涓昏宸紓鐐癸細
- * - ForgeRegistries 浠ｆ浛 BuiltInRegistries锛堥儴鍒嗭級
- * - SimpleNetworkWrapper 浠ｆ浛 StreamCodec 缃戠粶
- * - ForgeConfigSpec 浠ｆ浛 NeoForge 閰嶇疆
+ * 主要差异点：
+ * - ForgeRegistries 代替 BuiltInRegistries（部分）
+ * - SimpleNetworkWrapper 代替 StreamCodec 网络
+ * - ForgeConfigSpec 代替 NeoForge 配置
  */
 public class ForgeLegacyPlatform implements Platform {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ForgeLegacyPlatform.class);
 
-    // 缂撳瓨鏂瑰潡灞炴€ф煡璇㈢粨鏋?
     private static final Map<String, BlockProperties> blockPropertiesCache = new HashMap<>();
 
     @Override
@@ -67,11 +65,10 @@ public class ForgeLegacyPlatform implements Platform {
         return net.minecraftforge.fml.loading.FMLEnvironment.dist == net.minecraftforge.api.distmarker.Dist.CLIENT;
     }
 
-    // ===== 鏂瑰潡灞炴€?=====
+    // ===== 方块属性 =====
 
     @Override
     public BlockProperties getBlockProperties(String blockName) {
-        // 妫€鏌ョ紦瀛?
         BlockProperties cached = blockPropertiesCache.get(blockName);
         if (cached != null) {
             return cached;
@@ -79,7 +76,6 @@ public class ForgeLegacyPlatform implements Platform {
 
         try {
             ResourceLocation loc = new ResourceLocation(blockName);
-            // Forge 1.20: 浣跨敤 ForgeRegistries 鎴?BuiltInRegistries
             Optional<Block> blockOpt = BuiltInRegistries.BLOCK.getOptional(loc);
 
             if (blockOpt.isEmpty()) {
@@ -95,7 +91,6 @@ public class ForgeLegacyPlatform implements Platform {
             Block block = blockOpt.get();
             BlockState state = block.defaultBlockState();
 
-            // 浣跨敤 BlockPropertyResolver 鑾峰彇灞炴€?
             BlockPropertyResolver.BlockProperties props = BlockPropertyResolver.getProperties(blockName);
 
             BlockProperties result = new BlockProperties(
@@ -129,7 +124,7 @@ public class ForgeLegacyPlatform implements Platform {
         return BlockColorMapper.getBlockColorByName(blockName);
     }
 
-    // ===== 涓栫晫淇℃伅 =====
+    // ===== 世界信息 =====
 
     @Override
     public int getDefaultMinBuildHeight() {
@@ -141,7 +136,7 @@ public class ForgeLegacyPlatform implements Platform {
         return 320;
     }
 
-    // ===== 缁村害淇℃伅 =====
+    // ===== 维度信息 =====
 
     @Override
     public String getXaeroDimensionPath(String dimensionId) {
@@ -153,11 +148,10 @@ public class ForgeLegacyPlatform implements Platform {
         return DimensionTypeInfo.fromDimensionId(dimensionId);
     }
 
-    // ===== 閰嶇疆绯荤粺锛團orge 浣跨敤 ForgeConfigSpec锛?====
+    // ===== 配置系统：Forge 使用 ForgeConfigSpec =====
 
     @Override
     public int getSyncSpeedLimitKBps() {
-        // TODO: 浠?ForgeConfigSpec 璇诲彇
         return ModConfig.SERVER.syncSpeedLimitKBps.get();
     }
 
@@ -223,7 +217,7 @@ public class ForgeLegacyPlatform implements Platform {
 
     @Override
     public void saveConfig() {
-        // Forge 鑷姩绠＄悊閰嶇疆鎸佷箙鍖栵紝鏃犻渶鎵嬪姩淇濆瓨
+        ModConfig.SERVER_SPEC.save();
     }
 
     @Override
@@ -246,7 +240,7 @@ public class ForgeLegacyPlatform implements Platform {
         return ModConfig.SERVER.getConfigForDimension(dimensionPath);
     }
 
-    // ===== 鏂囦欢璺緞 =====
+    // ===== 文件路径 =====
 
     @Override
     public Path getServerMapCacheDir() {
@@ -263,7 +257,7 @@ public class ForgeLegacyPlatform implements Platform {
 
             Minecraft mc = Minecraft.getInstance();
             if (mc.gameDirectory != null) {
-                return mc.gameDirectory.toPath().resolve("xaero").resolve("world-map");
+                return com.mapsyncer.util.XaeroPathResolver.getWorldMapDir(mc.gameDirectory.toPath());
             }
         } catch (Exception e) {
             LOGGER.debug("Failed to get Xaero world map dir: {}", e.getMessage());
@@ -284,14 +278,14 @@ public class ForgeLegacyPlatform implements Platform {
         return "Multiplayer_Server";
     }
 
-    // ===== 鏃ュ織 =====
+    // ===== 日志 =====
 
     @Override
     public Logger getLogger() {
         return LOGGER;
     }
 
-    // ===== 宸ュ叿鏂规硶 =====
+    // ===== 工具方法 =====
 
     @Override
     public boolean matchesBlockPattern(String blockName, String pattern) {
@@ -337,17 +331,11 @@ public class ForgeLegacyPlatform implements Platform {
         }
     }
 
-    /**
-     * 娓呴櫎鏂瑰潡灞炴€х紦瀛?
-     */
     @Override
     public void clearBlockPropertiesCache() {
         blockPropertiesCache.clear();
     }
 
-    /**
-     * 鑾峰彇缂撳瓨澶у皬
-     */
     public static int getCacheSize() {
         return blockPropertiesCache.size();
     }

@@ -33,7 +33,7 @@ include 'libs:common'           // 全版本共享的代码（source-only，不�
 // MC 1.20.1
 include 'mc-1.20.1:shared'
 include 'mc-1.20.1:fabric'
-// include 'mc-1.20.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
+// include 'mc-1.20.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x → 使用 scripts/settings-forge.gradle 单独构建
 
 // MC 1.20.4 (目录暂未创建)
 // include 'mc-1.20.4:shared'
@@ -47,11 +47,11 @@ include 'mc-1.21.1:fabric'
 // include 'mc-1.21.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
 include 'mc-1.21.1:neoforge'
 
-// MC 1.21.11 (目录暂未创建)
-// include 'mc-1.21.11:shared'
-// include 'mc-1.21.11:neoforge'
-// include 'mc-1.21.11:forge'
-// include 'mc-1.21.11:fabric'
+// MC 1.21.11
+// include 'mc-1.21.11:shared'  // 已合并到 fabric-shared（三平台统一）
+include 'mc-1.21.11:neoforge'
+// include 'mc-1.21.11:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
+// include 'mc-1.21.11:fabric'  // Loom 1.15.4 隔离，使用 settings-12111.gradle
 
 // MC 26.1
 include 'mc-26.1:shared'

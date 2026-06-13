@@ -12,7 +12,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * 委托所有业务逻辑给公共的 IncrementalUpdateHandlerLogic 类。
  * 此类仅负责 NeoForge 特定的事件注册和生命周期管理。
  */
-@EventBusSubscriber(value = Dist.DEDICATED_SERVER, bus = EventBusSubscriber.Bus.GAME)
+@EventBusSubscriber(value = {Dist.CLIENT, Dist.DEDICATED_SERVER}, bus = EventBusSubscriber.Bus.GAME)
 public class IncrementalUpdateHandler {
 
     /**

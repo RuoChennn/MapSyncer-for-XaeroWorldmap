@@ -12,7 +12,7 @@ import net.minecraftforge.event.TickEvent;
  * 委托所有业务逻辑给公共的 IncrementalUpdateHandlerLogic 类。
  * 此类仅负责 Forge 特定的事件注册和生命周期管理。
  */
-@Mod.EventBusSubscriber(modid = "mapsyncer", value = Dist.DEDICATED_SERVER, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@Mod.EventBusSubscriber(modid = "mapsyncer", value = {Dist.CLIENT, Dist.DEDICATED_SERVER}, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class IncrementalUpdateHandler {
 
     /**

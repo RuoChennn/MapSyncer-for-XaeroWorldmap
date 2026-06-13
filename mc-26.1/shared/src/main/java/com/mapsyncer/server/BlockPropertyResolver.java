@@ -75,6 +75,7 @@ public class BlockPropertyResolver {
 
     /** BlockPropertyLookup 适配器实例，供 core 模块的 RegionConverterStandalone 使用 */
     public static final BlockPropertyLookup INSTANCE = new BlockPropertyLookup() {
+        @Override public int getFlags(String name) { return BlockPropertyResolver.getFlags(name); }
         @Override public boolean isWater(String name) { return BlockPropertyResolver.isWater(name); }
         @Override public boolean isTransparent(String name) { return BlockPropertyResolver.isTransparent(name); }
         @Override public boolean isInvisible(String name) { return BlockPropertyResolver.isInvisible(name); }
@@ -279,8 +280,8 @@ public class BlockPropertyResolver {
             // 检查是否有有效的 MapColor
             boolean hasMapColor = checkHasMapColor(defaultState, blockName);
 
-            // 检查是否有地图颜色（非空气、非隐形、非问题方块）
-            boolean hasVanillaColor = !isAir && !isInvisible && !buggedBlocks.containsKey(blockName);
+            // 检查是否有地图颜色（非空气、非隐形、非问题方块，且必须有有效的MapColor）
+            boolean hasVanillaColor = !isAir && !isInvisible && !buggedBlocks.containsKey(blockName) && hasMapColor;
 
             return new BlockProperties(
                 isAir, isWater, isLava, isFluid,
@@ -305,6 +306,16 @@ public class BlockPropertyResolver {
      * @return true表示有有效的MapColor
      */
     private static boolean checkHasMapColor(BlockState state, String blockName) {
+        // 树叶和草方块是 biome-tinted 方块，需要真实 BlockGetter 才能获取 MapColor。
+        // 服务端占位 BlockGetter 缺少 getMinY/getBiome 等方法，调用会抛异常。
+        // 这些方块始终有有效的 MapColor，直接返回 true。
+        if (state.is(BlockTags.LEAVES)) {
+            return true;
+        }
+        if (state.getBlock() == Blocks.GRASS_BLOCK) {
+            return true;
+        }
+
         try {
             MapColor mapColor = state.getMapColor(PLACEHOLDER_BLOCK_GETTER, PLACEHOLDER_BLOCKPOS);
             if (mapColor != null && mapColor.col != 0) {
@@ -392,6 +403,11 @@ public class BlockPropertyResolver {
             return true;
         }
 
+        // 彩色玻璃板继承自 StainedGlassPaneBlock（非 HalfTransparentBlock），应作为 overlay
+        if (block instanceof net.minecraft.world.level.block.StainedGlassPaneBlock) {
+            return true;
+        }
+
         // 2. 流体方块（水、熔岩）- 使用 translucent 渲染
         FluidState fluidState = state.getFluidState();
         if (!fluidState.isEmpty()) {
@@ -410,6 +426,11 @@ public class BlockPropertyResolver {
         // 排除树叶：树叶虽然有 lightBlock = 1，但使用 cutout 渲染，不应作为 overlay
         if (state.is(BlockTags.LEAVES)) {
             return false;  // 树叶不作为 overlay，是实体方块
+        }
+
+        // 排除雪片：雪层方块虽然 lightBlock 很低，但应作为表面渲染
+        if (block == Blocks.SNOW) {
+            return false;
         }
 
         // 其他 lightBlock < 15 的方块可能是 translucent
@@ -450,9 +471,9 @@ public class BlockPropertyResolver {
             return true;
         }
 
-        // 4. 玻璃类（Xaero 作为隐形处理）
-        if (block == Blocks.GLASS || block == Blocks.GLASS_PANE ||
-            blockId.contains("stained_glass") || blockId.contains("stained_glass_pane")) {
+        // 4. 普通玻璃/玻璃板（完全透明，不在画面中渲染）
+        // 彩色玻璃由 TransparentBlock → shouldOverlay() 路径处理
+        if (block == Blocks.GLASS || block == Blocks.GLASS_PANE) {
             return true;
         }
 
@@ -1017,5 +1038,19 @@ public class BlockPropertyResolver {
      */
     public static boolean isWaterInheriting(String blockName) {
         return getProperties(blockName).isAquaticPlant();
+    }
+
+    public static int getFlags(String blockName) {
+        BlockProperties p = getProperties(blockName);
+        int flags = 0;
+        if (p.isWater()) flags |= BlockPropertyLookup.FLAG_WATER;
+        if (p.isTransparent()) flags |= BlockPropertyLookup.FLAG_TRANSPARENT;
+        if (p.isInvisible()) flags |= BlockPropertyLookup.FLAG_INVISIBLE;
+        if (p.shouldOverlay()) flags |= BlockPropertyLookup.FLAG_SHOULD_OVERLAY;
+        if (p.hasVanillaColor()) flags |= BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR;
+        if (p.isGlowing()) flags |= BlockPropertyLookup.FLAG_GLOWING;
+        if (p.isTranslucentFluid()) flags |= BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID;
+        if (p.isAquaticPlant()) flags |= BlockPropertyLookup.FLAG_WATER_INHERITING;
+        return flags;
     }
 }

@@ -9,6 +9,6 @@ import com.mapsyncer.network.NetworkHandler;
  *
  * @param version 服务端模组版本号
  */
-public record ServerInstalledPayload(String version) {
+public record ServerInstalledPayload(String version, long lastGenerationTimestamp, int autoSyncIntervalMinutes) {
     public static final String ID = NetworkHandler.SERVER_INSTALLED_ID;
 }

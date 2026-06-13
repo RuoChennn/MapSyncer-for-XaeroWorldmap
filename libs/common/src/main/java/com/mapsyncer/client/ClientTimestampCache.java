@@ -76,7 +76,7 @@ public class ClientTimestampCache {
     private final Path cacheFile;
 
     /** 缓存数据，键为相对路径（如 "null/0_0"），值为缓存条目。使用 ConcurrentHashMap 保证多线程安全 */
-    private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
+    private final Map<String, TimestampHashEntry> cache = new ConcurrentHashMap<>();
 
     /** 当前同步状态（null 表示从未同步过） */
     private volatile String syncState = null;
@@ -86,29 +86,6 @@ public class ClientTimestampCache {
 
     /** 同步指令（用于断点续传提示） */
     private volatile String syncCommand = "";
-
-    /**
-     * 缓存条目：时间戳(秒) + CRC32哈希。
-     *
-     * @param timestampSeconds 时间戳（秒）
-     * @param hash CRC32哈希值（8位十六进制）
-     */
-    public record CacheEntry(long timestampSeconds, String hash) {
-        /**
-         * 从字符串解析缓存条目。
-         */
-        public static CacheEntry parse(String value) {
-            TimestampHashEntry entry = PropertiesCacheIO.parseTimestampHash(value);
-            return entry != null ? new CacheEntry(entry.timestampSeconds(), entry.hash()) : null;
-        }
-
-        /**
-         * 将缓存条目格式化为字符串。
-         */
-        public String format() {
-            return timestampSeconds + ":" + hash;
-        }
-    }
 
     /**
      * 私有构造函数，初始化缓存实例。
@@ -180,7 +157,7 @@ public class ClientTimestampCache {
             // 加载区域缓存（非特殊键）
             for (String key : props.stringPropertyNames()) {
                 if (!key.startsWith("_")) {
-                    CacheEntry entry = CacheEntry.parse(props.getProperty(key));
+                    TimestampHashEntry entry = PropertiesCacheIO.parseTimestampHash(props.getProperty(key));
                     if (entry != null) {
                         cache.put(key, entry);
                     }
@@ -211,7 +188,7 @@ public class ClientTimestampCache {
             props.setProperty(KEY_COMMAND, syncCommand);
 
             // 保存区域缓存
-            for (Map.Entry<String, CacheEntry> entry : cache.entrySet()) {
+            for (Map.Entry<String, TimestampHashEntry> entry : cache.entrySet()) {
                 props.setProperty(entry.getKey(), entry.getValue().format());
             }
 
@@ -230,7 +207,7 @@ public class ClientTimestampCache {
                 content.append("# Format: dimension/region_x_z = timestamp_seconds:hash\n");
 
                 // 写入区域缓存
-                for (Map.Entry<String, CacheEntry> entry : cache.entrySet()) {
+                for (Map.Entry<String, TimestampHashEntry> entry : cache.entrySet()) {
                     content.append(entry.getKey()).append("=").append(entry.getValue().format()).append("\n");
                 }
 
@@ -306,13 +283,13 @@ public class ClientTimestampCache {
      * 更新区域的缓存信息。
      */
     public void update(String relativePath, long timestampSeconds, String hash) {
-        cache.put(relativePath, new CacheEntry(timestampSeconds, hash));
+        cache.put(relativePath, new TimestampHashEntry(timestampSeconds, hash));
     }
 
     /**
      * 获取区域的缓存信息。
      */
-    public CacheEntry get(String relativePath) {
+    public TimestampHashEntry get(String relativePath) {
         return cache.get(relativePath);
     }
 
@@ -322,7 +299,7 @@ public class ClientTimestampCache {
      * <p>返回不可修改视图，避免创建完整副本浪费内存。</p>
      * <p>如果需要修改数据，请使用 update() 方法。</p>
      */
-    public Map<String, CacheEntry> getAll() {
+    public Map<String, TimestampHashEntry> getAll() {
         return Collections.unmodifiableMap(cache);
     }
 

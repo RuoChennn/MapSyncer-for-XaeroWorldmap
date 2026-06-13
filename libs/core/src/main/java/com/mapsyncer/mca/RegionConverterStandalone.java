@@ -159,10 +159,10 @@ public class RegionConverterStandalone {
      * @return 包含该Y坐标的Section，如果不存在则返回null
      */
     private static ChunkSectionParser.SectionData findSectionAt(ChunkDataParser.ChunkInfo chunk, int worldY) {
-        int sectionY = worldY >> 4;
-        for (ChunkSectionParser.SectionData section : chunk.sections()) {
-            if (section.sectionY() == sectionY) return section;
-        }
+        ChunkSectionParser.SectionData[] lookup = chunk.sectionLookup();
+        if (lookup == null) return null;
+        int idx = (worldY >> 4) - chunk.minSectionY();
+        if (idx >= 0 && idx < lookup.length) return lookup[idx];
         return null;
     }
 
@@ -311,13 +311,11 @@ public class RegionConverterStandalone {
                                                               BlockPropertyLookup blockLookup) {
         ChunkSectionParser.BlockState singleState = section.blockPalette().get(0);
 
-        if (singleState.isAir()) {
-            return null;
-        }
+        if (singleState.isAir()) return null;
+        if (isCaveMode && !underair) return null;
 
-        if (isCaveMode && !underair) {
-            return null;
-        }
+        String blockName = singleState.name();
+        int flags = blockLookup.getFlags(blockName);
 
         int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
         if (scanStartY < 0) scanStartY = 15;
@@ -327,9 +325,7 @@ public class RegionConverterStandalone {
             int worldY = sectionBaseY + ly;
             if (worldY < scanBottomY) break;
 
-            // Water-inheriting：水生植物（海草、海带）继承上方水体的 overlay
-            // 参考 Xaero loadPixel：光照在 h+1 位置读取，overlay/surface 共享同一光照值
-            if (blockLookup.isWaterInheriting(singleState.name())) {
+            if ((flags & BlockPropertyLookup.FLAG_WATER_INHERITING) != 0) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
                 int aboveWorldY = worldY + 1;
                 byte effectiveLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
@@ -340,8 +336,8 @@ public class RegionConverterStandalone {
                 return new SurfaceResult(singleState, worldY, worldY, biomeName, effectiveLight, overlayList);
             }
 
-            if (blockLookup.isWaterloggedSurface(singleState.name(), singleState.properties())
-                && !blockLookup.shouldOverlay(singleState.name())) {
+            if (blockLookup.isWaterloggedSurface(blockName, singleState.properties())
+                && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) == 0) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
                 int aboveWorldY = worldY + 1;
                 byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
@@ -352,11 +348,15 @@ public class RegionConverterStandalone {
                 return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
             }
 
-            if (blockLookup.shouldOverlay(singleState.name())) {
-                int opacity = blockLookup.getLightBlock(singleState.name());
+            if ((flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) != 0) {
+                int opacity = blockLookup.getLightBlock(blockName);
                 int aboveWorldY = worldY + 1;
                 byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, singleState.name(), worldY, opacity, overlayLight, blockLookup);
+                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
+                continue;
+            }
+
+            if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) {
                 continue;
             }
 
@@ -394,17 +394,13 @@ public class RegionConverterStandalone {
 
             ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
 
-            if (state.isAir()) {
-                continue;
-            }
+            if (state.isAir()) continue;
+            if (isCaveMode && !underair) continue;
 
-            if (isCaveMode && !underair) {
-                continue;
-            }
+            String blockName = state.name();
+            int flags = blockLookup.getFlags(blockName);
 
-            // Water-inheriting：水生植物（海草、海带）继承上方水体的 overlay
-            // 参考 Xaero loadPixel：光照在 h+1 位置读取，overlay/surface 共享同一光照值
-            if (blockLookup.isWaterInheriting(state.name())) {
+            if ((flags & BlockPropertyLookup.FLAG_WATER_INHERITING) != 0) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
                 int aboveWorldY = worldY + 1;
                 byte effectiveLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
@@ -415,8 +411,8 @@ public class RegionConverterStandalone {
                 return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, effectiveLight, overlayList);
             }
 
-            if (blockLookup.isWaterloggedSurface(state.name(), state.properties())
-                && !blockLookup.shouldOverlay(state.name())) {
+            if (blockLookup.isWaterloggedSurface(blockName, state.properties())
+                && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) == 0) {
                 int opacity = blockLookup.getLightBlock("minecraft:water");
                 int aboveWorldY = worldY + 1;
                 byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
@@ -427,45 +423,40 @@ public class RegionConverterStandalone {
                 return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
             }
 
-            if (blockLookup.isTranslucentFluid(state.name())) {
-                int opacity = blockLookup.getLightBlock(state.name());
+            if ((flags & BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID) != 0) {
+                int opacity = blockLookup.getLightBlock(blockName);
                 int aboveWorldY = worldY + 1;
                 byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
+                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
                 if (highestBlockY < 0) highestBlockY = worldY;
                 continue;
             }
 
             // 水logged 透明方块（海草、海带等）：先添加水 overlay，再添加方块 overlay
-            // 匹配 Xaero 的 fluid-state-first 处理顺序
-            if (state.isWaterlogged() && blockLookup.shouldOverlay(state.name())) {
+            if (state.isWaterlogged() && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) != 0) {
                 int waterOpacity = blockLookup.getLightBlock("minecraft:water");
                 int aboveWorldY = worldY + 1;
                 byte waterLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlay(overlayList, "minecraft:water", worldY, waterOpacity, waterLight, blockLookup);
-                int opacity = blockLookup.getLightBlock(state.name());
+                int opacity = blockLookup.getLightBlock(blockName);
                 byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
+                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
                 if (highestBlockY < 0) highestBlockY = worldY;
                 continue;
             }
 
-            if (blockLookup.isInvisible(state.name())) {
-                continue;
-            }
+            if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) continue;
 
-            if (blockLookup.isTransparent(state.name())) {
-                int opacity = blockLookup.getLightBlock(state.name());
+            if ((flags & BlockPropertyLookup.FLAG_TRANSPARENT) != 0) {
+                int opacity = blockLookup.getLightBlock(blockName);
                 int aboveWorldY = worldY + 1;
                 byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, state.name(), worldY, opacity, overlayLight, blockLookup);
+                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
                 if (highestBlockY < 0) highestBlockY = worldY;
                 continue;
             }
 
-            if (!blockLookup.hasVanillaColor(state.name())) {
-                continue;
-            }
+            if ((flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) == 0) continue;
 
             int aboveWorldY = worldY + 1;
             byte surfaceLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
@@ -533,34 +524,31 @@ public class RegionConverterStandalone {
                                                 LightMode lightMode,
                                                 boolean worldHasSkylight,
                                                 BlockPropertyLookup blockLookup) {
-        // 跨section读取光照：worldY可能落在当前section之外
         byte blockLight = getBlockLightCrossSection(chunk, currentSection, lx, ly, lz, worldY);
-        byte skyLight;
+        byte skyLight = 0;
+        ChunkSectionParser.SectionData stateSection = null;
         int worldYSkySectionY = worldY >> 4;
         if (worldYSkySectionY == currentSection.sectionY()) {
             int localY = worldY - (worldYSkySectionY * 16);
             if (localY >= 0 && localY <= 15) {
                 skyLight = ChunkSectionParser.getSkyLight(currentSection, lx, localY, lz);
-            } else {
-                skyLight = 0;
             }
         } else {
-            ChunkSectionParser.SectionData targetSection = findSectionAt(chunk, worldY);
-            if (targetSection != null) {
-                int localY = worldY - (targetSection.sectionY() * 16);
-                skyLight = ChunkSectionParser.getSkyLight(targetSection, lx, localY, lz);
-            } else {
-                skyLight = 0;
+            stateSection = findSectionAt(chunk, worldY);
+            if (stateSection != null) {
+                int localY = worldY - (stateSection.sectionY() * 16);
+                skyLight = ChunkSectionParser.getSkyLight(stateSection, lx, localY, lz);
             }
         }
 
-        boolean hasFluidOverlay = overlayList.stream()
-            .anyMatch(o -> blockLookup.isWater(o.blockName));
+        boolean hasFluidOverlay = false;
+        for (OverlayData o : overlayList) {
+            if (blockLookup.isWater(o.blockName)) { hasFluidOverlay = true; break; }
+        }
 
         boolean hasSkyAccess = worldY >= heightMapValue;
 
-        // 跨section获取方块状态用于发光检测
-        ChunkSectionParser.SectionData stateSection = findSectionAt(chunk, worldY);
+        if (stateSection == null) stateSection = findSectionAt(chunk, worldY);
         if (stateSection == null) stateSection = currentSection;
         int stateLocalY = worldY - (stateSection.sectionY() * 16);
         if (stateLocalY < 0 || stateLocalY > 15) stateLocalY = ly;

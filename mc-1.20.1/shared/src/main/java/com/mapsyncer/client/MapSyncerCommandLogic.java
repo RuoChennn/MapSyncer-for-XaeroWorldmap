@@ -225,6 +225,13 @@ public class MapSyncerCommandLogic {
      * 发送同步请求到服务端。
      */
     public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
+        if (MapPacketHandler.isSyncInProgress()) {
+            if (mc.player != null) {
+                mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.in_progress"), false);
+            }
+            return;
+        }
+
         Map<String, ClientMeta> metaMap;
 
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
@@ -275,7 +282,10 @@ public class MapSyncerCommandLogic {
             tsCache.markSyncStart(dimensions, command);
         }
 
-        NetworkManager.sendToServer(new SyncRequestPayload(metaMap));
+        SyncRequestPayload[] parts = SyncRequestPayload.split(metaMap);
+        for (SyncRequestPayload part : parts) {
+            NetworkManager.sendToServer(part);
+        }
         SyncProgressTracker.startTracking();
     }
 
