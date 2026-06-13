@@ -10,7 +10,7 @@
 
 ### 平台支持
 
-> 优先适配现代版本，1.20.4前neoforge尚未正式独立不做适配，26.1后forge未提供任何开发文档，不做适配
+> 优先适配现代版本。1.20.4 前 NeoForge 尚未正式独立不做适配；26.1 后 Forge 未提供开发文档不做适配。
 
 | MC 版本 | Forge | NeoForge | Fabric |
 |---------|:-----:|:--------:|:------:|
@@ -28,7 +28,7 @@
 | 依赖 | 要求 |
 |------|------|
 | Xaero's World Map | 1.40.11+ |
- 
+
 ### 服务端要求
 
 - 无需安装 Xaero，可独立运行
@@ -50,6 +50,10 @@
 | **洞穴模式** | 支持从指定高度向下扫描，输出到 caves 子目录 |
 | **多线程哈希** | 客户端 CRC32 计算支持并行，线程数可配置 |
 | **自动同步** | 加入服务器时自动检测服务端地图更新，无需手动执行指令 |
+| **内置服务器** | 单人游戏局域网共享，复用主机 Xaero 存档 |
+| **MapPackager** | 独立 CLI 工具，将服务器缓存打包为客户端可用的 Xaero 地图包（离线分发） |
+| **Payload 分片** | 双向自动分片，>28KB 数据拆分为小包传输，接收端自动组装 |
+| **握手保护** | 禁止向未安装 mod 的客户端发送自定义 payload，防止踢出玩家 |
 
 ---
 
@@ -63,6 +67,7 @@
 | `/mapsyncer sync` | 同步当前维度 |
 | `/mapsyncer sync <维度>` | 同步指定维度 |
 | `/mapsyncer sync all` | 同步所有维度 |
+| `/mapsyncer clearstate` | 清除同步恢复状态（忽略断点续传） |
 
 **维度参数支持**：
 - 原版：`overworld`、`the_nether`、`the_end`
@@ -139,12 +144,56 @@ dimension_configs = [
 
 ---
 
+## MapPackager — 离线地图打包工具
+
+独立 CLI 工具，将服务器 `server_map_cache/` 目录打包为客户端可直接使用的 Xaero 地图 zip 包。适用于无法安装 mod 的客户端或离线分发的场景。
+
+### 用法
+
+```bash
+java -jar mapsyncer-packager.jar -c <缓存目录> -o <输出文件> [选项]
+```
+
+### 参数
+
+| 参数 | 说明 |
+|------|------|
+| `-c, --cache-dir <路径>` | 服务器缓存目录路径（必填） |
+| `-o, --output <路径>` | 输出 zip 文件路径（必填） |
+| `-s, --server-name <名称>` | 服务器名称，默认 "Server" |
+| `-w, --world-id <id>` | 手动指定 World ID |
+| `-d, --world-dir <路径>` | 自动从 xaeromap.txt 检测 World ID |
+| `-h, --help` | 显示帮助 |
+
+### 示例
+
+```bash
+# 基本用法
+java -jar mapsyncer-packager.jar -c ./server_map_cache -o ./map_pack.zip
+
+# 指定服务器名称和 World ID
+java -jar mapsyncer-packager.jar -c ./cache -s "MyServer" -w 42 -o output.zip
+
+# 自动检测 World ID
+java -jar mapsyncer-packager.jar -c ./cache -d ./world -o output.zip
+```
+
+### 功能
+
+- 自动扫描所有维度目录（含 Mod 维度）
+- 转换 `generation_cache.properties` → `sync_timestamps.cache`（客户端可直接使用）
+- 按 `Multiplayer_<服务器名>/<维度>/mw$<worldId>/` 结构组织
+- 不需要安装 Xaero 或 Minecraft，纯 Java 运行
+
+---
+
 ## 项目结构
 
 ```
 libs/                   抽象库层（平台无关，编译为独立 JAR）
-├── core/               纯 Java 核心：MCA/NBT 解析、工具类
-└── platform-api/       平台抽象接口、网络 Payload 定义
+├── core/               纯 Java 核心：MCA/NBT 解析、工具类、MapPackager
+├── platform-api/       平台抽象接口、网络 Payload 定义
+└── common/             客户端/服务端共享逻辑（同步、缓存、自动同步管理器）
 
 mc-1.20.1/              1.20.1 版本
 ├── shared/             源码复用层（由平台模块 sourceSet 引用）
@@ -179,7 +228,7 @@ mc-26.1/                26.1 版本
    解压 → NBT 解析 → 提取区块数据
         │
         ▼
-   区域转换 (RegionConverter)
+   区域转换 (RegionConverterStandalone)
         │
         ▼
 压制成 Xaero 格式 (region.zip)
@@ -235,14 +284,6 @@ mc-26.1/                26.1 版本
 
 ---
 
-## 已知问题
-
-| 问题 | 说明 | 影响 |
-|------|------|------|
-| 洞穴内容异常 | 洞穴模式下部分内容不准确 | 基本上只有地狱受影响，看情况优化 |
-
----
-
 ## 构建
 
 ```bash
@@ -253,14 +294,25 @@ mc-26.1/                26.1 版本
 ./gradlew :mc-1.21.1:forge:build -x test
 ./gradlew :mc-1.21.1:fabric:build -x test
 
+# 构建 MapPackager 独立工具
+./gradlew buildPackager
+
 # 快捷脚本
-scripts/fastbuild/build-all.bat          # 构建全部活跃平台
-scripts/fastbuild/build-forge-1.20.1.bat # 构建指定平台
-scripts/fastbuild/build-fabric-26.1.bat    # Fabric 26.1（独立 Gradle 进程）
-scripts/fastbuild/build-26.1.bat           # 全部 26.1 模块
+scripts/fastbuild/build-all.bat              # 构建全部活跃平台
+scripts/fastbuild/build-forge-1.20.1.bat     # 构建指定平台
+scripts/fastbuild/build-packager.bat         # 构建 MapPackager
+scripts/fastbuild/build-target.ps1 all -NoTest  # PowerShell 构建全部
 ```
 
-产物输出到各平台模块的 `build/libs/` 目录。
+产物输出：mod JAR 到各平台模块的 `build/libs/` 目录，`buildPackager` 和 `buildAll` 额外收集到根目录 `output/`。
+
+---
+
+## 已知问题
+
+| 问题 | 说明 | 影响 |
+|------|------|------|
+| 洞穴内容异常 | 洞穴模式下部分内容不准确 | 基本上只有地狱受影响，看情况优化 |
 
 ---
 
