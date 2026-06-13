@@ -228,12 +228,10 @@ public class ChunkSectionParser {
         List<String> biomePalette,          // 生物群系名称列表 ["minecraft:plains", ...]
         long[] biomeData,                   // 位压缩的生物群系索引数据
         int biomeBitsPerEntry,              // 每个生物群系索引的位数
-        byte[] blockLight,                  // 方块光照数组 (2048字节)
-        byte[] skyLight,                    // 天空光照数组 (2048字节)
+        byte[] blockLight,                  // 预解码的方块光照 (4096字节，预热使用)
+        byte[] skyLight,                    // 预解码的天空光照 (4096字节，预热使用)
         int blockUVal,                      // floor(64 / blockBitsPerEntry)，预计算
-        long blockMask,                     // (1L << blockBitsPerEntry) - 1，预计算
-        byte[] decodedBlockLight,           // 预解码的方块光照 (4096字节)
-        byte[] decodedSkyLight              // 预解码的天空光照 (4096字节)
+        long blockMask                      // (1L << blockBitsPerEntry) - 1，预计算
     ) {
         // record 自动提供 blockNames() 访问方法，无需额外定义
     }
@@ -304,24 +302,12 @@ public class ChunkSectionParser {
             biomeBitsPerEntry = calculateBiomeBitsPerEntry(biomePalette.size(), biomeData);
         }
 
-        // 解析光照数据
-        byte[] blockLight = sectionTag.getByteArray("BlockLight");
-        byte[] skyLight = sectionTag.getByteArray("SkyLight");
-
-        // 预计算 blockData bit-reading 参数
-        int blockUVal = 0;
-        long blockMask = 0;
-        if (blockData != null && blockData.length > 0 && blockBitsPerEntry > 0) {
-            blockUVal = 64 / blockBitsPerEntry;
-            blockMask = (1L << blockBitsPerEntry) - 1L;
-        }
-
-        // 预解码光照 nibble arrays
+        // 解析并预解码光照数据（只保留 decoded 4096-byte 版本，不保留 raw nibble 2048-byte）
         byte[] decodedBlockLight = null;
         byte[] decodedSkyLight = null;
-        byte[] rawBlockLight = blockLight.length == 2048 ? blockLight : null;
-        byte[] rawSkyLight = skyLight.length == 2048 ? skyLight : null;
-        if (rawBlockLight != null) {
+        byte[] rawBlockLight = sectionTag.getByteArray("BlockLight");
+        byte[] rawSkyLight = sectionTag.getByteArray("SkyLight");
+        if (rawBlockLight != null && rawBlockLight.length == 2048) {
             decodedBlockLight = new byte[4096];
             for (int i = 0; i < 2048; i++) {
                 int b = rawBlockLight[i] & 0xFF;
@@ -330,7 +316,7 @@ public class ChunkSectionParser {
                 decodedBlockLight[idx + 1] = (byte) ((b >> 4) & 0xF);
             }
         }
-        if (rawSkyLight != null) {
+        if (rawSkyLight != null && rawSkyLight.length == 2048) {
             decodedSkyLight = new byte[4096];
             for (int i = 0; i < 2048; i++) {
                 int b = rawSkyLight[i] & 0xFF;
@@ -340,11 +326,19 @@ public class ChunkSectionParser {
             }
         }
 
+        // 预计算 blockData bit-reading 参数
+        int blockUVal = 0;
+        long blockMask = 0;
+        if (blockData != null && blockData.length > 0 && blockBitsPerEntry > 0) {
+            blockUVal = 64 / blockBitsPerEntry;
+            blockMask = (1L << blockBitsPerEntry) - 1L;
+        }
+
         return new SectionData(
             sectionY, blockPalette, blockNames, blockData, blockBitsPerEntry,
             biomePalette, biomeData, biomeBitsPerEntry,
-            rawBlockLight, rawSkyLight,
-            blockUVal, blockMask, decodedBlockLight, decodedSkyLight
+            decodedBlockLight, decodedSkyLight,
+            blockUVal, blockMask
         );
     }
 
@@ -613,14 +607,13 @@ public class ChunkSectionParser {
      * @return 方块光照值 (0-15)
      */
     public static byte getBlockLight(SectionData section, int x, int y, int z) {
-        if (section.decodedBlockLight() != null) {
-            return section.decodedBlockLight()[(y << 8) | (z << 4) | x];
-        }
-        return getLightValue(section.blockLight(), x, y, z);
+        byte[] d = section.blockLight();
+        if (d != null && d.length == 4096) return d[(y << 8) | (z << 4) | x];
+        return 0;
     }
 
     /**
-     * 获取天空光照值（从nibble array）
+     * 获取天空光照值
      *
      * @param section Section数据
      * @param x 局部X坐标 (0-15)
@@ -629,10 +622,9 @@ public class ChunkSectionParser {
      * @return 天空光照值 (0-15)
      */
     public static byte getSkyLight(SectionData section, int x, int y, int z) {
-        if (section.decodedSkyLight() != null) {
-            return section.decodedSkyLight()[(y << 8) | (z << 4) | x];
-        }
-        return getLightValue(section.skyLight(), x, y, z);
+        byte[] d = section.skyLight();
+        if (d != null && d.length == 4096) return d[(y << 8) | (z << 4) | x];
+        return 0;
     }
 
     /**
