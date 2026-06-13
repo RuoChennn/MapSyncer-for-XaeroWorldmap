@@ -306,6 +306,16 @@ public class BlockPropertyResolver {
      * @return true表示有有效的MapColor
      */
     private static boolean checkHasMapColor(BlockState state, String blockName) {
+        // 树叶和草方块是 biome-tinted 方块，需要真实 BlockGetter 才能获取 MapColor。
+        // 服务端占位 BlockGetter 缺少 getMinY/getBiome 等方法，调用会抛异常。
+        // 这些方块始终有有效的 MapColor，直接返回 true。
+        if (state.is(BlockTags.LEAVES)) {
+            return true;
+        }
+        if (state.getBlock() == Blocks.GRASS_BLOCK) {
+            return true;
+        }
+
         try {
             MapColor mapColor = state.getMapColor(PLACEHOLDER_BLOCK_GETTER, PLACEHOLDER_BLOCKPOS);
             if (mapColor != null && mapColor.col != 0) {

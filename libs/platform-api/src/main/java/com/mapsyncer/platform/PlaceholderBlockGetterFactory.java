@@ -165,6 +165,7 @@ public final class PlaceholderBlockGetterFactory {
                     return 256;
 
                 case "getMinBuildHeight":
+                case "getMinY":
                     // 返回最小建筑高度
                     return -64;
 
@@ -178,7 +179,15 @@ public final class PlaceholderBlockGetterFactory {
                     return proxy == args[0];
 
                 default:
-                    LOGGER.warn("Unknown BlockGetter method called: {}", methodName);
+                    // 对于其他未实现的 BlockGetter/LevelHeightAccessor 方法，
+                    // 返回类型安全的默认值避免 NPE
+                    Class<?> returnType = method.getReturnType();
+                    if (returnType == int.class) return 0;
+                    if (returnType == boolean.class) return false;
+                    if (returnType == long.class) return 0L;
+                    if (returnType == float.class) return 0.0f;
+                    if (returnType == double.class) return 0.0d;
+                    LOGGER.debug("Unknown BlockGetter method called: {}, returning type-safe default", methodName);
                     return null;
             }
         }
