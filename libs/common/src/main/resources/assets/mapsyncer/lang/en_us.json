@@ -2,6 +2,7 @@
   "mapsyncer.sync.start": "Starting sync...",
   "mapsyncer.sync.waiting": "waiting...",
   "mapsyncer.sync.completed": "Sync completed! %d regions in %ds",
+  "mapsyncer.sync.in_progress": "Sync is already in progress, please wait",
   "mapsyncer.sync.progress": "Progress: %d/%d (%d%%)",
   "mapsyncer.sync.cancelled": "Sync cancelled",
   "mapsyncer.sync.timeout": "Sync timed out, please try again",
