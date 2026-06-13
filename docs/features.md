@@ -132,6 +132,7 @@ mc-26.1/            MC 26.1 版本
 | 并发转换 | ✅ | 可配置线程池（默认 4 线程，最大 16） |
 | 两遍处理 | ✅ | 第一遍处理时间戳变更区域，第二遍捕获新增区域 |
 | 世界格式自适应 | ✅ | 自动检测新格式（MC 26.1+）和传统格式 |
+| Xaero 路径自适应 | ✅ | 优先使用新版 `xaero/world-map`，旧版 `XaeroWorldMap` 目录存在时自动 fallback |
 
 ---
 
@@ -235,7 +236,8 @@ mc-26.1/            MC 26.1 版本
 ├── caves/<layer>/                  # 洞穴模式输出
 └── generation_cache.properties     # 时间戳+哈希缓存
 
-客户端: <client>/xaero/world-map/Multiplayer_<serverIP>/
+客户端: <client>/xaero/world-map/Multiplayer_<serverIP>/  # 新版统一路径（优先）
+       <client>/XaeroWorldMap/Multiplayer_<serverIP>/      # 旧版路径（兼容 fallback）
 ├── null/mw$<worldId>/             # 主世界
 ├── DIM-1/mw$<worldId>/            # 地狱
 ├── DIM1/mw$<worldId>/             # 末地

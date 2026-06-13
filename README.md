@@ -217,7 +217,8 @@ mc-26.1/                26.1 版本
   └── generation_cache.properties  # 时间戳+哈希缓存
 
 客户端:
-  <client>/xaero/world-map/Multiplayer_<IP>/
+  <client>/xaero/world-map/Multiplayer_<IP>/     # 新版 Xaero 统一路径（优先）
+  <client>/XaeroWorldMap/Multiplayer_<IP>/       # 旧版 Xaero 路径（兼容 fallback）
   ├── null/mw$<worldId>/   # 主世界
   ├── DIM-1/mw$<worldId>/  # 地狱
   └── DIM1/mw$<worldId>/   # 末地

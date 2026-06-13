@@ -205,7 +205,8 @@ Server:
   └── generation_cache.properties  # Timestamp + hash cache
 
 Client:
-  <client>/xaero/world-map/Multiplayer_<IP>/
+  <client>/xaero/world-map/Multiplayer_<IP>/     # Modern Xaero unified path (preferred)
+  <client>/XaeroWorldMap/Multiplayer_<IP>/       # Legacy Xaero path (compatibility fallback)
   ├── null/mw$<worldId>/   # Overworld
   ├── DIM-1/mw$<worldId>/  # Nether
   └── DIM1/mw$<worldId>/   # End
