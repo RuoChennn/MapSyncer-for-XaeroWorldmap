@@ -39,6 +39,7 @@ public final class NamedThreadFactory implements java.util.concurrent.ThreadFact
     public Thread newThread(Runnable r) {
         Thread thread = new Thread(r, baseName + "-" + counter.incrementAndGet());
         thread.setDaemon(daemon);
+        thread.setPriority(Thread.MIN_PRIORITY);
         return thread;
     }
 
