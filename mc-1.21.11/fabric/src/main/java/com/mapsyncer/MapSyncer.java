@@ -136,8 +136,9 @@ public class MapSyncer implements ModInitializer {
             com.mapsyncer.server.PlayerJoinHandler.onPlayerLeave(handler.player.getUUID());
         });
 
-        // 服务端 Tick 事件（IncrementalUpdateHandler 已在 static 块中注册）
+        // 服务端 Tick 事件
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            IncrementalUpdateHandlerLogic.getInstance().onServerTick();
             com.mapsyncer.server.PlayerJoinHandler.onServerTick(server);
         });
     }
