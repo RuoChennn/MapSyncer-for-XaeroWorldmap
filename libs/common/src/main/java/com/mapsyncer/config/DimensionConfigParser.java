@@ -2,6 +2,9 @@ package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +15,8 @@ import java.util.List;
  * 等重复逻辑从各平台 ModConfig 中提取到此处，消除 10 份拷贝。
  */
 public final class DimensionConfigParser {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DimensionConfigParser.class);
 
     /** 默认洞穴起始高度 */
     public static final int DEFAULT_CAVE_START = 63;
@@ -64,36 +69,50 @@ public final class DimensionConfigParser {
         int caveStart = DEFAULT_CAVE_START;
         DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimension);
 
-        try {
-            boolean isNewFormat = parts.length > 1 &&
-                (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
+        boolean isNewFormat = parts.length > 1 &&
+            (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
 
-            int scanModeIndex = isNewFormat ? 1 : 2;
-            int caveStartIndex = isNewFormat ? 2 : 3;
-            int dimTypeStartIndex = isNewFormat ? 3 : 4;
+        int scanModeIndex = isNewFormat ? 1 : 2;
+        int caveStartIndex = isNewFormat ? 2 : 3;
+        int dimTypeStartIndex = isNewFormat ? 3 : 4;
 
-            String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
+        String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
 
-            if (parts.length > caveStartIndex) {
-                caveStart = Integer.parseInt(parts[caveStartIndex]);
+        // 独立解析 caveStart：单字段失败不影响其余字段
+        if (parts.length > caveStartIndex) {
+            try {
+                caveStart = Integer.parseInt(parts[caveStartIndex].trim());
+            } catch (NumberFormatException e) {
+                LOGGER.warn("Invalid cave_start '{}' in dimension config [{}], using default {}",
+                    parts[caveStartIndex], configStr, DEFAULT_CAVE_START);
             }
-
-            if (parts.length >= dimTypeStartIndex + 5) {
-                boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex]);
-                boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1]);
-                int minY = Integer.parseInt(parts[dimTypeStartIndex + 2]);
-                int height = Integer.parseInt(parts[dimTypeStartIndex + 3]);
-                int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4]);
-                dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
-            }
-
-            ScanMode mode = ScanMode.valueOf(modeStr.toUpperCase());
-            return new DimensionScanConfig(dimension, mode, caveStart, dimTypeInfo);
-        } catch (NumberFormatException e) {
-            return new DimensionScanConfig(dimension, ScanMode.SURFACE, DEFAULT_CAVE_START, dimTypeInfo);
-        } catch (IllegalArgumentException e) {
-            return new DimensionScanConfig(dimension, ScanMode.SURFACE, caveStart, dimTypeInfo);
         }
+
+        // 独立解析 dimTypeInfo：单字段失败不影响其余字段
+        if (parts.length >= dimTypeStartIndex + 5) {
+            try {
+                boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex].trim());
+                boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1].trim());
+                int minY = Integer.parseInt(parts[dimTypeStartIndex + 2].trim());
+                int height = Integer.parseInt(parts[dimTypeStartIndex + 3].trim());
+                int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4].trim());
+                dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
+            } catch (NumberFormatException e) {
+                LOGGER.warn("Invalid dim_type_info in dimension config [{}], using runtime type info", configStr);
+            }
+        }
+
+        // 独立解析 ScanMode：解析失败时使用 SURFACE
+        ScanMode mode;
+        try {
+            mode = ScanMode.valueOf(modeStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            LOGGER.warn("Invalid scan_mode '{}' in dimension config [{}], falling back to SURFACE",
+                modeStr, configStr);
+            mode = ScanMode.SURFACE;
+        }
+
+        return new DimensionScanConfig(dimension, mode, caveStart, dimTypeInfo);
     }
 
     /**
@@ -124,9 +143,9 @@ public final class DimensionConfigParser {
         // 未在配置列表中找到，返回原版内置或通用默认
         if (isVanilla) {
             switch (normalizedPath) {
-                case "the_nether": return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, DEFAULT_CAVE_START, DimensionTypeInfo.nether());
-                case "overworld":  return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, DEFAULT_CAVE_START, DimensionTypeInfo.overworld());
-                default:           return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, DEFAULT_CAVE_START, DimensionTypeInfo.theEnd());
+                case "the_nether": return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE, defaultCave, DimensionTypeInfo.nether());
+                case "overworld":  return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE, defaultCave, DimensionTypeInfo.overworld());
+                default:           return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE, defaultCave, DimensionTypeInfo.theEnd());
             }
         }
 
