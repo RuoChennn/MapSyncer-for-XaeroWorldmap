@@ -230,12 +230,7 @@ public class ConversionOrchestrator {
         skippedCount = 0;
         completedDimensions = new ArrayList<>();  // 重置已完成维度列表
 
-        // Step 1: Force save all chunks to disk before reading .mca files
-        if (!saveAllChunks(server)) {
-            LOGGER.error("Failed to save all chunks, aborting map generation");
-            isRunning = false;
-            return;
-        }
+        // Note: caller handles saveEverything on server thread before invoking this method.
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
         totalCount = allRegions.stream().mapToInt(d -> d.regions().size()).sum();
@@ -278,12 +273,7 @@ public class ConversionOrchestrator {
         ServerLevel level = server.getLevel(dimKey);
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
 
-        // Force save all chunks before reading .mca files
-        if (!saveAllChunks(server)) {
-            LOGGER.error("Failed to save all chunks, aborting map generation");
-            isRunning = false;
-            return;
-        }
+        // Note: caller handles saveEverything on server thread before invoking this method.
 
         RegionScanner.RegionScanResult scanResult = RegionScanner.scanDimension(level);
         List<RegionCoords> regions = scanResult.regions();
@@ -325,12 +315,7 @@ public class ConversionOrchestrator {
         clearDimensionCache(dimCacheDir);
         clearGenerationCacheEntries(xaeroDimName);
 
-        // Force save all chunks before reading .mca files
-        if (!saveAllChunks(server)) {
-            LOGGER.error("Failed to save all chunks, aborting map generation");
-            isRunning = false;
-            return;
-        }
+        // Note: caller handles saveEverything on server thread before invoking this method.
 
         RegionScanner.RegionScanResult scanResult = RegionScanner.scanDimension(level);
         List<RegionCoords> regions = scanResult.regions();
@@ -394,12 +379,7 @@ public class ConversionOrchestrator {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimension); isRunning = false; return SingleRegionResult.CONVERSION_FAILED; }
 
-        // Force save all chunks before reading .mca files
-        if (!saveAllChunks(server)) {
-            LOGGER.error("Failed to save all chunks, aborting map generation");
-            isRunning = false;
-            return SingleRegionResult.CONVERSION_FAILED;
-        }
+        // Note: caller handles saveEverything on server thread before invoking this method.
 
         // 使用完整维度 ID 作为缓存 key（确保新格式路径正确转换）
         String fullDimId = dimension.location().toString();

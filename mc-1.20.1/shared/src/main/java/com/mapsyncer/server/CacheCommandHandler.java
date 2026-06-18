@@ -42,6 +42,8 @@ public class CacheCommandHandler {
      * 生成所有维度的地图缓存
      */
     public static void generateAll(MinecraftServer server, Runnable onSuccess) {
+        // Save chunks on server thread before dispatching heavy I/O to background
+        server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateAll(server);
             if (onSuccess != null) {
@@ -55,6 +57,8 @@ public class CacheCommandHandler {
      * 生成指定维度的地图缓存
      */
     public static void generateDimension(MinecraftServer server, String dimensionId, Runnable onSuccess) {
+        // Save chunks on server thread before dispatching heavy I/O to background
+        server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimension(server, dimensionId);
             if (onSuccess != null) {
@@ -68,6 +72,8 @@ public class CacheCommandHandler {
      * 强制重新生成指定维度的地图缓存
      */
     public static void generateDimensionForce(MinecraftServer server, String dimensionId, Runnable onSuccess) {
+        // Save chunks on server thread before dispatching heavy I/O to background
+        server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
             ConversionOrchestrator.generateDimensionForce(server, dimensionId);
             if (onSuccess != null) {
@@ -89,6 +95,8 @@ public class CacheCommandHandler {
      */
     public static void generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int x, int z,
                                             Consumer<SingleRegionResult> resultHandler) {
+        // Save chunks on server thread before dispatching heavy I/O to background
+        server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
             SingleRegionResult result = ConversionOrchestrator.generateSingleRegion(server, dimension, x, z);
             if (resultHandler != null) {
