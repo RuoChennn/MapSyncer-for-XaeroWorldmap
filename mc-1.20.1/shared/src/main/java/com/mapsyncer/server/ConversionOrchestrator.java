@@ -877,14 +877,9 @@ public class ConversionOrchestrator {
             return;
         }
 
-        // Save chunks before scanning to ensure MCA files are up-to-date
-        // This is called from server thread via ServerTickEvent, so direct call is safe
-        try {
-            server.saveEverything(false, true, true);
-        } catch (RuntimeException e) {
-            LOGGER.error("Runtime error saving chunks for incremental scan", e);
-            return;
-        }
+        // Note: caller is responsible for calling server.saveEverything() before invoking this method.
+        // This method performs heavy I/O (MCA scanning, conversion, writing) and should be called
+        // from a background thread to avoid blocking the server tick.
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
         McaTimestampCache mcaCache = getTimestampCache();

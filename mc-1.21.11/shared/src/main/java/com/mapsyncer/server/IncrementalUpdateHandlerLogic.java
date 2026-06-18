@@ -8,6 +8,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -40,6 +43,12 @@ public class IncrementalUpdateHandlerLogic {
 
     /** 上次计划更新的时间，用于防止同一天多次执行 */
     private volatile LocalDateTime lastScheduledUpdate = null;
+
+    /** 后台执行器，用于异步执行增量扫描，避免阻塞 Server 线程 */
+    private volatile ExecutorService updateExecutor = null;
+
+    /** 标记是否已有增量更新任务正在执行 */
+    private volatile boolean updateInProgress = false;
 
     private IncrementalUpdateHandlerLogic() {
         // 私有构造器，禁止外部实例化
@@ -93,10 +102,48 @@ public class IncrementalUpdateHandlerLogic {
      */
     public void stop() {
         running = false;
+        updateInProgress = false;
+        shutdownExecutor();
         server = null;
         tickCounter.set(0);
         lastScheduledUpdate = null;
         LOGGER.info("Incremental update handler stopped");
+    }
+
+    /**
+     * 获取或创建后台更新执行器（单线程，惰性初始化）
+     */
+    private ExecutorService getUpdateExecutor() {
+        if (updateExecutor == null) {
+            synchronized (this) {
+                if (updateExecutor == null) {
+                    updateExecutor = Executors.newSingleThreadExecutor(r -> {
+                        Thread t = new Thread(r, "mapsyncer-incremental-update");
+                        t.setPriority(Thread.MIN_PRIORITY);
+                        t.setDaemon(true);
+                        return t;
+                    });
+                }
+            }
+        }
+        return updateExecutor;
+    }
+
+    /**
+     * 关闭后台更新执行器
+     */
+    private void shutdownExecutor() {
+        if (updateExecutor != null) {
+            updateExecutor.shutdownNow();
+            try {
+                if (!updateExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    LOGGER.warn("Update executor did not terminate in time");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            updateExecutor = null;
+        }
     }
 
     /**
@@ -184,19 +231,41 @@ public class IncrementalUpdateHandlerLogic {
      * @param reason 更新原因描述
      */
     private void performScheduledUpdate(String reason) {
+        if (updateInProgress) {
+            LOGGER.debug("Scheduled update already in progress, skipping");
+            return;
+        }
+
         LOGGER.info("Performing incremental update: {}", reason);
+        updateInProgress = true;
 
+        // Save chunks on server thread (required for thread safety)
         try {
-            ConversionOrchestrator.performIncrementalScan(server);
+            server.saveEverything(false, true, true);
         } catch (RuntimeException e) {
-            LOGGER.error("Error during scheduled incremental update", e);
+            LOGGER.error("Runtime error saving chunks for incremental scan", e);
+            updateInProgress = false;
+            return;
         }
 
-        // 检查是否有玩家在线，无人则停止处理器节省资源
-        if (server.getPlayerList().getPlayerCount() == 0) {
-            LOGGER.info("No players online after incremental update, stopping handler to save resources");
-            stop();
-        }
+        // Run heavy I/O (MCA scan, conversion, writing) on background thread
+        // to avoid blocking the server tick and triggering the watchdog.
+        final MinecraftServer currentServer = this.server;
+        getUpdateExecutor().submit(() -> {
+            try {
+                ConversionOrchestrator.performIncrementalScan(currentServer);
+            } catch (RuntimeException e) {
+                LOGGER.error("Error during scheduled incremental update", e);
+            } finally {
+                updateInProgress = false;
+            }
+
+            // 检查是否有玩家在线，无人则停止处理器节省资源
+            if (currentServer.getPlayerList().getPlayerCount() == 0) {
+                LOGGER.info("No players online after incremental update, stopping handler to save resources");
+                stop();
+            }
+        });
     }
 
     /**
