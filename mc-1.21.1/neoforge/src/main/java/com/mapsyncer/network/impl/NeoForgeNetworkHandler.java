@@ -16,6 +16,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 /**
@@ -23,7 +24,7 @@ import java.util.function.BiConsumer;
  */
 public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, RegisterPayloadHandlersEvent> {
 
-    private volatile boolean payloadsRegistered = false;
+    private final AtomicBoolean payloadsRegistered = new AtomicBoolean(false);
 
     /** 已确认安装了 MapSyncer 的玩家 — 仅对这些玩家发送自定义 payload */
     private final Set<UUID> confirmedPlayers = ConcurrentHashMap.newKeySet();
@@ -35,8 +36,7 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
 
     @Override
     public void registerHandlers(RegisterPayloadHandlersEvent event) {
-        if (payloadsRegistered) return;
-        payloadsRegistered = true;
+        if (!payloadsRegistered.compareAndSet(false, true)) return;
 
         PayloadRegistrar registrar = event.registrar("1").optional();
 
