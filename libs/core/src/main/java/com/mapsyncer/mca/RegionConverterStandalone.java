@@ -79,7 +79,7 @@ public class RegionConverterStandalone {
             byte[] xaeroData = serializeToXaeroFormat(regionData, minBuildHeight, blockLookup);
             return new ConvertedRegion(regionX, regionZ, xaeroData);
         } catch (IOException e) {
-            LOGGER.warn("Failed to convert region ({}, {}): {}", regionX, regionZ, e.getMessage());
+            LOGGER.warn("Failed to convert region ({}, {})", regionX, regionZ, e);
             return null;
         }
     }
