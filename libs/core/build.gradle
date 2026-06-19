@@ -28,6 +28,7 @@ configurations {
 
 dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'org.lz4:lz4-java:1.8.0'
     packagerLogging 'org.slf4j:slf4j-simple:2.0.9'
 }
 

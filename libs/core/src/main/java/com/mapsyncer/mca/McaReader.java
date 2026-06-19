@@ -9,6 +9,8 @@ import java.io.*;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
+import net.jpountz.lz4.LZ4BlockInputStream;
+
 /**
  * MCA文件读取器 - 零依赖实现
  * 解析Minecraft区域文件格式(.mca)
@@ -25,9 +27,8 @@ import java.util.zip.InflaterInputStream;
  *   <li>GZIP (类型1)</li>
  *   <li>ZLIB (类型2)</li>
  *   <li>无压缩 (类型3)</li>
+ *   <li>LZ4 (类型4)</li>
  * </ul>
- *
- * <p>注意：LZ4压缩类型(4)暂不支持，需要额外依赖库</p>
  *
  * @see ChunkDataParser 用于解析chunk的NBT数据
  * @see McaReader.ChunkLocation chunk位置信息记录
@@ -262,7 +263,7 @@ public class McaReader implements AutoCloseable {
      *   <li>GZIP (1): 使用GZIPInputStream解压</li>
      *   <li>ZLIB (2): 使用InflaterInputStream解压</li>
      *   <li>无压缩 (3): 直接返回原始数据</li>
-     *   <li>LZ4 (4): 暂不支持，抛出异常</li>
+     *   <li>LZ4 (4): LZ4 块压缩 (Minecraft 1.21.2+ 默认格式)</li>
      * </ul>
      *
      * @param data 压缩的数据字节数组
@@ -299,8 +300,14 @@ public class McaReader implements AutoCloseable {
                 return data;
 
             case COMPRESS_LZ4:
-                // LZ4压缩需要额外依赖，暂不支持
-                throw new IOException("LZ4压缩暂不支持，请使用GZIP或ZLIB压缩的region文件");
+                try (LZ4BlockInputStream lis = new LZ4BlockInputStream(bais)) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = lis.read(buf)) > 0) {
+                        baos.write(buf, 0, len);
+                    }
+                }
+                return baos.toByteArray();
 
             default:
                 throw new IOException("未知压缩类型: " + compressionType);
