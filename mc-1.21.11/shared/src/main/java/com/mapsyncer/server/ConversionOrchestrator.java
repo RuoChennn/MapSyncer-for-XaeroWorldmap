@@ -815,16 +815,17 @@ public class ConversionOrchestrator {
      * @param server Minecraft服务器实例
      */
     public static void performIncrementalScan(MinecraftServer server) {
-        if (isRunning.get()) {
+        if (!isRunning.compareAndSet(false, true)) {
             LOGGER.debug("Conversion already in progress, skipping incremental scan");
             return;
         }
 
-        // Note: caller is responsible for calling server.saveEverything() before invoking this method.
-        // This method performs heavy I/O (MCA scanning, conversion, writing) and should be called
-        // from a background thread to avoid blocking the server tick.
+        try {
+            // Note: caller is responsible for calling server.saveEverything() before invoking this method.
+            // This method performs heavy I/O (MCA scanning, conversion, writing) and should be called
+            // from a background thread to avoid blocking the server tick.
 
-        List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
+            List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
         McaTimestampCache mcaCache = getTimestampCache();
         GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
         int totalUpdated = 0;
@@ -926,6 +927,9 @@ public class ConversionOrchestrator {
             LOGGER.info("Incremental scan completed: {} regions updated", totalUpdated);
             mcaCache.saveCache();
             genCache.save();
+        }
+        } finally {
+            isRunning.set(false);
         }
     }
 
