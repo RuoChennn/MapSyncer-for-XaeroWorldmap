@@ -31,20 +31,6 @@ public final class TimeoutConfig {
      */
     public static final long TASK_TIMEOUT_SECONDS = 60;
 
-    /**
-     * 保存超时时间（毫秒）
-     *
-     * <p>用于等待区块保存完成。</p>
-     *
-     * <p>选择依据：</p>
-     * <ul>
-     *   <li>区块保存涉及磁盘IO操作</li>
-     *   <li>大型服务器可能有大量区块需要保存</li>
-     *   <li>60秒足够完成保存操作</li>
-     * </ul>
-     */
-    public static final long SAVE_TIMEOUT_MS = 60_000;
-
     // ========== 网络同步超时配置 ==========
 
     /**

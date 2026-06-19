@@ -744,62 +744,6 @@ public class ConversionOrchestrator {
     }
 
     /**
-     * 强制保存所有维度的所有区块到磁盘
-     *
-     * 确保MCA文件是最新的，必须在读取MCA文件之前调用。
-     * 由于C2ME并发限制，必须在服务器线程上执行（不能异步）。
-     *
-     * @param server Minecraft服务器实例
-     * @return true表示保存成功，false表示保存失败
-     */
-    private static boolean saveAllChunks(MinecraftServer server) {
-        try {
-            LOGGER.info("Flushing all chunks to disk...");
-            currentStatus = "Saving all chunks to disk...";
-
-            // Must execute on server thread to avoid C2ME ConcurrentModificationException
-            // C2ME prevents async calls to saveEverything()
-            final boolean[] success = new boolean[1];
-            final Throwable[] error = new Throwable[1];
-
-            server.execute(() -> {
-                try {
-                    server.saveEverything(false, true, true);
-                    success[0] = true;
-                } catch (Throwable t) {
-                    error[0] = t;
-                }
-            });
-
-            // Wait for save to complete (with timeout)
-            long startTime = System.currentTimeMillis();
-            long timeoutMs = TimeoutConfig.SAVE_TIMEOUT_MS;
-            while (!success[0] && error[0] == null) {
-                if (System.currentTimeMillis() - startTime > timeoutMs) {
-                    LOGGER.error("Timeout waiting for chunk save to complete");
-                    return false;
-                }
-                Thread.sleep(100);
-            }
-
-            if (error[0] != null) {
-                LOGGER.error("Error during chunk flush", error[0]);
-                return false;
-            }
-
-            LOGGER.info("All chunks flushed to disk successfully");
-            return true;
-        } catch (InterruptedException e) {
-            LOGGER.error("Interrupted while waiting for chunk save", e);
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (RuntimeException e) {
-            LOGGER.error("Runtime error during chunk flush", e);
-            return false;
-        }
-    }
-
-    /**
      * 解析维度ID为ResourceKey
      *
      * 支持多种输入格式：
