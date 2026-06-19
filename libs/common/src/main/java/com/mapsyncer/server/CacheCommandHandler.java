@@ -5,6 +5,7 @@ import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.resources.ResourceKey;
@@ -277,13 +278,13 @@ public class CacheCommandHandler {
      * 获取友好的维度名称
      */
     public static String getFriendlyDimensionName(ResourceKey<Level> dimension) {
-        return DimensionPathMapping.getInstance().getFriendlyName(dimension.location().toString());
+        return DimensionPathMapping.getInstance().getFriendlyName(DimensionApiHelper.getDimId(dimension));
     }
 
     /**
      * 获取维度ID字符串
      */
     public static String getDimensionId(ResourceKey<Level> dimension) {
-        return dimension.location().toString();
+        return DimensionApiHelper.getDimId(dimension);
     }
 }

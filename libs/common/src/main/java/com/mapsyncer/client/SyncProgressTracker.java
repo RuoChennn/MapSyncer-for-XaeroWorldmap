@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.ClientMessageHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -98,13 +99,13 @@ public class SyncProgressTracker {
             if (tracking && !receivedFirstResponse) {
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
-                    // sendSystemMessage 必须在 MC 主线程调用，通过 execute() 调度
+                    // 必须在 MC 主线程调用，通过 execute() 调度
                     mc.execute(() -> {
                         if (mc.player != null) {
                             if (MapPacketReceiver.isServerInstalled()) {
-                                mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.timeout"));
+                                ClientMessageHelper.sendChatMessage(ChatUtils.error("mapsyncer.sync.timeout"));
                             } else {
-                                mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"));
+                                ClientMessageHelper.sendChatMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"));
                             }
                         }
                     });
@@ -163,7 +164,7 @@ public class SyncProgressTracker {
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
-            mc.player.sendSystemMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed));
+            ClientMessageHelper.sendChatMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed));
         }
     }
 
@@ -208,9 +209,9 @@ public class SyncProgressTracker {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && tracking) {
             if (total > 0) {
-                mc.player.sendOverlayMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent));
+                ClientMessageHelper.sendOverlayMessage(ChatUtils.message("mapsyncer.sync.progress", processed, total, lastDisplayedPercent));
             } else {
-                mc.player.sendOverlayMessage(ChatUtils.prefix().append(Component.literal(status)));
+                ClientMessageHelper.sendOverlayMessage(ChatUtils.prefix().append(Component.literal(status)));
             }
         }
     }

@@ -4,6 +4,7 @@ import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ScanMode;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.DimensionTypeHelper;
 import net.minecraft.resources.ResourceKey;
@@ -72,7 +73,7 @@ public class DimensionRegistry {
         Set<String> newDimensions = new LinkedHashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
             ResourceKey<Level> dimKey = level.dimension();
-            String dimId = dimKey.location().toString();
+            String dimId = DimensionApiHelper.getDimId(dimKey);
 
             String normalizedId = normalizeDimensionId(dimId);
 
@@ -160,7 +161,7 @@ public class DimensionRegistry {
      */
     private static ServerLevel getLevelForDimension(MinecraftServer server, String dimId) {
         for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().toString().equals(dimId)) {
+            if (DimensionApiHelper.getDimId(level.dimension()).equals(dimId)) {
                 return level;
             }
         }
