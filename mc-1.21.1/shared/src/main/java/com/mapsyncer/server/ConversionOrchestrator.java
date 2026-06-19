@@ -103,6 +103,8 @@ public class ConversionOrchestrator {
             String worldName = server.getWorldPath(LevelResource.ROOT).getParent().getFileName().toString();
             setCacheDir(XaeroPathResolver.getWorldMapDir(gameDir).resolve(worldName));
         }
+        // 清理历史残留的 .zip.temp 文件
+        XaeroWriter.cleanStaleTempFiles(getCacheDir());
     }
 
     /** 时间戳缓存实例 */

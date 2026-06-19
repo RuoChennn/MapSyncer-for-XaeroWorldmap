@@ -3,11 +3,15 @@ package com.mapsyncer.server;
 import com.mapsyncer.mca.RegionConverterStandalone.ConvertedRegion;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Xaero地图文件写入器 - 将转换后的区域数据写入Xaero兼容的zip文件
@@ -16,6 +20,47 @@ import java.util.zip.ZipOutputStream;
  * 使用临时文件+原子替换的方式写入，确保文件完整性。
  */
 public class XaeroWriter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(XaeroWriter.class);
+
+    /** 超过此时间的 .temp 残留文件视为可安全删除（毫秒） */
+    private static final long TEMP_FILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+    /**
+     * 清理残留的 .zip.temp 文件。
+     *
+     * <p>正常写入通过原子 rename 完成，JVM 崩溃后 .temp 文件会残留。
+     * 此方法删除超过 {@link #TEMP_FILE_MAX_AGE_MS} 的残留文件，
+     * 确保不会误删正在进行的写入。</p>
+     *
+     * @param rootDir 缓存根目录（会递归扫描）
+     * @return 清理的文件数量
+     */
+    public static int cleanStaleTempFiles(Path rootDir) {
+        if (!Files.exists(rootDir)) return 0;
+        long cutoff = System.currentTimeMillis() - TEMP_FILE_MAX_AGE_MS;
+        int[] count = {0};
+        try (var stream = Files.walk(rootDir)) {
+            stream.filter(p -> p.getFileName().toString().endsWith(".zip.temp"))
+                  .forEach(p -> {
+                      try {
+                          if (Files.getLastModifiedTime(p).toMillis() < cutoff) {
+                              Files.deleteIfExists(p);
+                              count[0]++;
+                              LOGGER.debug("Cleaned stale temp file: {}", p);
+                          }
+                      } catch (IOException ignored) {
+                          // 文件可能已被其他进程删除
+                      }
+                  });
+        } catch (IOException e) {
+            LOGGER.warn("Failed to scan for stale temp files in {}", rootDir, e);
+        }
+        if (count[0] > 0) {
+            LOGGER.info("Cleaned {} stale .temp files from {}", count[0], rootDir);
+        }
+        return count[0];
+    }
 
     /**
      * 将转换后的区域数据写入zip文件
