@@ -70,6 +70,7 @@
   "mapsyncer.generate.force_complete": "强制维度生成完成：%d/%d 个区域，本次更新 %d 个",
   "mapsyncer.generate.in_progress": "转换进行中：%d/%d 个区域 - %s",
   "mapsyncer.generate.no_progress": "当前无转换任务",
+  "mapsyncer.command.conversion_busy": "已有地图生成任务正在进行中，请等待当前任务完成后再执行新任务。",
   "mapsyncer.status.no_task_disabled": "当前无转换任务，增量更新未启用",
   "mapsyncer.status.combined": "%s，%s",
   "mapsyncer.status.incremental_disabled": "增量更新：未启用",

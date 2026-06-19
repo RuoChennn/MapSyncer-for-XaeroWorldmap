@@ -239,10 +239,10 @@ public class ConversionOrchestrator {
      *
      * @param server Minecraft服务器实例
      */
-    public static void generateAll(MinecraftServer server) {
+    public static boolean generateAll(MinecraftServer server) {
         if (!isRunning.compareAndSet(false, true)) {
-            LOGGER.warn("Conversion already in progress");
-            return;
+            LOGGER.warn("Conversion already in progress, rejecting generateAll");
+            return false;
         }
         processedCount = 0;
         skippedCount.set(0);
@@ -256,7 +256,7 @@ public class ConversionOrchestrator {
         if (totalCount == 0) {
             LOGGER.info("No regions found to convert");
             isRunning.set(false);
-            return;
+            return true;
         }
         LOGGER.info("Starting conversion of {} regions across {} dimensions", totalCount, allRegions.size());
         try {
@@ -269,6 +269,7 @@ public class ConversionOrchestrator {
             shutdownExecutor();
             LOGGER.info("Conversion completed: {}/{} regions, {} skipped (empty MCA)", processedCount, totalCount, totalSkippedEmpty);
         }
+        return true;
     }
 
     /**
@@ -279,17 +280,17 @@ public class ConversionOrchestrator {
      * @param server Minecraft服务器实例
      * @param dimensionId 维度ID（如"minecraft:overworld"）
      */
-    public static void generateDimension(MinecraftServer server, String dimensionId) {
+    public static boolean generateDimension(MinecraftServer server, String dimensionId) {
         if (!isRunning.compareAndSet(false, true)) {
-            LOGGER.warn("Conversion already in progress");
-            return;
+            LOGGER.warn("Conversion already in progress, rejecting generateDimension");
+            return false;
         }
         processedCount = 0;
         skippedCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
-        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return; }
+        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return true; }
         ServerLevel level = server.getLevel(dimKey);
-        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return; }
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return true; }
 
         // Note: caller handles saveEverything on server thread before invoking this method.
 
@@ -304,6 +305,7 @@ public class ConversionOrchestrator {
             currentStatus = "completed";
             shutdownExecutor();
         }
+        return true;
     }
 
     /**
@@ -314,17 +316,17 @@ public class ConversionOrchestrator {
      * @param server Minecraft服务器实例
      * @param dimensionId 维度ID（如"minecraft:overworld"）
      */
-    public static void generateDimensionForce(MinecraftServer server, String dimensionId) {
+    public static boolean generateDimensionForce(MinecraftServer server, String dimensionId) {
         if (!isRunning.compareAndSet(false, true)) {
-            LOGGER.warn("Conversion already in progress");
-            return;
+            LOGGER.warn("Conversion already in progress, rejecting generateDimensionForce");
+            return false;
         }
         processedCount = 0;
         skippedCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
-        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return; }
+        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return true; }
         ServerLevel level = server.getLevel(dimKey);
-        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return; }
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return true; }
 
         // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
         String fullDimId = dimKey.identifier().toString(); // 完整维度 ID（包含 namespace）
@@ -346,6 +348,7 @@ public class ConversionOrchestrator {
             currentStatus = "completed";
             shutdownExecutor();
         }
+        return true;
     }
 
     /**

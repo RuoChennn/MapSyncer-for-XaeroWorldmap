@@ -12,6 +12,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -23,6 +25,8 @@ import java.util.function.Consumer;
  * 仅负责命令注册和参数解析。
  */
 public class CacheCommandHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CacheCommandHandler.class);
 
     /**
      * 显示帮助信息
@@ -41,47 +45,60 @@ public class CacheCommandHandler {
 
     /**
      * 生成所有维度的地图缓存
+     * @return true 任务已提交，false 已有转换任务在运行
      */
-    public static void generateAll(MinecraftServer server, Runnable onSuccess) {
+    public static boolean generateAll(MinecraftServer server, Runnable onSuccess) {
+        if (ConversionOrchestrator.isRunning()) {
+            LOGGER.warn("Conversion already in progress, rejecting generateAll command");
+            return false;
+        }
         // Save chunks on server thread before dispatching heavy I/O to background
         server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateAll(server);
-            if (onSuccess != null) {
+            if (ConversionOrchestrator.generateAll(server) && onSuccess != null) {
                 onSuccess.run();
             }
         }, "xaero-map-generator");
         worker.start();
+        return true;
     }
 
     /**
      * 生成指定维度的地图缓存
+     * @return true 任务已提交，false 已有转换任务在运行
      */
-    public static void generateDimension(MinecraftServer server, String dimensionId, Runnable onSuccess) {
-        // Save chunks on server thread before dispatching heavy I/O to background
+    public static boolean generateDimension(MinecraftServer server, String dimensionId, Runnable onSuccess) {
+        if (ConversionOrchestrator.isRunning()) {
+            LOGGER.warn("Conversion already in progress, rejecting generateDimension command");
+            return false;
+        }
         server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateDimension(server, dimensionId);
-            if (onSuccess != null) {
+            if (ConversionOrchestrator.generateDimension(server, dimensionId) && onSuccess != null) {
                 onSuccess.run();
             }
         }, "xaero-map-generator");
         worker.start();
+        return true;
     }
 
     /**
      * 强制重新生成指定维度的地图缓存
+     * @return true 任务已提交，false 已有转换任务在运行
      */
-    public static void generateDimensionForce(MinecraftServer server, String dimensionId, Runnable onSuccess) {
-        // Save chunks on server thread before dispatching heavy I/O to background
+    public static boolean generateDimensionForce(MinecraftServer server, String dimensionId, Runnable onSuccess) {
+        if (ConversionOrchestrator.isRunning()) {
+            LOGGER.warn("Conversion already in progress, rejecting generateDimensionForce command");
+            return false;
+        }
         server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {
-            ConversionOrchestrator.generateDimensionForce(server, dimensionId);
-            if (onSuccess != null) {
+            if (ConversionOrchestrator.generateDimensionForce(server, dimensionId) && onSuccess != null) {
                 onSuccess.run();
             }
         }, "xaero-map-generator");
         worker.start();
+        return true;
     }
 
     /**
@@ -94,8 +111,13 @@ public class CacheCommandHandler {
     /**
      * 生成单个区域的地图缓存
      */
-    public static void generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int x, int z,
+    public static boolean generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int x, int z,
                                             Consumer<SingleRegionResult> resultHandler) {
+        if (ConversionOrchestrator.isRunning()) {
+            LOGGER.warn("Conversion already in progress, rejecting generateSingleRegion command");
+            resultHandler.accept(SingleRegionResult.ALREADY_RUNNING);
+            return false;
+        }
         // Save chunks on server thread before dispatching heavy I/O to background
         server.saveEverything(false, true, true);
         Thread worker = new Thread(() -> {

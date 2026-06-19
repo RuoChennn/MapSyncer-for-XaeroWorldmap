@@ -70,6 +70,7 @@
   "mapsyncer.generate.force_complete": "Forced dimension generation completed: %d/%d regions, %d updated",
   "mapsyncer.generate.in_progress": "Conversion in progress: %d/%d regions - %s",
   "mapsyncer.generate.no_progress": "No conversion in progress",
+  "mapsyncer.command.conversion_busy": "A map generation task is already in progress. Please wait for it to complete before starting a new one.",
   "mapsyncer.status.no_task_disabled": "No conversion task, incremental updates disabled",
   "mapsyncer.status.combined": "%s, %s",
   "mapsyncer.status.incremental_disabled": "Incremental updates: Disabled",

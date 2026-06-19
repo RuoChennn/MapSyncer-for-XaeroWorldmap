@@ -76,17 +76,18 @@ public class CacheGenerateCommand {
 
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
         MinecraftServer server = ctx.getSource().getServer();
-        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_full"), false);
-
-        CacheCommandHandler.generateAll(server, () -> {
+        if (!CacheCommandHandler.generateAll(server, () -> {
             String dimList = String.join(", ", CacheCommandHandler.getCompletedDimensions());
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.full_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
                     CacheCommandHandler.getCompletedDimensions().size(),
                     dimList), false);
-        });
-
+        })) {
+            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.conversion_busy"));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_full"), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -95,15 +96,17 @@ public class CacheGenerateCommand {
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
-        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_dim", friendlyName), false);
 
-        CacheCommandHandler.generateDimension(ctx.getSource().getServer(), dimensionId, () -> {
+        if (!CacheCommandHandler.generateDimension(ctx.getSource().getServer(), dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.dim_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
                     CacheCommandHandler.getUpdatedCount()), false);
-        });
-
+        })) {
+            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.conversion_busy"));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_dim", friendlyName), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -112,15 +115,17 @@ public class CacheGenerateCommand {
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
-        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_force", friendlyName), false);
 
-        CacheCommandHandler.generateDimensionForce(ctx.getSource().getServer(), dimensionId, () -> {
+        if (!CacheCommandHandler.generateDimensionForce(ctx.getSource().getServer(), dimensionId, () -> {
             ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.generate.force_complete",
                     CacheCommandHandler.getProcessedCount(),
                     CacheCommandHandler.getTotalCount(),
                     CacheCommandHandler.getUpdatedCount()), false);
-        });
-
+        })) {
+            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.conversion_busy"));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.generate.start_force", friendlyName), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -138,15 +143,18 @@ public class CacheGenerateCommand {
         }
 
         String friendlyName = CacheCommandHandler.getFriendlyDimensionName(dimension);
-        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.command.generating_region", x, z, friendlyName), false);
 
-        CacheCommandHandler.generateSingleRegion(server, dimension, x, z, result -> {
+        if (!CacheCommandHandler.generateSingleRegion(server, dimension, x, z, result -> {
             if (result == SingleRegionResult.SUCCESS) {
                 ctx.getSource().sendSuccess(() -> ChatUtils.success("mapsyncer.command.region_converted"), false);
             } else if (result == SingleRegionResult.CONVERSION_FAILED) {
                 ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.region_conversion_failed", x, z));
             }
-        });
+        })) {
+            ctx.getSource().sendFailure(ChatUtils.error("mapsyncer.command.conversion_busy"));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.command.generating_region", x, z, friendlyName), false);
 
         return Command.SINGLE_SUCCESS;
     }
