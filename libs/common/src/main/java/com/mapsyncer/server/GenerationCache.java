@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 生成缓存 - 缓存每个region的生成时间戳和CRC32哈希值
@@ -42,8 +43,8 @@ public class GenerationCache {
     /** 缓存文件路径 */
     private final Path cacheFile;
 
-    /** 缓存数据：relativePath -> TimestampHashEntry */
-    private final Map<String, TimestampHashEntry> cache = new HashMap<>();
+    /** 缓存数据：relativePath -> TimestampHashEntry（线程安全） */
+    private final Map<String, TimestampHashEntry> cache = new ConcurrentHashMap<>();
 
     private GenerationCache(Path cacheDir) {
         this.cacheFile = cacheDir.resolve("generation_cache.properties");
