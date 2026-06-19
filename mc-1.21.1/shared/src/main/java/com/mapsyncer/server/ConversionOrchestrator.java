@@ -30,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -65,8 +66,8 @@ public class ConversionOrchestrator {
     /** 已处理的区域数量（兼容旧代码） */
     private static volatile int processedCount = 0;
 
-    /** 跳过的区域数量（时间戳未变化） */
-    private static volatile int skippedCount = 0;
+    /** 跳过的区域数量（时间戳未变化，原子操作安全） */
+    private static final AtomicInteger skippedCount = new AtomicInteger(0);
 
     /** 总区域数量 */
     private static volatile int totalCount = 0;
@@ -77,8 +78,8 @@ public class ConversionOrchestrator {
     /** 当前正在处理的维度 */
     private static volatile ResourceKey<Level> currentDimension = null;
 
-    /** 已完成的维度列表（用于全量生成完成提示） */
-    private static volatile List<String> completedDimensions = new ArrayList<>();
+    /** 已完成的维度列表（用于全量生成完成提示，线程安全） */
+    private static final List<String> completedDimensions = new CopyOnWriteArrayList<>();
 
     /** 缓存输出目录 */
     private static final Path DEFAULT_CACHE_DIR = Path.of("server_map_cache");
@@ -227,8 +228,8 @@ public class ConversionOrchestrator {
         }
         isRunning = true;
         processedCount = 0;
-        skippedCount = 0;
-        completedDimensions = new ArrayList<>();  // 重置已完成维度列表
+        skippedCount.set(0);
+        completedDimensions.clear();  // 重置已完成维度列表
 
         // Note: caller handles saveEverything on server thread before invoking this method.
 
@@ -267,7 +268,7 @@ public class ConversionOrchestrator {
         }
         isRunning = true;
         processedCount = 0;
-        skippedCount = 0;
+        skippedCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
         if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
         ServerLevel level = server.getLevel(dimKey);
@@ -302,7 +303,7 @@ public class ConversionOrchestrator {
         }
         isRunning = true;
         processedCount = 0;
-        skippedCount = 0;
+        skippedCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
         if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
         ServerLevel level = server.getLevel(dimKey);
@@ -511,7 +512,7 @@ public class ConversionOrchestrator {
 
         ConcurrentLinkedQueue<RegionCoords> failedRegions = new ConcurrentLinkedQueue<>();
         processedCountAtomic.set(0);
-        skippedCount = 0;
+        skippedCount.set(0);
         long generationTimeSeconds = System.currentTimeMillis() / 1000;
 
         ExecutorService executor = getOrCreateExecutor();
@@ -542,7 +543,7 @@ public class ConversionOrchestrator {
         }
 
         LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA), {} failed",
-            dimPath, regions.size(), processedCount - skippedCount, skippedCount, dimRegions.skippedEmptyCount(), failedRegions.size());
+            dimPath, regions.size(), processedCount - skippedCount.get(), skippedCount.get(), dimRegions.skippedEmptyCount(), failedRegions.size());
 
         String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension().location().toString());
         completedDimensions.add(friendlyName);
@@ -646,7 +647,7 @@ public class ConversionOrchestrator {
 
             if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
                 processedCountAtomic.incrementAndGet();
-                skippedCount++;
+                skippedCount.incrementAndGet();
                 LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
                 continue;
             }
@@ -992,14 +993,14 @@ public class ConversionOrchestrator {
      *
      * @return 实际更新数量
      */
-    public static int getUpdatedCount() { return processedCount - skippedCount; }
+    public static int getUpdatedCount() { return processedCount - skippedCount.get(); }
 
     /**
      * 获取跳过的区域数量（时间戳未变化）
      *
      * @return 跳过数量
      */
-    public static int getSkippedCount() { return skippedCount; }
+    public static int getSkippedCount() { return skippedCount.get(); }
 
     /**
      * 获取当前状态描述
