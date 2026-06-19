@@ -56,6 +56,7 @@ import net.minecraft.world.level.material.MapColor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -96,8 +97,14 @@ public class BlockPropertyResolver {
     private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = (BlockGetter) PlaceholderBlockGetterFactory.getInstance();
     private static final BlockPos PLACEHOLDER_BLOCKPOS = BlockPos.ZERO;
 
-    /** 缓存方块属性查询结果（带LRU清理） */
-    private static final ConcurrentHashMap<String, BlockProperties> propertiesCache = new ConcurrentHashMap<>();
+    /** 缓存方块属性查询结果（LRU策略，access-order LinkedHashMap） */
+    private static final LinkedHashMap<String, BlockProperties> propertiesCache =
+        new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, BlockProperties> eldest) {
+                return size() > MAX_CACHE_SIZE;
+            }
+        };
 
     /** 缓存最大容量（使用集中配置，便于管理） */
     private static final int MAX_CACHE_SIZE = CacheConfig.MAX_BLOCK_PROPERTIES_CACHE;
@@ -176,34 +183,9 @@ public class BlockPropertyResolver {
      * @return 方块属性集合
      */
     public static BlockProperties getProperties(String blockName) {
-        // 检查缓存大小，超过上限时清理部分条目
-        if (propertiesCache.size() > MAX_CACHE_SIZE) {
-            trimCache();
+        synchronized (propertiesCache) {
+            return propertiesCache.computeIfAbsent(blockName, BlockPropertyResolver::resolveProperties);
         }
-        return propertiesCache.computeIfAbsent(blockName, BlockPropertyResolver::resolveProperties);
-    }
-
-    /**
-     * 清理缓存（LRU策略）
-     *
-     * 当缓存超过上限时，清理一半的旧条目。
-     * 使用简单策略：随机清理一部分条目，避免遍历所有条目排序。
-     */
-    private static void trimCache() {
-        int currentSize = propertiesCache.size();
-        int toRemove = currentSize / 2;
-
-        LOGGER.debug("Trimming properties cache: size={}, removing {} entries", currentSize, toRemove);
-
-        // 清理一半条目（简单策略，不精确LRU）
-        int removed = 0;
-        for (String key : propertiesCache.keySet()) {
-            if (removed >= toRemove) break;
-            propertiesCache.remove(key);
-            removed++;
-        }
-
-        LOGGER.debug("Cache trimmed: removed {} entries, new size={}", removed, propertiesCache.size());
     }
 
     /**

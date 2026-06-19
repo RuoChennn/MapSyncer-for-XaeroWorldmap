@@ -11,6 +11,7 @@ import java.time.LocalTime;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -48,7 +49,7 @@ public class IncrementalUpdateHandlerLogic {
     private volatile ExecutorService updateExecutor = null;
 
     /** 标记是否已有增量更新任务正在执行 */
-    private volatile boolean updateInProgress = false;
+    private final AtomicBoolean updateInProgress = new AtomicBoolean(false);
 
     private IncrementalUpdateHandlerLogic() {
         // 私有构造器，禁止外部实例化
@@ -104,7 +105,7 @@ public class IncrementalUpdateHandlerLogic {
      */
     public void stop() {
         running = false;
-        updateInProgress = false;
+        updateInProgress.set(false);
         shutdownExecutor();
         server = null;
         tickCounter.set(0);
@@ -233,20 +234,19 @@ public class IncrementalUpdateHandlerLogic {
      * @param reason 更新原因描述
      */
     private void performScheduledUpdate(String reason) {
-        if (updateInProgress) {
+        if (!updateInProgress.compareAndSet(false, true)) {
             LOGGER.debug("Scheduled update already in progress, skipping");
             return;
         }
 
         LOGGER.info("Performing incremental update: {}", reason);
-        updateInProgress = true;
 
         // Save chunks on server thread (required for thread safety)
         try {
             server.saveEverything(false, true, true);
         } catch (RuntimeException e) {
             LOGGER.error("Runtime error saving chunks for incremental scan", e);
-            updateInProgress = false;
+            updateInProgress.set(false);
             return;
         }
 
@@ -259,7 +259,7 @@ public class IncrementalUpdateHandlerLogic {
             } catch (RuntimeException e) {
                 LOGGER.error("Error during scheduled incremental update", e);
             } finally {
-                updateInProgress = false;
+                updateInProgress.set(false);
             }
 
             // 检查是否有玩家在线，无人则停止处理器节省资源

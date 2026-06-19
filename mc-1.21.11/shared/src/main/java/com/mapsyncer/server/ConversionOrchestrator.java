@@ -37,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
@@ -60,7 +61,7 @@ public class ConversionOrchestrator {
     private static volatile ExecutorService conversionExecutor = null;
 
     /** 是否正在运行转换任务 */
-    private static volatile boolean isRunning = false;
+    private static final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     /** 已处理的区域数量（原子变量，支持并发更新） */
     private static final AtomicInteger processedCountAtomic = new AtomicInteger(0);
@@ -239,11 +240,10 @@ public class ConversionOrchestrator {
      * @param server Minecraft服务器实例
      */
     public static void generateAll(MinecraftServer server) {
-        if (isRunning) {
+        if (!isRunning.compareAndSet(false, true)) {
             LOGGER.warn("Conversion already in progress");
             return;
         }
-        isRunning = true;
         processedCount = 0;
         skippedCount.set(0);
         completedDimensions.clear();  // 重置已完成维度列表
@@ -255,7 +255,7 @@ public class ConversionOrchestrator {
         int totalSkippedEmpty = allRegions.stream().mapToInt(DimensionRegions::skippedEmptyCount).sum();
         if (totalCount == 0) {
             LOGGER.info("No regions found to convert");
-            isRunning = false;
+            isRunning.set(false);
             return;
         }
         LOGGER.info("Starting conversion of {} regions across {} dimensions", totalCount, allRegions.size());
@@ -264,7 +264,7 @@ public class ConversionOrchestrator {
                 convertDimension(server, dimRegions, false);
             }
         } finally {
-            isRunning = false;
+            isRunning.set(false);
             currentStatus = "completed";
             shutdownExecutor();
             LOGGER.info("Conversion completed: {}/{} regions, {} skipped (empty MCA)", processedCount, totalCount, totalSkippedEmpty);
@@ -280,17 +280,16 @@ public class ConversionOrchestrator {
      * @param dimensionId 维度ID（如"minecraft:overworld"）
      */
     public static void generateDimension(MinecraftServer server, String dimensionId) {
-        if (isRunning) {
+        if (!isRunning.compareAndSet(false, true)) {
             LOGGER.warn("Conversion already in progress");
             return;
         }
-        isRunning = true;
         processedCount = 0;
         skippedCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
-        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
+        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return; }
         ServerLevel level = server.getLevel(dimKey);
-        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return; }
 
         // Note: caller handles saveEverything on server thread before invoking this method.
 
@@ -301,7 +300,7 @@ public class ConversionOrchestrator {
         try {
             convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()), false);
         } finally {
-            isRunning = false;
+            isRunning.set(false);
             currentStatus = "completed";
             shutdownExecutor();
         }
@@ -316,17 +315,16 @@ public class ConversionOrchestrator {
      * @param dimensionId 维度ID（如"minecraft:overworld"）
      */
     public static void generateDimensionForce(MinecraftServer server, String dimensionId) {
-        if (isRunning) {
+        if (!isRunning.compareAndSet(false, true)) {
             LOGGER.warn("Conversion already in progress");
             return;
         }
-        isRunning = true;
         processedCount = 0;
         skippedCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
-        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning = false; return; }
+        if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return; }
         ServerLevel level = server.getLevel(dimKey);
-        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning = false; return; }
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return; }
 
         // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
         String fullDimId = dimKey.identifier().toString(); // 完整维度 ID（包含 namespace）
@@ -344,7 +342,7 @@ public class ConversionOrchestrator {
         try {
             convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()), true);
         } finally {
-            isRunning = false;
+            isRunning.set(false);
             currentStatus = "completed";
             shutdownExecutor();
         }
@@ -381,7 +379,7 @@ public class ConversionOrchestrator {
      * @return 转换结果状态
      */
     public static SingleRegionResult generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int regionX, int regionZ) {
-        if (isRunning) {
+        if (!isRunning.compareAndSet(false, true)) {
             LOGGER.warn("Conversion already in progress");
             return SingleRegionResult.ALREADY_RUNNING;
         }
@@ -390,15 +388,15 @@ public class ConversionOrchestrator {
         Path mcaPath = checkMcaFileExists(server, dimension, regionX, regionZ);
         if (mcaPath == null) {
             LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.identifier().getPath());
+            isRunning.set(false);
             return SingleRegionResult.REGION_NOT_FOUND;
         }
 
-        isRunning = true;
         totalCount = 1;
         processedCount = 0;
         currentDimension = dimension;
         ServerLevel level = server.getLevel(dimension);
-        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimension); isRunning = false; return SingleRegionResult.CONVERSION_FAILED; }
+        if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimension); isRunning.set(false); return SingleRegionResult.CONVERSION_FAILED; }
 
         // Note: caller handles saveEverything on server thread before invoking this method.
 
@@ -419,7 +417,7 @@ public class ConversionOrchestrator {
 
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", dimension);
-            isRunning = false;
+            isRunning.set(false);
             return SingleRegionResult.CONVERSION_FAILED;
         }
 
@@ -471,7 +469,7 @@ public class ConversionOrchestrator {
             result = SingleRegionResult.CONVERSION_FAILED;
         }
         finally {
-            isRunning = false;
+            isRunning.set(false);
             currentStatus = "completed";
         }
         return result;
@@ -817,7 +815,7 @@ public class ConversionOrchestrator {
      * @param server Minecraft服务器实例
      */
     public static void performIncrementalScan(MinecraftServer server) {
-        if (isRunning) {
+        if (isRunning.get()) {
             LOGGER.debug("Conversion already in progress, skipping incremental scan");
             return;
         }
@@ -936,7 +934,7 @@ public class ConversionOrchestrator {
      *
      * @return true表示正在运行，false表示空闲
      */
-    public static boolean isRunning() { return isRunning; }
+    public static boolean isRunning() { return isRunning.get(); }
 
     /**
      * 获取已处理的区域数量

@@ -129,25 +129,84 @@ public class RegionConverterStandalone {
         int caveStart = caveParams.caveStart();
         int caveDepth = caveParams.caveDepth();
         boolean isCaveMode = caveStart != Integer.MAX_VALUE;
+        boolean fullCave = caveStart == Integer.MIN_VALUE;
+        int[][] heightMap = chunk.heightmap();
+        int chunkBottomY = chunk.chunkBottomY();
 
-        for (int lx = 0; lx < 16; lx++) {
-            for (int lz = 0; lz < 16; lz++) {
-                int relX = chunkX * 16 + lx;
-                int relZ = chunkZ * 16 + lz;
+        // per-pixel 状态数组（chunk 局部复用，结束时 GC）
+        boolean[] blockFound = new boolean[256];
+        boolean[] underair = new boolean[256];
+        @SuppressWarnings("unchecked")
+        ArrayList<OverlayData>[] overlayLists = new ArrayList[256];
+        int[] topPixelH = new int[256];   // 最高非表面方块 Y（overlay 之上）
+        Arrays.fill(topPixelH, -1);
 
-                if (relX >= REGION_SIZE_BLOCKS || relZ >= REGION_SIZE_BLOCKS) {
-                    continue;
-                }
+        for (int i = 0; i < 256; i++) {
+            underair[i] = fullCave;
+        }
 
-                ScanRange scanRange = computeScanRange(chunk, lx, lz, minBuildHeight, worldTopY, isCaveMode, caveStart, caveDepth);
+        // ----- sections 外层（对齐 Xaero 循环次序）-----
+        int sectionIndex = 0;
+        for (ChunkSectionParser.SectionData section : chunk.sections()) {
+            if (section.blockPalette().isEmpty()) continue;
 
-                SurfaceResult surface = scanChunkSections(chunk, data, lx, lz, relX, relZ,
-                    scanRange, minBuildHeight, worldTopY, lightMode, isCaveMode, caveStart, worldHasSkylight, blockLookup);
+            int sectionY = section.sectionY();
+            int sectionBaseY = sectionY * 16;
+            int sectionTopY = sectionBaseY + 15;
+            int sectionBottomY = sectionBaseY;
 
-                if (surface != null) {
-                    recordPixelData(data, surface, relX, relZ);
+            if (sectionTopY < chunkBottomY) continue;
+
+            boolean singlePalette = section.blockPalette().size() == 1 && section.blockData() == null;
+            ChunkSectionParser.BlockState singleState = singlePalette
+                ? section.blockPalette().get(0) : null;
+
+            for (int lx = 0; lx < 16; lx++) {
+                for (int lz = 0; lz < 16; lz++) {
+                    int relX = chunkX * 16 + lx;
+                    int relZ = chunkZ * 16 + lz;
+                    if (relX >= REGION_SIZE_BLOCKS || relZ >= REGION_SIZE_BLOCKS) continue;
+
+                    int pos = (lz << 4) | lx;
+                    if (blockFound[pos]) continue;
+
+                    int heightMapValue = heightMap[lx][lz];
+
+                    int scanBottomY;
+                    int startY;
+                    if (isCaveMode) {
+                        startY = caveStart;
+                        scanBottomY = Math.max(caveStart - caveDepth, minBuildHeight);
+                    } else {
+                        startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
+                        scanBottomY = minBuildHeight;
+                    }
+
+                    if (isCaveMode && sectionTopY > startY) continue;
+                    if (sectionBottomY < scanBottomY) continue;
+
+                    int effectiveStartY = computeEffectiveStartY(sectionIndex, startY, worldTopY,
+                        isCaveMode, heightMapValue, chunkBottomY, sectionTopY);
+
+                    if (!isCaveMode && effectiveStartY < sectionBottomY) continue;
+
+                    if (singlePalette) {
+                        if (tryProcessSinglePalettePixel(chunk, section, sectionBaseY,
+                                lx, lz, relX, relZ, effectiveStartY, scanBottomY,
+                                singleState, heightMapValue, isCaveMode, worldHasSkylight,
+                                lightMode, underair, overlayLists, topPixelH, blockFound, data,
+                                blockLookup)) continue;
+                    } else {
+                        tryProcessMultiPalettePixel(chunk, section, sectionBaseY,
+                            lx, lz, relX, relZ, effectiveStartY, scanBottomY,
+                            chunkBottomY, heightMapValue, isCaveMode, worldHasSkylight,
+                            lightMode, underair, overlayLists, topPixelH, blockFound, data,
+                            blockLookup);
+                    }
                 }
             }
+
+            sectionIndex++;
         }
     }
 
@@ -195,92 +254,6 @@ public class RegionConverterStandalone {
         return 0;
     }
 
-    private record ScanRange(int startY, int scanBottomY) {}
-
-    private record SurfaceResult(
-        ChunkSectionParser.BlockState topState,
-        int topY,
-        int highestBlockY,
-        String biomeName,
-        byte surfaceLight,
-        List<OverlayData> overlayList
-    ) {}
-
-    private static ScanRange computeScanRange(ChunkDataParser.ChunkInfo chunk, int lx, int lz,
-                                               int minBuildHeight, int worldTopY,
-                                               boolean isCaveMode, int caveStart, int caveDepth) {
-        int heightMapValue = chunk.heightmap()[lx][lz];
-
-        if (isCaveMode) {
-            int startY = caveStart;
-            int scanBottomY = Math.max(caveStart - caveDepth, minBuildHeight);
-            return new ScanRange(startY, scanBottomY);
-        } else {
-            int startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
-            return new ScanRange(startY, minBuildHeight);
-        }
-    }
-
-    private static SurfaceResult scanChunkSections(ChunkDataParser.ChunkInfo chunk, MapRegionData data,
-                                                    int lx, int lz, int relX, int relZ,
-                                                    ScanRange scanRange, int minBuildHeight, int worldTopY,
-                                                    LightMode lightMode, boolean isCaveMode, int caveStart,
-                                                    boolean worldHasSkylight,
-                                                    BlockPropertyLookup blockLookup) {
-        int heightMapValue = chunk.heightmap()[lx][lz];
-        int chunkBottomY = chunk.chunkBottomY();
-
-        ChunkSectionParser.BlockState topState = null;
-        int topY = -1;
-        int highestBlockY = -1;
-        String biomeName = null;
-        List<OverlayData> overlayList = new ArrayList<>();
-        byte surfaceLight = 0;
-
-        boolean underair = isCaveMode && caveStart == Integer.MIN_VALUE;
-
-        int sectionIndex = 0;
-        for (ChunkSectionParser.SectionData section : chunk.sections()) {
-            if (section.blockPalette().isEmpty()) continue;
-
-            int sectionY = section.sectionY();
-            int sectionBaseY = sectionY * 16;
-            int sectionTopY = sectionBaseY + 15;
-            int sectionBottomY = sectionBaseY;
-
-            if (isCaveMode && sectionTopY > scanRange.startY()) continue;
-            if (sectionBottomY < scanRange.scanBottomY()) continue;
-            if (sectionTopY < chunkBottomY) continue;
-
-            int effectiveStartY = computeEffectiveStartY(sectionIndex, scanRange.startY(), worldTopY,
-                isCaveMode, heightMapValue, chunkBottomY, sectionTopY);
-
-            sectionIndex++;
-
-            SurfaceResult sectionResult;
-            if (section.blockPalette().size() == 1 && section.blockData() == null) {
-                sectionResult = processSinglePaletteSection(chunk, section, lx, lz, relX, relZ,
-                    sectionBaseY, effectiveStartY, scanRange.scanBottomY(), chunkBottomY,
-                    isCaveMode, underair, worldHasSkylight, lightMode, heightMapValue, overlayList, blockLookup);
-            } else {
-                sectionResult = processMultiPaletteSection(chunk, section, lx, lz, relX, relZ,
-                    sectionBaseY, effectiveStartY, scanRange.scanBottomY(), chunkBottomY,
-                    isCaveMode, underair, worldHasSkylight, lightMode, heightMapValue, overlayList, blockLookup);
-            }
-
-            if (sectionResult != null) {
-                underair = updateUnderairState(section, lx, lz, sectionBaseY, effectiveStartY,
-                    scanRange.scanBottomY(), chunkBottomY, isCaveMode, underair);
-                return sectionResult;
-            }
-
-            underair = updateUnderairState(section, lx, lz, sectionBaseY, effectiveStartY,
-                scanRange.scanBottomY(), chunkBottomY, isCaveMode, underair);
-        }
-
-        return null;
-    }
-
     private static int computeEffectiveStartY(int sectionIndex, int startY, int worldTopY,
                                                boolean isCaveMode, int heightMapValue, int chunkBottomY,
                                                int sectionTopY) {
@@ -288,200 +261,37 @@ public class RegionConverterStandalone {
         if (sectionIndex > 0) {
             effectiveStartY = Math.min(startY + 1, worldTopY - 1);
         }
-
         if (!isCaveMode && heightMapValue < chunkBottomY) {
             effectiveStartY = sectionTopY;
         }
-
         if (isCaveMode) {
             effectiveStartY = Math.min(effectiveStartY, sectionTopY);
         }
-
         return effectiveStartY;
     }
 
-    private static SurfaceResult processSinglePaletteSection(ChunkDataParser.ChunkInfo chunk,
-                                                              ChunkSectionParser.SectionData section,
-                                                              int lx, int lz, int relX, int relZ,
-                                                              int sectionBaseY, int effectiveStartY,
-                                                              int scanBottomY, int chunkBottomY,
-                                                              boolean isCaveMode, boolean underair,
-                                                              boolean worldHasSkylight, LightMode lightMode,
-                                                              int heightMapValue, List<OverlayData> overlayList,
-                                                              BlockPropertyLookup blockLookup) {
-        ChunkSectionParser.BlockState singleState = section.blockPalette().get(0);
+    // ===== per-pixel, per-section 处理（sections-inner）=====
 
-        if (singleState.isAir()) return null;
-        if (isCaveMode && !underair) return null;
+    /**
+     * 单 palette section 中处理一个像素列。
+     * @return true 表示该像素已找到表面
+     */
+    private static boolean tryProcessSinglePalettePixel(
+            ChunkDataParser.ChunkInfo chunk, ChunkSectionParser.SectionData section,
+            int sectionBaseY, int lx, int lz, int relX, int relZ,
+            int effectiveStartY, int scanBottomY,
+            ChunkSectionParser.BlockState singleState, int heightMapValue,
+            boolean isCaveMode, boolean worldHasSkylight, LightMode lightMode,
+            boolean[] underair, ArrayList<OverlayData>[] overlayLists,
+            int[] topPixelH, boolean[] blockFound, MapRegionData data,
+            BlockPropertyLookup blockLookup) {
+
+        int pos = (lz << 4) | lx;
+        if (singleState.isAir()) return false;
+        if (isCaveMode && !underair[pos]) return false;
 
         String blockName = singleState.name();
         int flags = blockLookup.getFlags(blockName);
-
-        int scanStartY = Math.min(effectiveStartY - sectionBaseY, 15);
-        if (scanStartY < 0) scanStartY = 15;
-        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
-
-        for (int ly = scanStartY; ly >= localScanBottomY; ly--) {
-            int worldY = sectionBaseY + ly;
-            if (worldY < scanBottomY) break;
-
-            if ((flags & BlockPropertyLookup.FLAG_WATER_INHERITING) != 0) {
-                int opacity = blockLookup.getLightBlock("minecraft:water");
-                int aboveWorldY = worldY + 1;
-                byte effectiveLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
-                    heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
-                addOverlay(overlayList, "minecraft:water", worldY, opacity, effectiveLight, blockLookup);
-
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
-                return new SurfaceResult(singleState, worldY, worldY, biomeName, effectiveLight, overlayList);
-            }
-
-            if (blockLookup.isWaterloggedSurface(blockName, singleState.properties())
-                && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) == 0) {
-                int opacity = blockLookup.getLightBlock("minecraft:water");
-                int aboveWorldY = worldY + 1;
-                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
-
-                byte surfaceLight = overlayLight;
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
-                return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
-            }
-
-            if ((flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) != 0) {
-                int opacity = blockLookup.getLightBlock(blockName);
-                int aboveWorldY = worldY + 1;
-                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
-                continue;
-            }
-
-            if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) {
-                continue;
-            }
-
-            int aboveWorldY = worldY + 1;
-            byte surfaceLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
-                heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
-            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
-            return new SurfaceResult(singleState, worldY, worldY, biomeName, surfaceLight, overlayList);
-        }
-
-        return null;
-    }
-
-    private static SurfaceResult processMultiPaletteSection(ChunkDataParser.ChunkInfo chunk,
-                                                             ChunkSectionParser.SectionData section,
-                                                             int lx, int lz, int relX, int relZ,
-                                                             int sectionBaseY, int effectiveStartY,
-                                                             int scanBottomY, int chunkBottomY,
-                                                             boolean isCaveMode, boolean underair,
-                                                             boolean worldHasSkylight, LightMode lightMode,
-                                                             int heightMapValue, List<OverlayData> overlayList,
-                                                             BlockPropertyLookup blockLookup) {
-        int localStartY = 15;
-        if (effectiveStartY >= sectionBaseY && effectiveStartY <= sectionBaseY + 15) {
-            localStartY = effectiveStartY - sectionBaseY;
-        }
-        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
-
-        int highestBlockY = -1;
-
-        for (int ly = localStartY; ly >= localScanBottomY; ly--) {
-            int worldY = sectionBaseY + ly;
-            if (worldY < scanBottomY) break;
-            if (worldY < chunkBottomY) break;
-
-            ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
-
-            if (state.isAir()) continue;
-            if (isCaveMode && !underair) continue;
-
-            String blockName = state.name();
-            int flags = blockLookup.getFlags(blockName);
-
-            if ((flags & BlockPropertyLookup.FLAG_WATER_INHERITING) != 0) {
-                int opacity = blockLookup.getLightBlock("minecraft:water");
-                int aboveWorldY = worldY + 1;
-                byte effectiveLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
-                    heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
-                addOverlay(overlayList, "minecraft:water", worldY, opacity, effectiveLight, blockLookup);
-
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
-                return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, effectiveLight, overlayList);
-            }
-
-            if (blockLookup.isWaterloggedSurface(blockName, state.properties())
-                && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) == 0) {
-                int opacity = blockLookup.getLightBlock("minecraft:water");
-                int aboveWorldY = worldY + 1;
-                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, "minecraft:water", worldY, opacity, overlayLight, blockLookup);
-
-                byte surfaceLight = overlayLight;
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
-                return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
-            }
-
-            if ((flags & BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID) != 0) {
-                int opacity = blockLookup.getLightBlock(blockName);
-                int aboveWorldY = worldY + 1;
-                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
-                if (highestBlockY < 0) highestBlockY = worldY;
-                continue;
-            }
-
-            // 水logged 透明方块（海草、海带等）：先添加水 overlay，再添加方块 overlay
-            if (state.isWaterlogged() && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) != 0) {
-                int waterOpacity = blockLookup.getLightBlock("minecraft:water");
-                int aboveWorldY = worldY + 1;
-                byte waterLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, "minecraft:water", worldY, waterOpacity, waterLight, blockLookup);
-                int opacity = blockLookup.getLightBlock(blockName);
-                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
-                if (highestBlockY < 0) highestBlockY = worldY;
-                continue;
-            }
-
-            if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) continue;
-
-            if ((flags & BlockPropertyLookup.FLAG_TRANSPARENT) != 0) {
-                int opacity = blockLookup.getLightBlock(blockName);
-                int aboveWorldY = worldY + 1;
-                byte overlayLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
-                addOverlay(overlayList, blockName, worldY, opacity, overlayLight, blockLookup);
-                if (highestBlockY < 0) highestBlockY = worldY;
-                continue;
-            }
-
-            if ((flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) == 0) continue;
-
-            int aboveWorldY = worldY + 1;
-            byte surfaceLight = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
-                heightMapValue, overlayList, lightMode, worldHasSkylight, blockLookup);
-            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
-            return new SurfaceResult(state, worldY, highestBlockY < 0 ? worldY : highestBlockY, biomeName, surfaceLight, overlayList);
-        }
-
-        return null;
-    }
-
-    private static boolean updateUnderairState(ChunkSectionParser.SectionData section,
-                                                int lx, int lz, int sectionBaseY, int effectiveStartY,
-                                                int scanBottomY, int chunkBottomY,
-                                                boolean isCaveMode, boolean underair) {
-        if (!isCaveMode || underair) {
-            return underair;
-        }
-
-        if (section.blockPalette().size() == 1 && section.blockData() == null) {
-            if (section.blockPalette().get(0).isAir()) {
-                return true;
-            }
-            return underair;
-        }
 
         int localStartY = Math.min(effectiveStartY - sectionBaseY, 15);
         if (localStartY < 0) localStartY = 15;
@@ -490,30 +300,224 @@ public class RegionConverterStandalone {
         for (int ly = localStartY; ly >= localScanBottomY; ly--) {
             int worldY = sectionBaseY + ly;
             if (worldY < scanBottomY) break;
+
+            ArrayList<OverlayData> overlays = overlayLists[pos];
+
+            if ((flags & BlockPropertyLookup.FLAG_WATER_INHERITING) != 0) {
+                int opacity = blockLookup.getLightBlock("minecraft:water");
+                int aboveWorldY = worldY + 1;
+                byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
+                    heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    "minecraft:water", worldY, opacity, light, blockLookup);
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
+                    overlayLists[pos], relX, relZ);
+                blockFound[pos] = true;
+                return true;
+            }
+
+            if (blockLookup.isWaterloggedSurface(blockName, singleState.properties())
+                && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) == 0) {
+                int opacity = blockLookup.getLightBlock("minecraft:water");
+                int aboveWorldY = worldY + 1;
+                byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    "minecraft:water", worldY, opacity, light, blockLookup);
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
+                    overlayLists[pos], relX, relZ);
+                blockFound[pos] = true;
+                return true;
+            }
+
+            if ((flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) != 0) {
+                int opacity = blockLookup.getLightBlock(blockName);
+                int aboveWorldY = worldY + 1;
+                byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    blockName, worldY, opacity, light, blockLookup);
+                continue;
+            }
+
+            if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) continue;
+
+            int aboveWorldY = worldY + 1;
+            byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
+                heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
+            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+            recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
+                overlayLists[pos], relX, relZ);
+            blockFound[pos] = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 多 palette section 中处理一个像素列。
+     */
+    private static void tryProcessMultiPalettePixel(
+            ChunkDataParser.ChunkInfo chunk, ChunkSectionParser.SectionData section,
+            int sectionBaseY, int lx, int lz, int relX, int relZ,
+            int effectiveStartY, int scanBottomY, int chunkBottomY,
+            int heightMapValue, boolean isCaveMode, boolean worldHasSkylight,
+            LightMode lightMode, boolean[] underair, ArrayList<OverlayData>[] overlayLists,
+            int[] topPixelH, boolean[] blockFound, MapRegionData data,
+            BlockPropertyLookup blockLookup) {
+
+        int pos = (lz << 4) | lx;
+        int localStartY = 15;
+        if (effectiveStartY >= sectionBaseY && effectiveStartY <= sectionBaseY + 15) {
+            localStartY = effectiveStartY - sectionBaseY;
+        }
+        int localScanBottomY = Math.max(0, scanBottomY - sectionBaseY);
+
+        for (int ly = localStartY; ly >= localScanBottomY; ly--) {
+            int worldY = sectionBaseY + ly;
+            if (worldY < scanBottomY) break;
             if (worldY < chunkBottomY) break;
 
             ChunkSectionParser.BlockState state = ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
-            if (state.isAir()) {
-                return true;
-            }
-        }
+            if (state.isAir()) continue;
+            if (isCaveMode && !underair[pos]) continue;
 
-        return underair;
+            String blockName = state.name();
+            int flags = blockLookup.getFlags(blockName);
+            ArrayList<OverlayData> overlays = overlayLists[pos];
+
+            if ((flags & BlockPropertyLookup.FLAG_WATER_INHERITING) != 0) {
+                int opacity = blockLookup.getLightBlock("minecraft:water");
+                int aboveWorldY = worldY + 1;
+                byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
+                    heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    "minecraft:water", worldY, opacity, light, blockLookup);
+                int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
+                    overlayLists[pos], relX, relZ);
+                blockFound[pos] = true;
+                return;
+            }
+
+            if (blockLookup.isWaterloggedSurface(blockName, state.properties())
+                && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) == 0) {
+                int opacity = blockLookup.getLightBlock("minecraft:water");
+                int aboveWorldY = worldY + 1;
+                byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    "minecraft:water", worldY, opacity, light, blockLookup);
+                int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
+                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
+                    overlayLists[pos], relX, relZ);
+                blockFound[pos] = true;
+                return;
+            }
+
+            if ((flags & BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID) != 0) {
+                int opacity = blockLookup.getLightBlock(blockName);
+                int aboveWorldY = worldY + 1;
+                byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    blockName, worldY, opacity, light, blockLookup);
+                if (topPixelH[pos] < 0) topPixelH[pos] = worldY;
+                continue;
+            }
+
+            if (state.isWaterlogged() && (flags & BlockPropertyLookup.FLAG_SHOULD_OVERLAY) != 0) {
+                int waterOpacity = blockLookup.getLightBlock("minecraft:water");
+                int aboveWorldY = worldY + 1;
+                byte waterLight = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    "minecraft:water", worldY, waterOpacity, waterLight, blockLookup);
+                int opacity = blockLookup.getLightBlock(blockName);
+                byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? overlayLists[pos] : overlays,
+                    blockName, worldY, opacity, light, blockLookup);
+                if (topPixelH[pos] < 0) topPixelH[pos] = worldY;
+                continue;
+            }
+
+            if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) continue;
+
+            if ((flags & BlockPropertyLookup.FLAG_TRANSPARENT) != 0) {
+                int opacity = blockLookup.getLightBlock(blockName);
+                int aboveWorldY = worldY + 1;
+                byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
+                addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
+                    blockName, worldY, opacity, light, blockLookup);
+                if (topPixelH[pos] < 0) topPixelH[pos] = worldY;
+                continue;
+            }
+
+            if ((flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) == 0) continue;
+
+            int aboveWorldY = worldY + 1;
+            byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
+                heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
+            int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
+            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+            recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
+                overlayLists[pos], relX, relZ);
+            blockFound[pos] = true;
+            return;
+        }
     }
 
-    private static void recordPixelData(MapRegionData data, SurfaceResult surface,
-                                         int relX, int relZ) {
+    /** 直接写入 MapRegionData（内联原 recordPixelData） */
+    private static void recordPixelDirect(MapRegionData data, ChunkSectionParser.BlockState surfaceState,
+                                          int topY, int highestBlockY, String biomeName,
+                                          byte surfaceLight, List<OverlayData> overlayList,
+                                          int relX, int relZ) {
         data.hasData[relX][relZ] = true;
-        data.blockNames[relX][relZ] = surface.topState() != null ? surface.topState().name() : "minecraft:air";
-        int topBlockYValue = (surface.highestBlockY() >= 0) ? surface.highestBlockY() : surface.topY();
-        data.topBlockY[relX][relZ] = topBlockYValue;
-        data.heightMap[relX][relZ] = surface.topY();
-        data.biomeNames[relX][relZ] = surface.biomeName() != null ? surface.biomeName() : DEFAULT_BIOME;
-        data.lightMap[relX][relZ] = surface.surfaceLight();
-
-        if (!surface.overlayList().isEmpty()) {
-            data.overlays.put(relX * REGION_SIZE_BLOCKS + relZ, surface.overlayList());
+        data.blockNames[relX][relZ] = surfaceState != null ? surfaceState.name() : "minecraft:air";
+        data.topBlockY[relX][relZ] = highestBlockY >= 0 ? highestBlockY : topY;
+        data.heightMap[relX][relZ] = topY;
+        data.biomeNames[relX][relZ] = biomeName != null ? biomeName : DEFAULT_BIOME;
+        data.lightMap[relX][relZ] = surfaceLight;
+        if (overlayList != null && !overlayList.isEmpty()) {
+            data.overlays.put(relX * REGION_SIZE_BLOCKS + relZ, overlayList);
         }
+    }
+
+    /** 添加 overlay 到列表（保持同名合并语义，对齐原 addOverlay） */
+    private static void addOverlayToList(List<OverlayData> currentList, ArrayList<OverlayData> list,
+                                         String blockName, int y, int opacityToAdd, int light,
+                                         BlockPropertyLookup blockLookup) {
+        if (currentList != list) {
+            // 列表首次创建，直接添加
+            addOverlaySingle(list, blockName, y, opacityToAdd, light, blockLookup);
+            return;
+        }
+        // 列表已存在，尝试合并
+        if (opacityToAdd > 15) opacityToAdd = 15;
+        if (opacityToAdd == 0 && !blockLookup.isWater(blockName)) {
+            String lower = blockName.toLowerCase();
+            if (lower.contains("seagrass") || lower.contains("kelp") || blockLookup.isTransparent(blockName)) {
+                opacityToAdd = 1;
+            }
+        }
+        OverlayData last = list.isEmpty() ? null : list.get(list.size() - 1);
+        if (last != null && last.blockName.equals(blockName)) {
+            last.opacity = Math.min(15, last.opacity + opacityToAdd);
+        } else {
+            list.add(new OverlayData(blockName, y, opacityToAdd, light));
+        }
+    }
+
+    private static void addOverlaySingle(ArrayList<OverlayData> list, String blockName, int y,
+                                         int opacityToAdd, int light, BlockPropertyLookup blockLookup) {
+        if (opacityToAdd > 15) opacityToAdd = 15;
+        if (opacityToAdd == 0 && !blockLookup.isWater(blockName)) {
+            String lower = blockName.toLowerCase();
+            if (lower.contains("seagrass") || lower.contains("kelp") || blockLookup.isTransparent(blockName)) {
+                opacityToAdd = 1;
+            }
+        }
+        list.add(new OverlayData(blockName, y, opacityToAdd, light));
     }
 
     private static byte calculateSurfaceLight(ChunkDataParser.ChunkInfo chunk,
@@ -725,28 +729,6 @@ public class RegionConverterStandalone {
                 writeBlockStateNbt(overlay.blockName, dos);
                 blockPalette.put(overlay.blockName, blockPalette.size());
             }
-        }
-    }
-
-    private static void addOverlay(List<OverlayData> overlayList, String blockName, int y, int opacityToAdd, int light,
-                                    BlockPropertyLookup blockLookup) {
-        if (opacityToAdd > 15) {
-            opacityToAdd = 15;
-        }
-
-        if (opacityToAdd == 0 && !blockLookup.isWater(blockName)) {
-            String blockId = blockName.toLowerCase();
-            if (blockId.contains("seagrass") || blockId.contains("kelp") ||
-                blockLookup.isTransparent(blockName)) {
-                opacityToAdd = 1;
-            }
-        }
-
-        OverlayData lastOverlay = overlayList.isEmpty() ? null : overlayList.get(overlayList.size() - 1);
-        if (lastOverlay != null && lastOverlay.blockName.equals(blockName)) {
-            lastOverlay.opacity = Math.min(15, lastOverlay.opacity + opacityToAdd);
-        } else {
-            overlayList.add(new OverlayData(blockName, y, opacityToAdd, light));
         }
     }
 

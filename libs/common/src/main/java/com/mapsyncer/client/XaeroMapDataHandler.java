@@ -9,9 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Xaero 地图数据处理器（跨版本公共）。
@@ -33,10 +33,10 @@ public final class XaeroMapDataHandler {
     private XaeroMapDataHandler() {}
 
     /** 同步期间更新的区域集合，用于选择性重置 */
-    private static volatile Set<RegionCoord> updatedRegions = new HashSet<>();
+    private static final Set<RegionCoord> updatedRegions = ConcurrentHashMap.newKeySet();
 
     /** 同步前预卸载的区域集合（原本已加载的），用于同步后设置 loadState=4 */
-    private static volatile Set<RegionCoord> preUnloadedRegions = new HashSet<>();
+    private static final Set<RegionCoord> preUnloadedRegions = ConcurrentHashMap.newKeySet();
 
     /**
      * 区域坐标记录，用于追踪更新的区域。
@@ -73,7 +73,7 @@ public final class XaeroMapDataHandler {
      * @return 更新区域集合的副本
      */
     public static Set<RegionCoord> getUpdatedRegions() {
-        return new HashSet<>(updatedRegions);
+        return Set.copyOf(updatedRegions);
     }
 
     /**

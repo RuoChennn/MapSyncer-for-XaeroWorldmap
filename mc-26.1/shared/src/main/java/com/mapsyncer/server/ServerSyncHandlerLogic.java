@@ -254,6 +254,10 @@ public class ServerSyncHandlerLogic {
         // 清理限速状态
         clearSpeedLimitState(playerId);
 
+        // 清理分片组装缓冲区，防止内存泄漏
+        requestPartBuffer.remove(playerId);
+        requestTotalParts.remove(playerId);
+
         // 立即中断同步线程
         Thread syncThread = syncThreads.remove(playerId);
         if (syncThread != null && syncThread.isAlive()) {

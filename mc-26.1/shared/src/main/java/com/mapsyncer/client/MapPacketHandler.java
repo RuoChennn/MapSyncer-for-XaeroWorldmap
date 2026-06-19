@@ -18,9 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -75,10 +73,10 @@ public class MapPacketHandler {
     private static final long PROGRESS_DEDUP_MS = 100;
 
     /** 同步期间更新的区域坐标集合（仅存储坐标，不存储数据，节省内存） */
-    private static volatile Set<XaeroMapDataHandler.RegionCoord> updatedRegionCoords = new HashSet<>();
+    private static final Set<XaeroMapDataHandler.RegionCoord> updatedRegionCoords = ConcurrentHashMap.newKeySet();
 
     /** 已加载的区域集合（避免重复加载） */
-    private static volatile Set<XaeroMapDataHandler.RegionCoord> loadedRegions = new HashSet<>();
+    private static final Set<XaeroMapDataHandler.RegionCoord> loadedRegions = ConcurrentHashMap.newKeySet();
 
     /** 分片超时时间（毫秒），超过此时间未到齐的分片视为丢失 */
     private static final long PART_STALE_TIMEOUT_MS = 2 * 60 * 1000;
