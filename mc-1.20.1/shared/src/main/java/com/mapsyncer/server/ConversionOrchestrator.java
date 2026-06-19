@@ -249,6 +249,7 @@ public class ConversionOrchestrator {
         } finally {
             isRunning = false;
             currentStatus = "completed";
+            shutdownExecutor();
             LOGGER.info("Conversion completed: {}/{} regions, {} skipped (empty MCA)", processedCount, totalCount, totalSkippedEmpty);
         }
     }
@@ -285,6 +286,7 @@ public class ConversionOrchestrator {
         } finally {
             isRunning = false;
             currentStatus = "completed";
+            shutdownExecutor();
         }
     }
 
@@ -327,6 +329,7 @@ public class ConversionOrchestrator {
         } finally {
             isRunning = false;
             currentStatus = "completed";
+            shutdownExecutor();
         }
     }
 
