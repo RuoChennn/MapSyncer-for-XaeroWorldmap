@@ -70,8 +70,9 @@ public class RegionScanner {
     public static List<DimensionRegions> scanAllDimensions(MinecraftServer server) {
         List<DimensionNames> dimNames = new ArrayList<>();
         for (ServerLevel level : server.getAllLevels()) {
-            String dimId = level.dimension().location().getPath();
-            if (!dimNames.stream().anyMatch(d -> d.name().equals(dimId))) {
+            String dimId = level.dimension().location().toString();
+            final String finalDimId = dimId;
+            if (!dimNames.stream().anyMatch(d -> d.name().equals(finalDimId))) {
                 dimNames.add(new DimensionNames(dimId, level.dimension()));
             }
         }
