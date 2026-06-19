@@ -218,7 +218,7 @@ public class ChunkDataParser {
 
             // 备用 MOTION_BLOCKING_NO_LEAVES
             if (heightmaps.contains("MOTION_BLOCKING_NO_LEAVES", Tag.TAG_LONG_ARRAY)) {
-                long[] data = heightmaps.getLongArray("WORLD_SURFACE");
+                long[] data = heightmaps.getLongArray("MOTION_BLOCKING_NO_LEAVES");
                 int bitsPerHeight = calculateBitsPerHeight(data.length, worldHeightRange);
                 if (bitsPerHeight > 0 && bitsPerHeight <= 10) {
                     decodeHeightmapLongArray(data, bitsPerHeight, chunkBottomY, heightmap);
