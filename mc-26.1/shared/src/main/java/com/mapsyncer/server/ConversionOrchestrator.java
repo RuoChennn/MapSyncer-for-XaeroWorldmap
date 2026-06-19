@@ -530,7 +530,7 @@ public class ConversionOrchestrator {
         // 第二轮：处理新增区域（非 force 模式）
         if (!force) {
             futures = submitNewRegionTasks(
-                executor, regions, needsUpdate, regionDir, outputDir, xaeroDimName, dimPath,
+                executor, regions, new HashSet<>(needsUpdate), regionDir, outputDir, xaeroDimName, dimPath,
                 dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
                 generationTimeSeconds, failedRegions);
             waitForCompletion(futures, "New region conversion");
@@ -637,7 +637,7 @@ public class ConversionOrchestrator {
      * @return 任务 Future 列表
      */
     private static List<java.util.concurrent.Future<?>> submitNewRegionTasks(
-            ExecutorService executor, List<RegionCoords> allRegions, List<RegionCoords> processedRegions,
+            ExecutorService executor, List<RegionCoords> allRegions, Set<RegionCoords> processedRegions,
             Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
             DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
             McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
