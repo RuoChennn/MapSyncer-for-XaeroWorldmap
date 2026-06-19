@@ -80,8 +80,12 @@ public class MapPacketHandler {
     /** 已加载的区域集合（避免重复加载） */
     private static volatile Set<XaeroMapDataHandler.RegionCoord> loadedRegions = new HashSet<>();
 
-    /** 分片重组缓冲区：key = "regionX,regionZ,dimension,caveLayer"，value = 分片数组 */
-    private static final Map<String, ChunkMapData[]> partBuffer = new ConcurrentHashMap<>();
+    /** 分片超时时间（毫秒），超过此时间未到齐的分片视为丢失 */
+    private static final long PART_STALE_TIMEOUT_MS = 2 * 60 * 1000;
+
+    /** 分片重组缓冲区：key = "regionX,regionZ,dimension,caveLayer"，value = 分片数组+首片到达时间 */
+    private record PartEntry(ChunkMapData[] parts, long firstArrivedMs) {}
+    private static final ConcurrentHashMap<String, PartEntry> partBuffer = new ConcurrentHashMap<>();
 
     private static String partKey(ChunkMapData chunk) {
         return chunk.regionX + "," + chunk.regionZ + "," + chunk.dimension + "," + chunk.caveLayer;
@@ -99,8 +103,25 @@ public class MapPacketHandler {
         }
 
         String key = partKey(chunk);
-        ChunkMapData[] parts = partBuffer.computeIfAbsent(key, k -> new ChunkMapData[chunk.totalParts]);
-        parts[chunk.partIndex] = chunk;
+        long now = System.currentTimeMillis();
+        PartEntry entry = partBuffer.compute(key, (k, existing) -> {
+            if (existing == null) {
+                ChunkMapData[] arr = new ChunkMapData[chunk.totalParts];
+                arr[chunk.partIndex] = chunk;
+                return new PartEntry(arr, now);
+            }
+            existing.parts()[chunk.partIndex] = chunk;
+            return existing;
+        });
+        ChunkMapData[] parts = entry.parts();
+
+        // 检查分片是否已超时
+        if (now - entry.firstArrivedMs() > PART_STALE_TIMEOUT_MS) {
+            partBuffer.remove(key);
+            LOGGER.warn("Chunk part assembly timed out for {} ({}ms), discarding {} received parts",
+                key, now - entry.firstArrivedMs(), countNonNull(parts));
+            return null;
+        }
 
         for (ChunkMapData p : parts) {
             if (p == null) return null;
@@ -122,6 +143,29 @@ public class MapPacketHandler {
         ChunkMapData first = parts[0];
         return new ChunkMapData(first.regionX, first.regionZ, first.dimension,
                 assembled, first.timestampSeconds, first.caveLayer);
+    }
+
+    private static int countNonNull(ChunkMapData[] parts) {
+        int n = 0;
+        for (ChunkMapData p : parts) {
+            if (p != null) n++;
+        }
+        return n;
+    }
+
+    /**
+     * 清理所有超时的分片缓冲条目。
+     */
+    private static void cleanStaleParts() {
+        long now = System.currentTimeMillis();
+        for (var it = partBuffer.entrySet().iterator(); it.hasNext(); ) {
+            var e = it.next();
+            if (now - e.getValue().firstArrivedMs() > PART_STALE_TIMEOUT_MS) {
+                it.remove();
+                LOGGER.warn("Cleaned stale part buffer for {} ({}ms overdue)",
+                    e.getKey(), now - e.getValue().firstArrivedMs());
+            }
+        }
     }
 
     /**
@@ -332,6 +376,7 @@ public class MapPacketHandler {
             boolean isCaveDimension = mc.level != null && mc.level.dimension() == Level.NETHER;
 
             // 流式处理：写入后立即处理
+            cleanStaleParts();
             for (ChunkMapData chunk : chunks) {
                 // 组装分片
                 ChunkMapData assembled = assemblePart(chunk);
