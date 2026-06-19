@@ -52,6 +52,8 @@ public class IncrementalUpdateHandlerLogic {
 
     private IncrementalUpdateHandlerLogic() {
         // 私有构造器，禁止外部实例化
+        // 注意：此构造器必须无外部依赖且不能抛异常，
+        // 否则 DCL volatile 保证在 Java 5+ 下仍需要局部变量防御
     }
 
     /**

@@ -48,6 +48,8 @@ public class GenerationCache {
 
     private GenerationCache(Path cacheDir) {
         this.cacheFile = cacheDir.resolve("generation_cache.properties");
+        // load 抛异常时 instance 保持 null（volatile 保证构造完成后才赋值），
+        // 下次 getInstance 会重试。不得在此构造器中添加可能抛异常的逻辑而不处理。
         load();
     }
 
