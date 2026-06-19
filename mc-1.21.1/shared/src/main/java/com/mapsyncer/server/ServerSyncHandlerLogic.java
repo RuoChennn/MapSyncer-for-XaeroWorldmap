@@ -205,7 +205,7 @@ public class ServerSyncHandlerLogic {
     private static final Map<UUID, Integer> playerSyncVersions = new ConcurrentHashMap<>();
 
     /** SyncRequestPayload 分片组装缓冲区：playerId → { partIndex → payload } */
-    private static final Map<UUID, Map<Integer, SyncRequestPayload>> requestPartBuffer = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID, Map<Integer, SyncRequestPayload>> requestPartBuffer = new ConcurrentHashMap<>();
     /** 记录每个玩家当前组装请求的总分片数（用于判断是否到齐） */
     private static final Map<UUID, Integer> requestTotalParts = new ConcurrentHashMap<>();
 
@@ -484,28 +484,40 @@ public class ServerSyncHandlerLogic {
         if (payload.totalParts() > 1) {
             Integer existingTotal = requestTotalParts.get(playerId);
             if (existingTotal != null && existingTotal != payload.totalParts()) {
-                // 新请求的分片数不同于旧请求，丢弃旧缓冲区（用户快速重复请求）
                 requestPartBuffer.remove(playerId);
                 LOGGER.debug("SyncRequest totalParts changed {}→{}, resetting buffer for player {}",
                         existingTotal, payload.totalParts(), playerId);
             }
 
-            Map<Integer, SyncRequestPayload> parts = requestPartBuffer.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
-            parts.put(payload.partIndex(), payload);
+            // 使用 compute 原子地 put 分片并检查是否到齐
+            final SyncRequestPayload currentPayload = payload;
+            boolean[] allArrived = new boolean[1];
+            Map<Integer, SyncRequestPayload> parts = requestPartBuffer.compute(playerId, (k, existing) -> {
+                if (existing == null) {
+                    existing = new ConcurrentHashMap<>();
+                }
+                existing.put(currentPayload.partIndex(), currentPayload);
+                allArrived[0] = existing.size() >= currentPayload.totalParts();
+                return existing;
+            });
             requestTotalParts.put(playerId, payload.totalParts());
 
-            if (parts.size() < payload.totalParts()) {
+            if (!allArrived[0]) {
                 LOGGER.debug("SyncRequest part {}/{} from player {}", payload.partIndex() + 1, payload.totalParts(), playerId);
-                return; // 分片尚未到齐
+                return;
             }
 
-            // 全部到齐，合并 metaMap
+            // 全部到齐，移除并合并（remove 可能返回 null 如果已被另一线程处理）
+            parts = requestPartBuffer.remove(playerId);
+            if (parts == null) {
+                return;
+            }
+            requestTotalParts.remove(playerId);
+
             Map<String, ClientMeta> merged = new HashMap<>();
             for (SyncRequestPayload part : parts.values()) {
                 merged.putAll(part.clientMeta());
             }
-            requestPartBuffer.remove(playerId);
-            requestTotalParts.remove(playerId);
             payload = new SyncRequestPayload(merged);
             LOGGER.debug("SyncRequest assembled from {} parts, {} entries total", parts.size(), merged.size());
         }
