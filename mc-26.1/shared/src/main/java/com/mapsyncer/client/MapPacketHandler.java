@@ -194,6 +194,7 @@ public class MapPacketHandler {
         clearReceivedChunks();
         loadedRegions.clear();
         partBuffer.clear();
+        pendingRegionLoads.clear();
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
