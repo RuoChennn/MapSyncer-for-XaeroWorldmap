@@ -160,6 +160,11 @@ public class NeoForgePlatform implements Platform {
     }
 
     @Override
+    public int getMapRegionLoadsPerTick() {
+        return ModConfig.CLIENT.getMapRegionLoadsPerTick();
+    }
+
+    @Override
     public boolean isDebugLoggingEnabled() {
         return ModConfig.SERVER.enableDebugLogging.get();
     }

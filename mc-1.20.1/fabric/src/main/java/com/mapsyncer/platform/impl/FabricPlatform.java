@@ -177,6 +177,11 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
+    public int getMapRegionLoadsPerTick() {
+        return ModConfig.CLIENT().getMapRegionLoadsPerTick();
+    }
+
+    @Override
     public UpdateMode getIncrementalUpdateMode() {
         return ModConfig.SERVER().getIncrementalUpdateMode();
     }

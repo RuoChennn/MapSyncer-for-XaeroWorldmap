@@ -170,6 +170,11 @@ public class NeoForgePlatform implements Platform {
     }
 
     @Override
+    public int getMapRegionLoadsPerTick() {
+        return ModConfig.CLIENT.getMapRegionLoadsPerTick();
+    }
+
+    @Override
     public UpdateMode getIncrementalUpdateMode() {
         return ModConfig.SERVER.incrementalUpdateMode.get();
     }

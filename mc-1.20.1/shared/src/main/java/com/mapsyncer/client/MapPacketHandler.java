@@ -5,7 +5,9 @@ import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -79,9 +81,8 @@ public class MapPacketHandler {
     /** 已加载的区域集合（避免重复加载） */
     private static final Set<XaeroMapDataHandler.RegionCoord> loadedRegions = ConcurrentHashMap.newKeySet();
 
-    /** 视距外 region 加载队列 — 限速 1/tick 排放，防止 Xaero MapProcessor 队列溢出 OOM */
+    /** 视距外 region 加载队列 — 限速排放，防止 Xaero MapProcessor 队列溢出 OOM */
     private static final ConcurrentLinkedQueue<PendingRegionLoad> pendingRegionLoads = new ConcurrentLinkedQueue<>();
-    private static final int LOADS_PER_TICK = 1;
 
     private record PendingRegionLoad(int regionX, int regionZ, int caveLayer) {}
 
@@ -622,7 +623,20 @@ public class MapPacketHandler {
      * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
      */
     public static void drainPendingLoadQueue() {
-        for (int i = 0; i < LOADS_PER_TICK; i++) {
+        int loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
+        if (loadsPerTick == 0) return;
+
+        if (loadsPerTick == -1) {
+            PendingRegionLoad pending;
+            while ((pending = pendingRegionLoads.poll()) != null) {
+                XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
+                    pending.regionX(), pending.regionZ(), pending.caveLayer());
+                triggerSingleRegionLoad(coord, pending.caveLayer(), false);
+            }
+            return;
+        }
+
+        for (int i = 0; i < loadsPerTick; i++) {
             PendingRegionLoad pending = pendingRegionLoads.poll();
             if (pending == null) break;
             XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(

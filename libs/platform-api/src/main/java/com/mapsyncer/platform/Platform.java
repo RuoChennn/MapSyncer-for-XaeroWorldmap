@@ -134,6 +134,20 @@ public interface Platform {
     int getClientHashThreads();
 
     /**
+     * 获取客户端每 tick 加载的地图区域数。
+     *
+     * <p>用于限速同步期间视距外 region 加载到 Xaero MapProcessor：</p>
+     * <ul>
+     *   <li>-1 = 不限制（立即加载所有 region）</li>
+     *   <li>0 = 仅加载视距内 region</li>
+     *   <li>1-5 = 每 tick 加载 N 个视距外 region</li>
+     * </ul>
+     *
+     * @return 每 tick 加载数
+     */
+    int getMapRegionLoadsPerTick();
+
+    /**
      * 获取增量更新模式
      */
     UpdateMode getIncrementalUpdateMode();

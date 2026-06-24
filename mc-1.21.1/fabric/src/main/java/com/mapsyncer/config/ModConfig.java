@@ -141,6 +141,9 @@ public class ModConfig {
          */
         private volatile int hashThreads;
 
+        /** 每 tick 加载的地图区域数（-1=不限制, 0=仅视距内, 1-5=限速） */
+        private volatile int mapRegionLoadsPerTick = 1;
+
         /** 配置文件路径 */
         private final Path configFile;
 
@@ -179,7 +182,10 @@ public class ModConfig {
                 // 确保线程数在有效范围内
                 hashThreads = Math.max(1, Math.min(maxThreads, loadedThreads));
 
-                LOGGER.info("Loaded client config from: {} (hashThreads={})", configFile, hashThreads);
+                int loadedLoadsPerTick = Integer.parseInt(props.getProperty("mapRegionLoadsPerTick", "1"));
+                mapRegionLoadsPerTick = Math.max(-1, Math.min(5, loadedLoadsPerTick));
+
+                LOGGER.info("Loaded client config from: {} (hashThreads={}, mapRegionLoadsPerTick={})", configFile, hashThreads, mapRegionLoadsPerTick);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load client config, using defaults: {}", e.getMessage());
             }
@@ -219,10 +225,11 @@ public class ModConfig {
                 sb.append("# Range: 1 - " + maxThreads + "\n");
                 sb.append("# 范围：1 - " + maxThreads + "\n");
                 sb.append("hashThreads=" + hashThreads + "\n");
+                sb.append("mapRegionLoadsPerTick=" + mapRegionLoadsPerTick + "\n");
 
                 Files.writeString(configFile, sb.toString());
 
-                LOGGER.info("Saved client config to: {} (hashThreads={})", configFile, hashThreads);
+                LOGGER.info("Saved client config to: {} (hashThreads={}, mapRegionLoadsPerTick={})", configFile, hashThreads, mapRegionLoadsPerTick);
             } catch (Exception e) {
                 LOGGER.error("Failed to save client config: {}", e.getMessage());
             }
@@ -235,6 +242,10 @@ public class ModConfig {
          */
         public int getHashThreads() {
             return hashThreads;
+        }
+
+        public int getMapRegionLoadsPerTick() {
+            return mapRegionLoadsPerTick;
         }
 
         /**

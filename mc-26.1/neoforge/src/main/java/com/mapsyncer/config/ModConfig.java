@@ -106,6 +106,8 @@ public class ModConfig {
          */
         public final IntValue hashThreads;
 
+        public final IntValue mapRegionLoadsPerTick;
+
         /**
          * 构造客户端配置
          *
@@ -143,16 +145,22 @@ public class ModConfig {
                              "范围：1 - " + maxThreads)
                     .defineInRange("hashThreads", defaultThreads, 1, maxThreads);
 
+            mapRegionLoadsPerTick = builder
+                    .comment("Map regions loaded per client tick during sync. Limits Xaero MapProcessor queue size to prevent OOM.",
+                             "同步期间每客户端 tick 加载的地图区域数。限制 Xaero MapProcessor 队列大小以防止内存溢出。",
+                             "  -1 = Unlimited, 0 = View-distance only, 1-5 = Load N per tick (default 1)",
+                             "  -1 = 不限制, 0 = 仅加载视距内, 1-5 = 每 tick 加载 N 个（默认 1）")
+                    .defineInRange("mapRegionLoadsPerTick", 1, -1, 5);
+
             builder.pop();
         }
 
-        /**
-         * 获取哈希计算线程数
-         *
-         * @return 配置的线程数
-         */
         public int getHashThreads() {
             return hashThreads.get();
+        }
+
+        public int getMapRegionLoadsPerTick() {
+            return mapRegionLoadsPerTick.get();
         }
     }
 
