@@ -1,14 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
-chcp 65001 >nul 2>&1
-pushd "%~dp0..\.."
+
+:: Resolve project root using 8.3 short path to avoid CJK encoding issues
+for %%I in ("%~dp0..\..") do set "PROJECT_ROOT=%%~sI"
+cd /d "%PROJECT_ROOT%"
 
 set SETTINGS_BAK=settings.bak.gradle
 set SETTINGS_FILE=settings.gradle
 set SETTINGS_26=scripts\fastbuild\settings-26.gradle
 set SETTINGS_12111=scripts\fastbuild\settings-12111.gradle
 set SETTINGS_FORGE=scripts\fastbuild\settings-forge.gradle
-set GRADLE_89=gradle-8.9\bin\gradle.bat
+set GRADLE_89=%PROJECT_ROOT%\gradle-8.9\bin\gradle.bat
 set PROPS_BAK=gradle.properties.bak
 set PROPS_FILE=gradle.properties
 set OUTPUT_DIR=output
@@ -26,7 +28,7 @@ mkdir "%OUTPUT_DIR%" 2>nul
 :: Phase 1: Gradle 9.x platforms (Fabric + NeoForge)
 :: ============================================================
 echo [Phase 1/4] Building Gradle 9.x platforms...
-call gradlew.bat ^
+call "%PROJECT_ROOT%\gradlew.bat" ^
     :mc-1.20.1:fabric:clean :mc-1.20.1:fabric:build ^
     :mc-1.21.1:fabric:clean  :mc-1.21.1:fabric:build ^
     :mc-1.21.1:neoforge:clean  :mc-1.21.1:neoforge:build ^
@@ -94,7 +96,7 @@ echo [Phase 3/4] Building mc-1.21.11:fabric (isolated, Loom 1.15.4)...
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_12111%" "%SETTINGS_FILE%" >nul
-call gradlew.bat :mc-1.21.11:fabric:clean :mc-1.21.11:fabric:build -x test
+call "%PROJECT_ROOT%\gradlew.bat" :mc-1.21.11:fabric:clean :mc-1.21.11:fabric:build -x test
 set FABRIC12111_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
@@ -110,7 +112,7 @@ echo [Phase 4/4] Building mc-26.1:fabric (isolated, Loom 1.16)...
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_26%" "%SETTINGS_FILE%" >nul
-call gradlew.bat :mc-26.1:fabric:clean :mc-26.1:fabric:build -x test
+call "%PROJECT_ROOT%\gradlew.bat" :mc-26.1:fabric:clean :mc-26.1:fabric:build -x test
 set FABRIC26_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
