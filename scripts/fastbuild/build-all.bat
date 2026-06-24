@@ -1,6 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
-cd /d "%~dp0..\.."
+chcp 65001 >nul 2>&1
+pushd "%~dp0..\.."
 
 set SETTINGS_BAK=settings.bak.gradle
 set SETTINGS_FILE=settings.gradle
