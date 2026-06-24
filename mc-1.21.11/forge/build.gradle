@@ -57,10 +57,8 @@ dependencies {
     // 强制 jopt-simple 版本（Mojang 使用的版本）
     implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
 
-    // 依赖核心模块（排除 LZ4 — MC 1.21.11+ 内置 at.yawk.lz4）
-    implementation(project(':libs:core')) {
-        exclude group: 'org.lz4', module: 'lz4-java'
-    }
+    // 依赖核心模块
+    implementation project(':libs:core')
     implementation project(':libs:platform-api')
 }
 
@@ -73,9 +71,7 @@ configurations {
     bundle
 }
 dependencies {
-    bundle(project(':libs:core')) {
-        exclude group: 'org.lz4', module: 'lz4-java'
-    }
+    bundle project(':libs:core')
     bundle project(':libs:platform-api')
 }
 

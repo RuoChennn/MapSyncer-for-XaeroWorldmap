@@ -31,7 +31,7 @@ import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.event.TickEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -91,10 +91,8 @@ public class MapSyncer {
         }
 
         @SubscribeEvent
-        public static void onClientTick(TickEvent.ClientTickEvent event) {
-            if (event.phase == TickEvent.Phase.END) {
-                MapPacketHandler.drainPendingLoadQueue();
-            }
+        public static void onClientTick(ClientTickEvent.Post event) {
+            MapPacketHandler.drainPendingLoadQueue();
         }
     }
 
