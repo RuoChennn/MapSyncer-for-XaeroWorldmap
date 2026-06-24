@@ -225,6 +225,19 @@ public class ModConfig {
                 sb.append("# Range: 1 - " + maxThreads + "\n");
                 sb.append("# 范围：1 - " + maxThreads + "\n");
                 sb.append("hashThreads=" + hashThreads + "\n");
+                sb.append("#\n");
+                sb.append("# Map regions loaded per client tick during sync\n");
+                sb.append("# 同步期间每客户端 tick 加载的地图区域数\n");
+                sb.append("# Limits Xaero MapProcessor queue size to prevent OOM\n");
+                sb.append("# 限制 Xaero MapProcessor 队列大小以防止内存溢出\n");
+                sb.append("#\n");
+                sb.append("#  -1 = Unlimited (load all immediately)\n");
+                sb.append("#  -1 = 不限制（立即加载全部）\n");
+                sb.append("#   0 = View-distance only\n");
+                sb.append("#   0 = 仅加载视距内\n");
+                sb.append("# 1-5 = Load N per tick (default: 1)\n");
+                sb.append("# 1-5 = 每 tick 加载 N 个（默认：1）\n");
+                sb.append("#\n");
                 sb.append("mapRegionLoadsPerTick=" + mapRegionLoadsPerTick + "\n");
 
                 Files.writeString(configFile, sb.toString());
