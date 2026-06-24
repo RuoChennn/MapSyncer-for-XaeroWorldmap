@@ -127,6 +127,7 @@ public class CacheCommandHandler {
             }
         }, "xaero-map-generator");
         worker.start();
+        return true;
     }
 
     /**

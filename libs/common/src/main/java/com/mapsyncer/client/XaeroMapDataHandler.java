@@ -83,7 +83,7 @@ public final class XaeroMapDataHandler {
      * @return 预卸载区域集合的副本
      */
     public static Set<RegionCoord> getPreUnloadedRegions() {
-        return new HashSet<>(preUnloadedRegions);
+        return Set.copyOf(preUnloadedRegions);
     }
 
     /**
