@@ -50,6 +50,9 @@ sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/platform-api/src/mai
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_1201_version}-${forge_1201_version}"
 
+    // LZ4 解压（McaReader 直接编译 core 源码，需显式声明）
+    implementation 'org.lz4:lz4-java:1.8.0'
+
     // 强制 jopt-simple 版本
     implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
 }
