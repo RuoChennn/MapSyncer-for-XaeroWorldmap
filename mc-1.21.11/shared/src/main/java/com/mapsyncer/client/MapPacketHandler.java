@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * 客户端断开连接时的统一清理入口。
@@ -77,6 +78,12 @@ public class MapPacketHandler {
 
     /** 已加载的区域集合（避免重复加载） */
     private static final Set<XaeroMapDataHandler.RegionCoord> loadedRegions = ConcurrentHashMap.newKeySet();
+
+    /** 视距外 region 加载队列 — 限速 1/tick 排放，防止 Xaero MapProcessor 队列溢出 OOM */
+    private static final ConcurrentLinkedQueue<PendingRegionLoad> pendingRegionLoads = new ConcurrentLinkedQueue<>();
+    private static final int LOADS_PER_TICK = 1;
+
+    private record PendingRegionLoad(int regionX, int regionZ, int caveLayer) {}
 
     /** 分片超时时间（毫秒），超过此时间未到齐的分片视为丢失 */
     private static final long PART_STALE_TIMEOUT_MS = 2 * 60 * 1000;
@@ -403,9 +410,12 @@ public class MapPacketHandler {
                 boolean inViewDistance = viewRegionsForLayer.contains(coord);
 
                 if (shouldProcess) {
-                    // 清除缓存文件并立即触发加载
                     clearSingleRegionCache(coord);
-                    triggerSingleRegionLoad(coord, assembled.caveLayer, inViewDistance);
+                    if (inViewDistance) {
+                        triggerSingleRegionLoad(coord, assembled.caveLayer, true);
+                    } else {
+                        pendingRegionLoads.add(new PendingRegionLoad(coord.x(), coord.z(), assembled.caveLayer));
+                    }
                     LOGGER.debug("区域 ({}, {}) layer={} inView={} 已清除缓存并触发加载",
                         coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
                 }
@@ -499,6 +509,7 @@ public class MapPacketHandler {
         updatedRegionCoords.clear();
         loadedRegions.clear();
         partBuffer.clear();
+        pendingRegionLoads.clear();
         lastMwDir = null;
         syncStartTime = 0;
     }
@@ -605,6 +616,28 @@ public class MapPacketHandler {
         } catch (Exception e) {
             LOGGER.error("立即加载区域 ({}, {}) layer={} 失败: {}", coord.x(), coord.z(), caveLayer, e.getMessage(), e);
         }
+    }
+
+    /**
+     * 从待加载队列中排放最多 LOADS_PER_TICK 个视距外 region 到 Xaero MapProcessor。
+     * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
+     */
+    public static void drainPendingLoadQueue() {
+        for (int i = 0; i < LOADS_PER_TICK; i++) {
+            PendingRegionLoad pending = pendingRegionLoads.poll();
+            if (pending == null) break;
+            XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
+                pending.regionX(), pending.regionZ(), pending.caveLayer());
+            triggerSingleRegionLoad(coord, pending.caveLayer(), false);
+        }
+    }
+
+    /**
+     * 检查是否有待加载的视距外 region。
+     * 供平台层决定是否注册 ClientTick 事件。
+     */
+    public static boolean hasPendingLoads() {
+        return !pendingRegionLoads.isEmpty();
     }
 
     /**

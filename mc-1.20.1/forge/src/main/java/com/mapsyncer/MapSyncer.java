@@ -1,5 +1,6 @@
 package com.mapsyncer;
 
+import com.mapsyncer.client.MapPacketHandler;
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.NetworkManager;
@@ -31,6 +32,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.ClientTickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +91,11 @@ public class MapSyncer {
         @SubscribeEvent
         public static void onPlayerLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
             MapPacketReceiver.onDisconnect();
+        }
+
+        @SubscribeEvent
+        public static void onClientTick(ClientTickEvent.Post event) {
+            MapPacketHandler.drainPendingLoadQueue();
         }
     }
 
