@@ -546,8 +546,10 @@ public class RegionConverterStandalone {
         }
 
         boolean hasFluidOverlay = false;
-        for (OverlayData o : overlayList) {
-            if (blockLookup.isWater(o.blockName)) { hasFluidOverlay = true; break; }
+        if (overlayList != null) {
+            for (OverlayData o : overlayList) {
+                if (blockLookup.isWater(o.blockName)) { hasFluidOverlay = true; break; }
+            }
         }
 
         boolean hasSkyAccess = worldY >= heightMapValue;
