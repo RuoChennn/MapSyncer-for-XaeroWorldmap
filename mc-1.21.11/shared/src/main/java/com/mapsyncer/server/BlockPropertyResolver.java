@@ -354,7 +354,8 @@ public class BlockPropertyResolver {
      * 1. AirBlock或TransparentBlock类 → overlay
      * 2. 渲染类型是translucent的方块 → overlay
      *
-     * 重要：树叶渲染类型是cutout，不是translucent，所以树叶不应该是overlay！
+     * 树叶虽渲染类型为 cutout_mipped，但 Xaero (Forge/Fabric) 均不将其
+     * 视为 translucent/overlay，而是作为主像素 + noise-based biome sampling。
      *
      * @param block 方块实例
      * @param state 方块状态
@@ -387,9 +388,12 @@ public class BlockPropertyResolver {
         // translucent 渲染的方块通常有较低的 lightBlock 值，但不包括树叶
         // 树叶的 lightBlock = 1，但渲染类型是 cutout_mipped，不是 translucent
 
-        // 排除树叶：树叶虽然有 lightBlock = 1，但使用 cutout 渲染，不应作为 overlay
+        // 树叶不作为 overlay：Xaero shouldOverlay() 通过检查 blockStateHasTranslucentRenderType
+        // (Forge: getRenderTypes.contains(translucent), Fabric: getRenderLayer==translucent)
+        // 判断 — 树叶渲染类型为 cutout_mipped/cutout，不被视为 translucent，因此不是 overlay。
+        // 树叶应作为主像素渲染，biome 使用 fillBiomes 噪声插值的结果（对应我们 getBiomeAt 查树叶 Y）。
         if (state.is(BlockTags.LEAVES)) {
-            return false;  // 树叶不作为 overlay，是实体方块
+            return false;
         }
 
         // 排除雪片：雪层方块虽然 lightBlock 很低，但应作为表面渲染

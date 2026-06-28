@@ -310,7 +310,7 @@ public class RegionConverterStandalone {
                     heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
                 recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -324,7 +324,7 @@ public class RegionConverterStandalone {
                 byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
                 recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -345,7 +345,7 @@ public class RegionConverterStandalone {
             int aboveWorldY = worldY + 1;
             byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                 heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
-            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, true);
+            String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
             recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
                 overlayLists[pos], relX, relZ);
             blockFound[pos] = true;
@@ -395,7 +395,7 @@ public class RegionConverterStandalone {
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
                 int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
                 recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -410,7 +410,7 @@ public class RegionConverterStandalone {
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
                 int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
-                String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
                 recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -459,12 +459,37 @@ public class RegionConverterStandalone {
             byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                 heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
             int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
-            String biomeName = ChunkSectionParser.getBiomeAt(section, lx, ly, lz);
+            String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
             recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
                 overlayLists[pos], relX, relZ);
             blockFound[pos] = true;
             return;
         }
+    }
+
+    /** 直接写入 MapRegionData（内联原 recordPixelData） */
+
+    /**
+     * biome 查找 + 跨 section 回退，对齐 Xaero BiomeManager 噪声插值行为。
+     *
+     * <p>Xaero 通过 BiomeZoomer 从 4×4×4 网格插值到 1×1 块分辨率，
+     * 即使当前 section 缺少 biome 数据也可从相邻 section 推断。
+     * 我们无法在服务端进行噪声插值，但可在当前 section 的 biomePalette
+     * 为空时搜索同 chunk 内的其他 section 作为回退。</p>
+     */
+    private static String getBiomeWithFallback(ChunkDataParser.ChunkInfo chunk,
+                                                ChunkSectionParser.SectionData section,
+                                                int lx, int ly, int lz,
+                                                boolean smoothBoundary) {
+        if (!section.biomePalette().isEmpty()) {
+            return ChunkSectionParser.getBiomeAt(section, lx, ly, lz, smoothBoundary);
+        }
+        for (ChunkSectionParser.SectionData s : chunk.sections()) {
+            if (s != section && !s.biomePalette().isEmpty()) {
+                return ChunkSectionParser.getBiomeAt(s, lx, ly, lz, smoothBoundary);
+            }
+        }
+        return DEFAULT_BIOME;
     }
 
     /** 直接写入 MapRegionData（内联原 recordPixelData） */
