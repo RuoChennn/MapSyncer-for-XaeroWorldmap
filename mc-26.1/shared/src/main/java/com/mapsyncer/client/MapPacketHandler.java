@@ -623,7 +623,12 @@ public class MapPacketHandler {
      * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
      */
     public static void drainPendingLoadQueue() {
-        int loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
+        int loadsPerTick;
+        try {
+            loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
+        } catch (IllegalStateException e) {
+            return;
+        }
         if (loadsPerTick == 0) return;
 
         if (loadsPerTick == -1) {
