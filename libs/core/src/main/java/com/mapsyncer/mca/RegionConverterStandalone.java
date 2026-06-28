@@ -310,7 +310,7 @@ public class RegionConverterStandalone {
                     heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
-                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, false);
                 recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -324,7 +324,7 @@ public class RegionConverterStandalone {
                 byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
-                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, false);
                 recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -345,7 +345,7 @@ public class RegionConverterStandalone {
             int aboveWorldY = worldY + 1;
             byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                 heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
-            String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
+            String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, false);
             recordPixelDirect(data, singleState, worldY, worldY, biomeName, light,
                 overlayLists[pos], relX, relZ);
             blockFound[pos] = true;
@@ -395,7 +395,7 @@ public class RegionConverterStandalone {
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
                 int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
-                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, false);
                 recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -410,7 +410,7 @@ public class RegionConverterStandalone {
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     "minecraft:water", worldY, opacity, light, blockLookup);
                 int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
-                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
+                String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, false);
                 recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
                     overlayLists[pos], relX, relZ);
                 blockFound[pos] = true;
@@ -459,7 +459,7 @@ public class RegionConverterStandalone {
             byte light = calculateSurfaceLight(chunk, section, lx, ly, lz, aboveWorldY,
                 heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup);
             int topBlockY = topPixelH[pos] < 0 ? worldY : topPixelH[pos];
-            String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, true);
+            String biomeName = getBiomeWithFallback(chunk, section, lx, ly, lz, false);
             recordPixelDirect(data, state, worldY, topBlockY, biomeName, light,
                 overlayLists[pos], relX, relZ);
             blockFound[pos] = true;

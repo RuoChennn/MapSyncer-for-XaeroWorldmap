@@ -352,7 +352,7 @@ public class ChunkDataParser {
      * @return 生物群系名称字符串
      */
     public static String getBiomeAt(ChunkInfo chunk, int x, int worldY, int z) {
-        return getBiomeAt(chunk, x, worldY, z, true);
+        return getBiomeAt(chunk, x, worldY, z, false);
     }
 
     /**
