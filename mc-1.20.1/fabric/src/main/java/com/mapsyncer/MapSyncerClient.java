@@ -3,11 +3,13 @@ package com.mapsyncer;
 import com.mapsyncer.client.MapPacketHandler;
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.MapSyncerCommand;
+import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,6 +23,9 @@ public class MapSyncerClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         LOGGER.info("Initializing MapSyncer client...");
+
+        // 初始化客户端配置（生成默认配置文件）
+        ModConfig.getClientConfig(FabricLoader.getInstance().getConfigDir());
 
         FabricNetworkHandler networkHandler = MapSyncer.getNetworkHandler();
         if (networkHandler != null) {
