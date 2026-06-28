@@ -477,37 +477,97 @@ public class RegionConverterStandalone {
      * 我们无法在服务端进行噪声插值，但可在当前 section 的 biomePalette
      * 为空或返回无效 biome 时搜索同 chunk 内的其他 section 作为回退。</p>
      *
-     * <p>回退时根据绝对 Y 计算回退 section 内的局部 ly，确保查找的是
-     * 同一绝对高度的 biome，而不是回退 section 内不同 Y 的 biome。</p>
+     * <p>the_void 会导致树叶等 biome-tinted 方块在客户端染成红褐色，因此所有
+     * 回退阶段都必须排除 the_void。</p>
      */
     private static String getBiomeWithFallback(ChunkDataParser.ChunkInfo chunk,
                                                 ChunkSectionParser.SectionData section,
                                                 int lx, int ly, int lz,
                                                 boolean smoothBoundary) {
-        // 1. 尝试当前 section（需排除 the_void — 表示该 section 缺少有效 biome 数据）
-        if (!section.biomePalette().isEmpty()) {
-            String biome = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, smoothBoundary);
-            if (biome != null && !biome.equals(DEFAULT_BIOME)) return biome;
-        }
-
-        // 2. 回退到同 chunk 其他 section：按绝对 Y 对齐查找
         int absoluteY = section.sectionY() * 16 + ly;
-        for (ChunkSectionParser.SectionData s : chunk.sections()) {
-            if (s == section || s.biomePalette().isEmpty()) continue;
-            int fallbackLy = absoluteY - s.sectionY() * 16;
-            if (fallbackLy < 0 || fallbackLy > 15) continue;
-            String biome = ChunkSectionParser.getBiomeAt(s, lx, fallbackLy, lz, smoothBoundary);
-            if (biome != null && !biome.equals(DEFAULT_BIOME)) return biome;
+        String biome = resolveBiomeAtAbsoluteY(chunk, lx, absoluteY, lz, smoothBoundary);
+        if (biome != null) {
+            return biome;
         }
 
-        // 3. 绝对 Y 不在回退 section 范围内时，退而用原始 ly（保持旧兼容）
+        // 树冠高度查不到时，回退到高度图地表 Y（通常与地面群系一致）
+        int[][] heightmap = chunk.heightmap();
+        if (heightmap != null) {
+            int surfaceY = heightmap[lx][lz];
+            if (surfaceY != absoluteY) {
+                biome = resolveBiomeAtAbsoluteY(chunk, lx, surfaceY, lz, smoothBoundary);
+                if (biome != null) {
+                    return biome;
+                }
+            }
+        }
+
+        // 最后手段：扫描 chunk 内任意 section、任意 Y 的首个有效 biome
         for (ChunkSectionParser.SectionData s : chunk.sections()) {
-            if (s == section || s.biomePalette().isEmpty()) continue;
-            String biome = ChunkSectionParser.getBiomeAt(s, lx, ly, lz, smoothBoundary);
-            if (biome != null && !biome.equals(DEFAULT_BIOME)) return biome;
+            if (s.biomePalette().isEmpty()) {
+                continue;
+            }
+            for (int tryLy = 0; tryLy <= 15; tryLy++) {
+                String candidate = ChunkSectionParser.getBiomeAt(s, lx, tryLy, lz, smoothBoundary);
+                if (isValidBiome(candidate)) {
+                    return candidate;
+                }
+            }
         }
 
         return DEFAULT_BIOME;
+    }
+
+    /**
+     * 在指定绝对 Y 查找 biome，含同 chunk 跨 section Y 对齐回退。
+     *
+     * @return 有效 biome，找不到时返回 null
+     */
+    private static String resolveBiomeAtAbsoluteY(ChunkDataParser.ChunkInfo chunk,
+                                                   int lx, int absoluteY, int lz,
+                                                   boolean smoothBoundary) {
+        int targetSectionY = absoluteY >> 4;
+        int localY = absoluteY & 0xF;
+
+        for (ChunkSectionParser.SectionData s : chunk.sections()) {
+            if (s.sectionY() != targetSectionY || s.biomePalette().isEmpty()) {
+                continue;
+            }
+            String biome = ChunkSectionParser.getBiomeAt(s, lx, localY, lz, smoothBoundary);
+            if (isValidBiome(biome)) {
+                return biome;
+            }
+        }
+
+        for (ChunkSectionParser.SectionData s : chunk.sections()) {
+            if (s.biomePalette().isEmpty()) {
+                continue;
+            }
+            int fallbackLy = absoluteY - s.sectionY() * 16;
+            if (fallbackLy < 0 || fallbackLy > 15) {
+                continue;
+            }
+            String biome = ChunkSectionParser.getBiomeAt(s, lx, fallbackLy, lz, smoothBoundary);
+            if (isValidBiome(biome)) {
+                return biome;
+            }
+        }
+
+        for (ChunkSectionParser.SectionData s : chunk.sections()) {
+            if (s.biomePalette().isEmpty()) {
+                continue;
+            }
+            String biome = ChunkSectionParser.getBiomeAt(s, lx, localY, lz, smoothBoundary);
+            if (isValidBiome(biome)) {
+                return biome;
+            }
+        }
+
+        return null;
+    }
+
+    private static boolean isValidBiome(String biome) {
+        return biome != null && !biome.equals(DEFAULT_BIOME);
     }
 
     /** 直接写入 MapRegionData（内联原 recordPixelData） */
