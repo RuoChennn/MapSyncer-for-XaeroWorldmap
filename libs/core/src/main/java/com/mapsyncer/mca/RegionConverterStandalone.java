@@ -475,20 +475,38 @@ public class RegionConverterStandalone {
      * <p>Xaero 通过 BiomeZoomer 从 4×4×4 网格插值到 1×1 块分辨率，
      * 即使当前 section 缺少 biome 数据也可从相邻 section 推断。
      * 我们无法在服务端进行噪声插值，但可在当前 section 的 biomePalette
-     * 为空时搜索同 chunk 内的其他 section 作为回退。</p>
+     * 为空或返回无效 biome 时搜索同 chunk 内的其他 section 作为回退。</p>
+     *
+     * <p>回退时根据绝对 Y 计算回退 section 内的局部 ly，确保查找的是
+     * 同一绝对高度的 biome，而不是回退 section 内不同 Y 的 biome。</p>
      */
     private static String getBiomeWithFallback(ChunkDataParser.ChunkInfo chunk,
                                                 ChunkSectionParser.SectionData section,
                                                 int lx, int ly, int lz,
                                                 boolean smoothBoundary) {
+        // 1. 尝试当前 section（需排除 the_void — 表示该 section 缺少有效 biome 数据）
         if (!section.biomePalette().isEmpty()) {
-            return ChunkSectionParser.getBiomeAt(section, lx, ly, lz, smoothBoundary);
+            String biome = ChunkSectionParser.getBiomeAt(section, lx, ly, lz, smoothBoundary);
+            if (biome != null && !biome.equals(DEFAULT_BIOME)) return biome;
         }
+
+        // 2. 回退到同 chunk 其他 section：按绝对 Y 对齐查找
+        int absoluteY = section.sectionY() * 16 + ly;
         for (ChunkSectionParser.SectionData s : chunk.sections()) {
-            if (s != section && !s.biomePalette().isEmpty()) {
-                return ChunkSectionParser.getBiomeAt(s, lx, ly, lz, smoothBoundary);
-            }
+            if (s == section || s.biomePalette().isEmpty()) continue;
+            int fallbackLy = absoluteY - s.sectionY() * 16;
+            if (fallbackLy < 0 || fallbackLy > 15) continue;
+            String biome = ChunkSectionParser.getBiomeAt(s, lx, fallbackLy, lz, smoothBoundary);
+            if (biome != null && !biome.equals(DEFAULT_BIOME)) return biome;
         }
+
+        // 3. 绝对 Y 不在回退 section 范围内时，退而用原始 ly（保持旧兼容）
+        for (ChunkSectionParser.SectionData s : chunk.sections()) {
+            if (s == section || s.biomePalette().isEmpty()) continue;
+            String biome = ChunkSectionParser.getBiomeAt(s, lx, ly, lz, smoothBoundary);
+            if (biome != null && !biome.equals(DEFAULT_BIOME)) return biome;
+        }
+
         return DEFAULT_BIOME;
     }
 
