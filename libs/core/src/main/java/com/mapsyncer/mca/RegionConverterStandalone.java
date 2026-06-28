@@ -337,7 +337,10 @@ public class RegionConverterStandalone {
                 byte light = getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     blockName, worldY, opacity, light, blockLookup);
-                continue;
+                if ((flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) == 0) {
+                    continue;
+                }
+                // 树叶等可染色透明方块：加入 overlay 后仍需记录像素（对齐 Xaero 行为）
             }
 
             if ((flags & BlockPropertyLookup.FLAG_INVISIBLE) != 0) continue;
@@ -450,7 +453,10 @@ public class RegionConverterStandalone {
                 addOverlayToList(overlays, overlays == null ? (overlayLists[pos] = new ArrayList<>()) : overlays,
                     blockName, worldY, opacity, light, blockLookup);
                 if (topPixelH[pos] < 0) topPixelH[pos] = worldY;
-                continue;
+                if ((flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) == 0) {
+                    continue;
+                }
+                // 树叶等可染色透明方块：加入 overlay 后仍需记录像素（对齐 Xaero 行为）
             }
 
             if ((flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) == 0) continue;
