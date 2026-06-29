@@ -4,6 +4,7 @@ import com.mapsyncer.network.NeoForgePayloadAdapters;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -33,6 +34,7 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
+    private BiConsumer<SyncAllowedPayload, PayloadContext> syncAllowedHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
     @Override
@@ -87,6 +89,17 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
                 }
             }
         );
+
+        // 登录就绪通知（服务端 -> 客户端）
+        registrar.playToClient(
+            NeoForgePayloadAdapters.NeoForgeSyncAllowedPayload.TYPE,
+            NeoForgePayloadAdapters.NeoForgeSyncAllowedPayload.STREAM_CODEC,
+            (payload, ctx) -> {
+                if (syncAllowedHandler != null) {
+                    syncAllowedHandler.accept(payload.data(), new PayloadContext(ctx));
+                }
+            }
+        );
     }
 
     @Override
@@ -115,6 +128,13 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
             new NeoForgePayloadAdapters.NeoForgeServerInstalledPayload(payload));
     }
 
+    @Override
+    public void sendToPlayer(ServerPlayer player, SyncAllowedPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        PacketDistributor.sendToPlayer(player,
+            new NeoForgePayloadAdapters.NeoForgeSyncAllowedPayload(payload));
+    }
+
     /** 玩家断线时清理确认状态 */
     public void onPlayerDisconnect(UUID playerId) {
         confirmedPlayers.remove(playerId);
@@ -133,6 +153,11 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     @Override
     public void registerServerInstalledHandler(BiConsumer<ServerInstalledPayload, PayloadContext> handler) {
         this.serverInstalledHandler = handler;
+    }
+
+    @Override
+    public void registerSyncAllowedHandler(BiConsumer<SyncAllowedPayload, PayloadContext> handler) {
+        this.syncAllowedHandler = handler;
     }
 
     @Override

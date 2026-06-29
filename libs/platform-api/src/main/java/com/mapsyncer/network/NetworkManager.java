@@ -1,6 +1,7 @@
 package com.mapsyncer.network;
 
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -102,6 +103,12 @@ public final class NetworkManager {
      * @param payload 服务端已安装通知包
      */
     public static void sendToPlayer(Object player, ServerInstalledPayload payload) {
+        @SuppressWarnings("unchecked")
+        NetworkHandler<Object, Object> handler = (NetworkHandler<Object, Object>) getHandler();
+        handler.sendToPlayer(player, payload);
+    }
+
+    public static void sendToPlayer(Object player, SyncAllowedPayload payload) {
         @SuppressWarnings("unchecked")
         NetworkHandler<Object, Object> handler = (NetworkHandler<Object, Object>) getHandler();
         handler.sendToPlayer(player, payload);

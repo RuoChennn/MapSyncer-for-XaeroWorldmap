@@ -1,6 +1,7 @@
 package com.mapsyncer.network;
 
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -40,6 +41,8 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
     String SYNC_PROGRESS_ID = "sync_progress";
     /** 服务端已安装通知包 ID */
     String SERVER_INSTALLED_ID = "server_installed";
+    /** 登录就绪、允许同步通知包 ID */
+    String SYNC_ALLOWED_ID = "sync_allowed";
 
     // ===== 初始化 =====
 
@@ -85,6 +88,11 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      */
     void sendToPlayer(PLAYER_TYPE player, ServerInstalledPayload payload);
 
+    /**
+     * 发送登录就绪通知到指定玩家（服务端调用）
+     */
+    void sendToPlayer(PLAYER_TYPE player, SyncAllowedPayload payload);
+
     // ===== 处理器注册 =====
 
     /**
@@ -107,6 +115,11 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      * @param handler 处理函数
      */
     void registerServerInstalledHandler(BiConsumer<ServerInstalledPayload, PayloadContext> handler);
+
+    /**
+     * 注册登录就绪处理器（客户端）
+     */
+    void registerSyncAllowedHandler(BiConsumer<SyncAllowedPayload, PayloadContext> handler);
 
     /**
      * 注册同步请求处理器（服务端）

@@ -6,9 +6,11 @@ import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncResponseMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncProgressMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeServerInstalledMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncAllowedMessage;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -43,6 +45,7 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
+    private BiConsumer<SyncAllowedPayload, PayloadContext> syncAllowedHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
     public void init() {
@@ -92,6 +95,16 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
                 }
             })
             .add();
+
+        CHANNEL.messageBuilder(ForgeSyncAllowedMessage.class, 4, NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(ForgeSyncAllowedMessage::encode)
+            .decoder(ForgeSyncAllowedMessage::decode)
+            .consumerMainThread((msg, ctx) -> {
+                if (syncAllowedHandler != null) {
+                    syncAllowedHandler.accept(msg.getData(), new PayloadContext(ctx));
+                }
+            })
+            .add();
     }
 
     @Override
@@ -125,6 +138,12 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     }
 
     @Override
+    public void sendToPlayer(ServerPlayer player, SyncAllowedPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        CHANNEL.send(new ForgeSyncAllowedMessage(payload), PacketDistributor.PLAYER.with(player));
+    }
+
+    @Override
     public void registerSyncResponseHandler(BiConsumer<SyncResponsePayload, PayloadContext> handler) {
         this.syncResponseHandler = handler;
     }
@@ -137,6 +156,11 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void registerServerInstalledHandler(BiConsumer<ServerInstalledPayload, PayloadContext> handler) {
         this.serverInstalledHandler = handler;
+    }
+
+    @Override
+    public void registerSyncAllowedHandler(BiConsumer<SyncAllowedPayload, PayloadContext> handler) {
+        this.syncAllowedHandler = handler;
     }
 
     @Override

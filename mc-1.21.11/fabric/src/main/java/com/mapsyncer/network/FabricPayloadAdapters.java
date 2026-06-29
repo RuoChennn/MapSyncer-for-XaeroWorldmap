@@ -4,6 +4,7 @@ import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -62,6 +63,12 @@ public class FabricPayloadAdapters {
                     buf -> new ServerInstalledWrapper(readServerInstalled(buf))
             );
 
+    public static final StreamCodec<RegistryFriendlyByteBuf, SyncAllowedWrapper> SYNC_ALLOWED_CODEC =
+            StreamCodec.of(
+                    (buf, wrapper) -> writeSyncAllowed(buf, wrapper.payload()),
+                    buf -> new SyncAllowedWrapper(readSyncAllowed(buf))
+            );
+
     // ===== CustomPacketPayload Wrapper Records =====
 
     public record SyncRequestWrapper(SyncRequestPayload payload) implements CustomPacketPayload {
@@ -89,6 +96,13 @@ public class FabricPayloadAdapters {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return SERVER_INSTALLED_TYPE;
+        }
+    }
+
+    public record SyncAllowedWrapper(SyncAllowedPayload payload) implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return SYNC_ALLOWED_TYPE;
         }
     }
 
@@ -177,6 +191,14 @@ public class FabricPayloadAdapters {
 
     private static ServerInstalledPayload readServerInstalled(RegistryFriendlyByteBuf buf) {
         return new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt());
+    }
+
+    private static void writeSyncAllowed(RegistryFriendlyByteBuf buf, SyncAllowedPayload payload) {
+        buf.writeInt(payload.autoSyncDelaySeconds());
+    }
+
+    private static SyncAllowedPayload readSyncAllowed(RegistryFriendlyByteBuf buf) {
+        return new SyncAllowedPayload(buf.readInt());
     }
 
     // ===== ChunkMapData 序列化 =====

@@ -3,6 +3,7 @@ package com.mapsyncer.network.impl;
 import com.mapsyncer.network.FabricPayloadAdapters;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -66,6 +67,19 @@ public class FabricClientNetworkHandler {
                         var h = networkHandler.getServerInstalledHandler();
                         if (h != null) {
                             ServerInstalledPayload payload = FabricPayloadAdapters.readServerInstalled(buf);
+                            h.accept(payload, new PayloadContext(client));
+                        }
+                    }
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                FabricPayloadAdapters.SYNC_ALLOWED_ID,
+                (client, handler, buf, responseSender) -> {
+                    if (networkHandler != null) {
+                        var h = networkHandler.getSyncAllowedHandler();
+                        if (h != null) {
+                            SyncAllowedPayload payload = FabricPayloadAdapters.readSyncAllowed(buf);
                             h.accept(payload, new PayloadContext(client));
                         }
                     }

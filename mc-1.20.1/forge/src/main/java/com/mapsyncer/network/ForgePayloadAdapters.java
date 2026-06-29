@@ -156,6 +156,29 @@ public class ForgePayloadAdapters {
         }
     }
 
+
+    // ===== 登录就绪消息 =====
+
+    public static class ForgeSyncAllowedMessage {
+        private final com.mapsyncer.network.payload.SyncAllowedPayload data;
+
+        public ForgeSyncAllowedMessage(com.mapsyncer.network.payload.SyncAllowedPayload data) {
+            this.data = data;
+        }
+
+        public com.mapsyncer.network.payload.SyncAllowedPayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeSyncAllowedMessage msg, net.minecraft.network.FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.autoSyncDelaySeconds());
+        }
+
+        public static ForgeSyncAllowedMessage decode(net.minecraft.network.FriendlyByteBuf buf) {
+            return new ForgeSyncAllowedMessage(new com.mapsyncer.network.payload.SyncAllowedPayload(buf.readInt()));
+        }
+    }
+
     // ===== ChunkMapData 序列化 =====
 
     private static void encodeChunkMapData(FriendlyByteBuf buf, ChunkMapData data) {

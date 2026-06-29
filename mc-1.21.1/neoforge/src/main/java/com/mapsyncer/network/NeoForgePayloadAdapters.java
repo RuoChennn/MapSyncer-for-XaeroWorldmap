@@ -164,6 +164,30 @@ public class NeoForgePayloadAdapters {
         }
     }
 
+
+    // ===== 登录就绪适配器 =====
+
+    public record NeoForgeSyncAllowedPayload(com.mapsyncer.network.payload.SyncAllowedPayload data) implements CustomPacketPayload {
+        public static final Type<NeoForgeSyncAllowedPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.SYNC_ALLOWED_ID));
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeSyncAllowedPayload> STREAM_CODEC =
+            StreamCodec.of(NeoForgeSyncAllowedPayload::encode, NeoForgeSyncAllowedPayload::decode);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeSyncAllowedPayload payload) {
+            buf.writeInt(payload.data.autoSyncDelaySeconds());
+        }
+
+        public static NeoForgeSyncAllowedPayload decode(RegistryFriendlyByteBuf buf) {
+            return new NeoForgeSyncAllowedPayload(new com.mapsyncer.network.payload.SyncAllowedPayload(buf.readInt()));
+        }
+    }
+
     // ===== ChunkMapData 序列化（共享逻辑）=====
 
     private static void encodeChunkMapData(RegistryFriendlyByteBuf buf, ChunkMapData data) {

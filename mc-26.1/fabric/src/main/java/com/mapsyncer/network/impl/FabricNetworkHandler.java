@@ -4,6 +4,7 @@ import com.mapsyncer.network.FabricPayloadAdapters;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.SyncAllowedPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -27,6 +28,8 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
+
+    private BiConsumer<SyncAllowedPayload, PayloadContext> syncAllowedHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
 
     /** 防止 Payload 类型被重复注册（集成客户端环境下 main + client 入口点各调用一次） */
@@ -95,6 +98,12 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
                 serverInstalledHandler.accept(wrapper.payload(), new PayloadContext(context));
             }
         });
+
+        ClientPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.SYNC_ALLOWED_TYPE, (wrapper, context) -> {
+            if (syncAllowedHandler != null) {
+                syncAllowedHandler.accept(wrapper.payload(), new PayloadContext(context));
+            }
+        });
     }
 
     @Override
@@ -118,6 +127,11 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     }
 
     @Override
+    public void sendToPlayer(ServerPlayer player, SyncAllowedPayload payload) {
+        ServerPlayNetworking.send(player, new FabricPayloadAdapters.SyncAllowedWrapper(payload));
+    }
+
+    @Override
     public void registerSyncResponseHandler(BiConsumer<SyncResponsePayload, PayloadContext> handler) {
         this.syncResponseHandler = handler;
     }
@@ -130,6 +144,11 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     @Override
     public void registerServerInstalledHandler(BiConsumer<ServerInstalledPayload, PayloadContext> handler) {
         this.serverInstalledHandler = handler;
+    }
+
+    @Override
+    public void registerSyncAllowedHandler(BiConsumer<SyncAllowedPayload, PayloadContext> handler) {
+        this.syncAllowedHandler = handler;
     }
 
     @Override

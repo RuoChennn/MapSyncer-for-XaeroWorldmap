@@ -32,6 +32,7 @@ public class FabricPayloadAdapters {
     public static final ResourceLocation SYNC_RESPONSE_ID = new ResourceLocation(MapSyncer.MOD_ID, "sync_response");
     public static final ResourceLocation SYNC_PROGRESS_ID = new ResourceLocation(MapSyncer.MOD_ID, "sync_progress");
     public static final ResourceLocation SERVER_INSTALLED_ID = new ResourceLocation(MapSyncer.MOD_ID, "server_installed");
+    public static final ResourceLocation SYNC_ALLOWED_ID = new ResourceLocation(MapSyncer.MOD_ID, "sync_allowed");
 
     // ===== 同步请求 =====
 
@@ -118,6 +119,14 @@ public class FabricPayloadAdapters {
 
     public static ServerInstalledPayload readServerInstalled(FriendlyByteBuf buf) {
         return new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt());
+    }
+
+    public static void writeSyncAllowed(FriendlyByteBuf buf, com.mapsyncer.network.payload.SyncAllowedPayload payload) {
+        buf.writeInt(payload.autoSyncDelaySeconds());
+    }
+
+    public static com.mapsyncer.network.payload.SyncAllowedPayload readSyncAllowed(FriendlyByteBuf buf) {
+        return new com.mapsyncer.network.payload.SyncAllowedPayload(buf.readInt());
     }
 
     // ===== ChunkMapData 序列化 =====
