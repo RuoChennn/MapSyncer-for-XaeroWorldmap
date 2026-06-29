@@ -84,6 +84,9 @@ public class MapPacketHandler {
     /** 视距外 region 加载队列 — 限速排放，防止 Xaero MapProcessor 队列溢出 OOM */
     private static final ConcurrentLinkedQueue<PendingRegionLoad> pendingRegionLoads = new ConcurrentLinkedQueue<>();
 
+    /** 同步完成后等待 tick 队列排空，再释放反射缓存 */
+    private static volatile boolean awaitingPendingReloadDrain = false;
+
     private record PendingRegionLoad(int regionX, int regionZ, int caveLayer) {}
 
     /** 分片超时时间（毫秒），超过此时间未到齐的分片视为丢失 */
@@ -471,8 +474,8 @@ public class MapPacketHandler {
                     }
                 }
 
-                clearSyncState();
-                clearReflectionCache();
+                clearSyncStateAfterComplete();
+                scheduleDeferredReloadCleanup();
             }
         });
     }
@@ -509,6 +512,50 @@ public class MapPacketHandler {
     }
 
     /**
+     * 同步完成后的轻量清理（保留视距外重载队列，供后续 tick 继续排放）。
+     */
+    private static void clearSyncStateAfterComplete() {
+        updatedRegionCoords.clear();
+        loadedRegions.clear();
+        partBuffer.clear();
+        lastMwDir = null;
+        syncStartTime = 0;
+    }
+
+    /**
+     * 同步完成后延迟释放反射缓存：等 pendingRegionLoads 排空后再 clear。
+     *
+     * <p>最后一包通常 isComplete=true 且含最远 region，若在入队后立即 clearSyncState，
+     * 会丢掉刚写入队列的视距外 region。</p>
+     */
+    private static void scheduleDeferredReloadCleanup() {
+        int loadsPerTick;
+        try {
+            loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
+        } catch (IllegalStateException e) {
+            loadsPerTick = 1;
+        }
+        if (loadsPerTick == 0 || pendingRegionLoads.isEmpty()) {
+            pendingRegionLoads.clear();
+            clearReflectionCache();
+            awaitingPendingReloadDrain = false;
+            return;
+        }
+        awaitingPendingReloadDrain = true;
+        drainPendingLoadQueue();
+        finishDeferredReloadCleanupIfDone();
+    }
+
+    private static void finishDeferredReloadCleanupIfDone() {
+        if (!awaitingPendingReloadDrain || !pendingRegionLoads.isEmpty()) {
+            return;
+        }
+        awaitingPendingReloadDrain = false;
+        clearReflectionCache();
+        LOGGER.debug("视距外 region 重载队列已排空，反射缓存已释放");
+    }
+
+    /**
      * 清理同步状态（非反射缓存）。
      */
     private static void clearSyncState() {
@@ -516,6 +563,7 @@ public class MapPacketHandler {
         loadedRegions.clear();
         partBuffer.clear();
         pendingRegionLoads.clear();
+        awaitingPendingReloadDrain = false;
         lastMwDir = null;
         syncStartTime = 0;
     }
@@ -644,6 +692,7 @@ public class MapPacketHandler {
                     pending.regionX(), pending.regionZ(), pending.caveLayer());
                 triggerSingleRegionLoad(coord, pending.caveLayer(), false);
             }
+            finishDeferredReloadCleanupIfDone();
             return;
         }
 
@@ -654,6 +703,7 @@ public class MapPacketHandler {
                 pending.regionX(), pending.regionZ(), pending.caveLayer());
             triggerSingleRegionLoad(coord, pending.caveLayer(), false);
         }
+        finishDeferredReloadCleanupIfDone();
     }
 
     /**
