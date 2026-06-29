@@ -5,6 +5,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mapsyncer.security.PermissionGates;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
@@ -38,7 +39,7 @@ public class CacheGenerateCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, String prefix) {
         dispatcher.register(Commands.literal(prefix)
-                .requires(source -> source.hasPermission(4))
+                .requires(PermissionGates::canAdmin)
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
                         .executes(CacheGenerateCommand::showHelp))

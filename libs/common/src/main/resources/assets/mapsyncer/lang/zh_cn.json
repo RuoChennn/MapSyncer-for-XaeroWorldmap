@@ -62,6 +62,8 @@
   "mapsyncer.server.map_uptodate": "地图已是最新，%d 个哈希匹配，%d 个时间戳跳过",
   "mapsyncer.server.sync_start": "开始地图同步：需下载 %d 个区域（%d 个相同，%d 个客户端较新已跳过）",
   "mapsyncer.server.sync_complete": "地图同步完成：已发送 %d 个区域",
+  "mapsyncer.server.sync_denied": "你没有地图同步权限。",
+  "mapsyncer.server.sync_not_authenticated": "请先登录后再同步地图。",
 
   "mapsyncer.generate.start_full": "开始全量地图生成...",
   "mapsyncer.generate.full_complete": "地图生成完成：%d/%d 个区域，已完成 %d 个维度：%s",

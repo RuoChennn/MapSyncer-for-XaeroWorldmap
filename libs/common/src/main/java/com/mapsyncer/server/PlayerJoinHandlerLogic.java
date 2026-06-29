@@ -8,6 +8,7 @@ import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.security.SyncAuthTracker;
 import com.mapsyncer.util.BlockColorMapper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,6 +45,8 @@ public class PlayerJoinHandlerLogic {
         NetworkManager.sendToPlayer(player,
             new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval));
 
+        SyncAuthNotifier.onPlayerJoin(player);
+
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {
             IncrementalUpdateHandlerLogic.getInstance().start(server);
@@ -54,6 +57,7 @@ public class PlayerJoinHandlerLogic {
      * 中断正在进行的该玩家的地图同步任务。
      */
     public static void onPlayerLeave(UUID playerId) {
+        SyncAuthNotifier.onPlayerLeave(playerId);
         ServerSyncHandlerLogic.onPlayerDisconnect(playerId);
     }
 
@@ -81,6 +85,7 @@ public class PlayerJoinHandlerLogic {
 
         // Clear sync tracking data
         ServerSyncHandlerLogic.cleanup();
+        SyncAuthTracker.clear();
 
         LOGGER.info("Singleton cache cleanup completed");
     }
@@ -89,6 +94,10 @@ public class PlayerJoinHandlerLogic {
      * 定期清理异常断线玩家的残留状态，防止内存泄漏。
      */
     public static void onServerTick(MinecraftServer server) {
+        if (server != null) {
+            SyncAuthNotifier.onServerTick(server);
+        }
+
         cleanupTickCounter++;
 
         if (cleanupTickCounter < CLEANUP_CHECK_INTERVAL_TICKS) {

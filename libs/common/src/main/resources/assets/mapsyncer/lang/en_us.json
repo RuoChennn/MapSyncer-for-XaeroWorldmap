@@ -62,6 +62,8 @@
   "mapsyncer.server.map_uptodate": "Map is up-to-date. %d hash match, %d timestamp skip.",
   "mapsyncer.server.sync_start": "Starting map sync: %d regions to download (%d identical, %d newer on client skipped)",
   "mapsyncer.server.sync_complete": "Map sync complete: %d regions sent",
+  "mapsyncer.server.sync_denied": "You don't have permission to sync maps.",
+  "mapsyncer.server.sync_not_authenticated": "Please log in before syncing maps.",
 
   "mapsyncer.generate.start_full": "Starting full map generation...",
   "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions, %d dimensions completed: %s",

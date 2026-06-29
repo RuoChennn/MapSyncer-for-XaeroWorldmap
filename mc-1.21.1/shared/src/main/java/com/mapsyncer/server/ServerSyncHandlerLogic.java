@@ -8,6 +8,8 @@ import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.security.AuthGates;
+import com.mapsyncer.security.SyncPolicyHelper;
 import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -526,6 +528,15 @@ public class ServerSyncHandlerLogic {
             LOGGER.debug("SyncRequest assembled from {} parts, {} entries total", parts.size(), merged.size());
         }
 
+        if (!AuthGates.isReadyForSync(serverPlayer)) {
+            denySyncRequest(serverPlayer, "not_authenticated");
+            return;
+        }
+        if (!SyncPolicyHelper.canProcessSyncRequest(serverPlayer, payload.clientMeta())) {
+            denySyncRequest(serverPlayer, "denied");
+            return;
+        }
+
         // 递增版本号，用于标记此次请求（旧请求的 server.execute() 任务会通过版本号自过滤）
         int syncVersion = globalSyncVersion.incrementAndGet();
         playerSyncVersions.put(playerId, syncVersion);
@@ -566,6 +577,18 @@ public class ServerSyncHandlerLogic {
     /**
      * 在主线程执行任务前检查版本号是否匹配（旧请求的入队任务自动丢弃）。
      */
+    private static void denySyncRequest(ServerPlayer serverPlayer, String reason) {
+        serverPlayer.level().getServer().execute(() -> {
+            if ("not_authenticated".equals(reason)) {
+                serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.sync_not_authenticated"));
+            } else {
+                serverPlayer.sendSystemMessage(ChatUtils.error("mapsyncer.server.sync_denied"));
+            }
+            NetworkManager.sendToPlayer(serverPlayer,
+                    new SyncResponsePayload(List.of(), true, 0, reason));
+        });
+    }
+
     private static void enqueueIfCurrent(ServerPlayer serverPlayer, UUID playerId, int version, Runnable task) {
         serverPlayer.serverLevel().getServer().execute(() -> {
             if (playerSyncVersions.getOrDefault(playerId, 0) == version) {
