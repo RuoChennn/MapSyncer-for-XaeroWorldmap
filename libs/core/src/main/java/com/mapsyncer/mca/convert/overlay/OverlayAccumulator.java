@@ -1,6 +1,8 @@
 package com.mapsyncer.mca.convert.overlay;
 
 import com.mapsyncer.mca.BlockPropertyLookup;
+import com.mapsyncer.mca.ChunkSectionParser.BlockState;
+import com.mapsyncer.mca.convert.io.XaeroBlockStateNbtWriter;
 import com.mapsyncer.mca.convert.model.OverlayEntry;
 
 import java.util.ArrayList;
@@ -13,31 +15,32 @@ public final class OverlayAccumulator {
     private OverlayAccumulator() {}
 
     public static void add(List<OverlayEntry> currentList, ArrayList<OverlayEntry> list,
-                           String blockName, int y, int opacityToAdd, int light,
+                           BlockState blockState, int y, int opacityToAdd, int light,
                            BlockPropertyLookup blockLookup) {
         if (currentList != list) {
-            addSingle(list, blockName, y, opacityToAdd, light, blockLookup);
+            addSingle(list, blockState, y, opacityToAdd, light, blockLookup);
             return;
         }
         if (list.size() >= MAX_LAYERS) {
             return;
         }
-        opacityToAdd = normalizeOpacity(blockName, opacityToAdd, blockLookup);
+        opacityToAdd = normalizeOpacity(blockState.name(), opacityToAdd, blockLookup);
         OverlayEntry last = list.isEmpty() ? null : list.get(list.size() - 1);
-        if (last != null && last.blockName.equals(blockName)) {
+        if (last != null && XaeroBlockStateNbtWriter.PaletteKey.from(last.blockState)
+                .equals(XaeroBlockStateNbtWriter.PaletteKey.from(blockState))) {
             last.opacity = Math.min(15, last.opacity + opacityToAdd);
         } else {
-            list.add(new OverlayEntry(blockName, y, opacityToAdd, light));
+            list.add(new OverlayEntry(blockState, y, opacityToAdd, light));
         }
     }
 
-    private static void addSingle(ArrayList<OverlayEntry> list, String blockName, int y,
+    private static void addSingle(ArrayList<OverlayEntry> list, BlockState blockState, int y,
                                   int opacityToAdd, int light, BlockPropertyLookup blockLookup) {
         if (list.size() >= MAX_LAYERS) {
             return;
         }
-        opacityToAdd = normalizeOpacity(blockName, opacityToAdd, blockLookup);
-        list.add(new OverlayEntry(blockName, y, opacityToAdd, light));
+        opacityToAdd = normalizeOpacity(blockState.name(), opacityToAdd, blockLookup);
+        list.add(new OverlayEntry(blockState, y, opacityToAdd, light));
     }
 
     private static int normalizeOpacity(String blockName, int opacityToAdd, BlockPropertyLookup blockLookup) {

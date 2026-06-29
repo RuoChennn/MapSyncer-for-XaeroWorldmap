@@ -8,7 +8,10 @@ import static com.mapsyncer.mca.convert.model.ConvertConstants.DEFAULT_BIOME;
 import static com.mapsyncer.mca.convert.model.ConvertConstants.REGION_SIZE_BLOCKS;
 
 /**
- * 扫描完成后按 topHeight 填充 biome，对齐 Xaero fillBiomes 两阶段流程。
+ * 扫描完成后按表面 height 填充 biome。
+ *
+ * <p>与重构前 scan 阶段一致：biome 在发现表面方块时的 worldY 采样，而非 topBlockY
+ * （overlay 上方最高方块，仅用于 Xaero 序列化 bit 24）。</p>
  */
 public final class BiomeFillPass {
 
@@ -36,11 +39,9 @@ public final class BiomeFillPass {
 
                 int lx = rx & 0xF;
                 int lz = rz & 0xF;
-                int height = data.heightMap[rx][rz];
-                int topY = data.topBlockY[rx][rz];
-                int sampleY = topY >= 0 ? topY : height;
+                int surfaceY = data.heightMap[rx][rz];
 
-                data.biomeNames[rx][rz] = BiomeQuartResolver.resolve(chunk, lx, sampleY, lz);
+                data.biomeNames[rx][rz] = BiomeQuartResolver.resolve(chunk, lx, surfaceY, lz);
             }
         }
     }

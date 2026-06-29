@@ -1,6 +1,7 @@
 package com.mapsyncer.mca.convert.model;
 
 import com.mapsyncer.mca.ChunkDataParser;
+import com.mapsyncer.mca.ChunkSectionParser.BlockState;
 import com.mapsyncer.mca.LightMode;
 
 import java.util.Arrays;
@@ -13,6 +14,7 @@ import static com.mapsyncer.mca.convert.model.ConvertConstants.REGION_SIZE_BLOCK
 
 public class MapRegionData {
     public final String[][] blockNames;
+    public final BlockState[][] blockStates;
     public final int[][] topBlockY;
     public final String[][] biomeNames;
     public final int[][] heightMap;
@@ -28,6 +30,7 @@ public class MapRegionData {
         this.minBuildHeight = minBuildHeight;
         this.lightMode = lightMode;
         blockNames = new String[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
+        blockStates = new BlockState[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
         topBlockY = new int[REGION_SIZE_BLOCKS][REGION_SIZE_BLOCKS];
         for (int x = 0; x < REGION_SIZE_BLOCKS; x++) {
             Arrays.fill(topBlockY[x], -1);

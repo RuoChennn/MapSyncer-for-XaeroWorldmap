@@ -1,6 +1,8 @@
 package com.mapsyncer.mca.convert.io;
 
 import com.mapsyncer.mca.BlockPropertyLookup;
+import com.mapsyncer.mca.ChunkSectionParser.BlockState;
+import com.mapsyncer.mca.convert.io.XaeroBlockStateNbtWriter.PaletteKey;
 import com.mapsyncer.mca.convert.model.MapRegionData;
 import com.mapsyncer.mca.convert.model.OverlayEntry;
 
@@ -31,7 +33,7 @@ public final class XaeroBinaryWriter {
             dos.writeByte(0xFF);
             dos.writeInt((MAJOR_VERSION << 16) | MINOR_VERSION);
 
-            Map<String, Integer> blockPalette = new LinkedHashMap<>();
+            Map<PaletteKey, Integer> blockPalette = new LinkedHashMap<>();
             Map<String, Integer> biomePalette = new LinkedHashMap<>();
 
             for (int tileChunkO = 0; tileChunkO < TILE_CHUNKS_PER_REGION; tileChunkO++) {
@@ -77,43 +79,40 @@ public final class XaeroBinaryWriter {
     }
 
     private static void writeEmptyPixel(DataOutputStream dos, int minBuildHeight,
-                                         Map<String, Integer> blockPalette) throws IOException {
-        String emptyBlockName = "minecraft:air";
+                                         Map<PaletteKey, Integer> blockPalette) throws IOException {
+        BlockState air = XaeroBlockStateNbtWriter.AIR;
+        PaletteKey paletteKey = PaletteKey.from(air);
         int emptyHeight = minBuildHeight;
         int emptyParams = 0;
 
         emptyParams |= 1;
-        emptyParams |= 0 << 8;
         emptyParams |= encodeHeightToParams(emptyHeight);
 
-        if (!blockPalette.containsKey(emptyBlockName)) {
+        if (!blockPalette.containsKey(paletteKey)) {
             emptyParams |= 0x200000;
         }
 
         dos.writeInt(emptyParams);
-
-        if (!blockPalette.containsKey(emptyBlockName)) {
-            writeBlockStateNbt(emptyBlockName, dos);
-            blockPalette.put(emptyBlockName, blockPalette.size());
-        } else {
-            dos.writeInt(blockPalette.get(emptyBlockName));
-        }
+        writeBlockStateRef(dos, air, blockPalette);
     }
 
     private static void writePixel(DataOutputStream dos, MapRegionData data, int rx, int rz,
-                                    Map<String, Integer> blockPalette,
+                                    Map<PaletteKey, Integer> blockPalette,
                                     Map<String, Integer> biomePalette,
                                     BlockPropertyLookup blockLookup) throws IOException {
-        String blockName = data.blockNames[rx][rz];
-        if (blockName == null) {
-            blockName = DEFAULT_BLOCK;
+        BlockState blockState = data.blockStates[rx][rz];
+        if (blockState == null) {
+            blockState = new BlockState(DEFAULT_BLOCK, Map.of());
         }
+        String blockName = blockState.name();
+        PaletteKey paletteKey = PaletteKey.from(blockState);
+
         int height = data.heightMap[rx][rz];
         int topY = data.topBlockY[rx][rz];
         int topHeight = (topY >= 0) ? topY : height;
         String biomeName = data.biomeNames[rx][rz];
-        if (biomeName == null) {
-            biomeName = DEFAULT_BIOME;
+        if (biomeName == null || biomeName.equals(DEFAULT_BIOME)) {
+            biomeName = null;
         }
         int light = data.lightMap[rx][rz];
         List<OverlayEntry> overlays = data.overlays.get(rx * REGION_SIZE_BLOCKS + rz);
@@ -137,7 +136,7 @@ public final class XaeroBinaryWriter {
             params |= 0x1000000;
         }
 
-        if (!isGrass && !blockPalette.containsKey(blockName)) {
+        if (!isGrass && !blockPalette.containsKey(paletteKey)) {
             params |= 0x200000;
         }
         if (biomeName != null && !biomePalette.containsKey(biomeName)) {
@@ -147,12 +146,7 @@ public final class XaeroBinaryWriter {
         dos.writeInt(params);
 
         if (!isGrass) {
-            if (blockPalette.containsKey(blockName)) {
-                dos.writeInt(blockPalette.get(blockName));
-            } else {
-                writeBlockStateNbt(blockName, dos);
-                blockPalette.put(blockName, blockPalette.size());
-            }
+            writeBlockStateRef(dos, blockState, blockPalette);
         }
 
         if (topHeightDifferent) {
@@ -176,29 +170,29 @@ public final class XaeroBinaryWriter {
         }
     }
 
+    private static void writeBlockStateRef(DataOutputStream dos, BlockState blockState,
+                                          Map<PaletteKey, Integer> blockPalette) throws IOException {
+        PaletteKey paletteKey = PaletteKey.from(blockState);
+        if (blockPalette.containsKey(paletteKey)) {
+            dos.writeInt(blockPalette.get(paletteKey));
+        } else {
+            XaeroBlockStateNbtWriter.writeBlockState(blockState, dos);
+            blockPalette.put(paletteKey, blockPalette.size());
+        }
+    }
+
     private static int encodeHeightToParams(int height) {
         return (height & 0xFF) << 12 | ((height >> 8) & 0xF) << 25;
     }
 
-    private static void writeBlockStateNbt(String blockName, DataOutputStream dos) throws IOException {
-        ByteArrayOutputStream nbtBaos = new ByteArrayOutputStream();
-        try (DataOutputStream nbtDos = new DataOutputStream(nbtBaos)) {
-            nbtDos.writeByte(10);
-            nbtDos.writeShort(0);
-            nbtDos.writeByte(8);
-            nbtDos.writeUTF("Name");
-            nbtDos.writeUTF(blockName);
-            nbtDos.writeByte(0);
-        }
-        dos.write(nbtBaos.toByteArray());
-    }
-
     private static void serializeOverlay(OverlayEntry overlay, DataOutputStream dos,
-                                          Map<String, Integer> blockPalette,
+                                          Map<PaletteKey, Integer> blockPalette,
                                           BlockPropertyLookup blockLookup) throws IOException {
-        boolean isWater = blockLookup.isWater(overlay.blockName);
+        BlockState blockState = overlay.blockState;
+        boolean isWater = blockLookup.isWater(blockState.name());
         int opacity = overlay.opacity;
         int light = overlay.light;
+        PaletteKey paletteKey = PaletteKey.from(blockState);
 
         int overlayParams = 0;
         if (!isWater) {
@@ -206,19 +200,14 @@ public final class XaeroBinaryWriter {
         }
         overlayParams |= light << 4;
         overlayParams |= opacity << 11;
-        if (!isWater && !blockPalette.containsKey(overlay.blockName)) {
+        if (!isWater && !blockPalette.containsKey(paletteKey)) {
             overlayParams |= 0x400;
         }
 
         dos.writeInt(overlayParams);
 
         if (!isWater) {
-            if (blockPalette.containsKey(overlay.blockName)) {
-                dos.writeInt(blockPalette.get(overlay.blockName));
-            } else {
-                writeBlockStateNbt(overlay.blockName, dos);
-                blockPalette.put(overlay.blockName, blockPalette.size());
-            }
+            writeBlockStateRef(dos, blockState, blockPalette);
         }
     }
 }

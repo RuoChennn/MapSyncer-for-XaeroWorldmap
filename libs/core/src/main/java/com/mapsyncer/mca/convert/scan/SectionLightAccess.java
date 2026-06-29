@@ -70,7 +70,7 @@ public final class SectionLightAccess {
         boolean hasFluidOverlay = false;
         if (overlayList != null) {
             for (OverlayEntry o : overlayList) {
-                if (blockLookup.isWater(o.blockName)) {
+                if (blockLookup.isWater(o.blockName())) {
                     hasFluidOverlay = true;
                     break;
                 }

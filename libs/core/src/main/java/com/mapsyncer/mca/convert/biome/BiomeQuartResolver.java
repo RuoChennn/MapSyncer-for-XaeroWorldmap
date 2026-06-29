@@ -20,7 +20,7 @@ public final class BiomeQuartResolver {
     public static String resolve(ChunkDataParser.ChunkInfo chunk, int lx, int absoluteY, int lz,
                                    boolean smoothBoundary) {
         String biome = resolveBiomeAtAbsoluteY(chunk, lx, absoluteY, lz, smoothBoundary);
-        if (biome != null) {
+        if (isValidBiome(biome)) {
             return biome;
         }
 
@@ -29,9 +29,23 @@ public final class BiomeQuartResolver {
             int surfaceY = heightmap[lx][lz];
             if (surfaceY != absoluteY) {
                 biome = resolveBiomeAtAbsoluteY(chunk, lx, surfaceY, lz, smoothBoundary);
-                if (biome != null) {
+                if (isValidBiome(biome)) {
                     return biome;
                 }
+            }
+        }
+
+        for (ChunkSectionParser.SectionData s : chunk.sections()) {
+            if (s.biomePalette().isEmpty()) {
+                continue;
+            }
+            int fallbackLy = absoluteY - s.sectionY() * 16;
+            if (fallbackLy < 0 || fallbackLy > 15) {
+                continue;
+            }
+            biome = ChunkSectionParser.getBiomeAt(s, lx, fallbackLy, lz, smoothBoundary);
+            if (isValidBiome(biome)) {
+                return biome;
             }
         }
 
@@ -53,6 +67,11 @@ public final class BiomeQuartResolver {
     private static String resolveBiomeAtAbsoluteY(ChunkDataParser.ChunkInfo chunk,
                                                    int lx, int absoluteY, int lz,
                                                    boolean smoothBoundary) {
+        String biome = ChunkDataParser.getBiomeAt(chunk, lx, absoluteY, lz, smoothBoundary);
+        if (isValidBiome(biome)) {
+            return biome;
+        }
+
         int targetSectionY = absoluteY >> 4;
         int localY = absoluteY & 0xF;
 
@@ -60,7 +79,7 @@ public final class BiomeQuartResolver {
             if (s.sectionY() != targetSectionY || s.biomePalette().isEmpty()) {
                 continue;
             }
-            String biome = ChunkSectionParser.getBiomeAt(s, lx, localY, lz, smoothBoundary);
+            biome = ChunkSectionParser.getBiomeAt(s, lx, localY, lz, smoothBoundary);
             if (isValidBiome(biome)) {
                 return biome;
             }
@@ -74,17 +93,7 @@ public final class BiomeQuartResolver {
             if (fallbackLy < 0 || fallbackLy > 15) {
                 continue;
             }
-            String biome = ChunkSectionParser.getBiomeAt(s, lx, fallbackLy, lz, smoothBoundary);
-            if (isValidBiome(biome)) {
-                return biome;
-            }
-        }
-
-        for (ChunkSectionParser.SectionData s : chunk.sections()) {
-            if (s.biomePalette().isEmpty()) {
-                continue;
-            }
-            String biome = ChunkSectionParser.getBiomeAt(s, lx, localY, lz, smoothBoundary);
+            biome = ChunkSectionParser.getBiomeAt(s, lx, fallbackLy, lz, smoothBoundary);
             if (isValidBiome(biome)) {
                 return biome;
             }

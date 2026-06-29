@@ -3,7 +3,9 @@ package com.mapsyncer.mca.convert.scan;
 import com.mapsyncer.mca.BlockPropertyLookup;
 import com.mapsyncer.mca.ChunkDataParser;
 import com.mapsyncer.mca.ChunkSectionParser;
+import com.mapsyncer.mca.ChunkSectionParser.BlockState;
 import com.mapsyncer.mca.LightMode;
+import com.mapsyncer.mca.convert.io.XaeroBlockStateNbtWriter;
 import com.mapsyncer.mca.convert.model.MapRegionData;
 import com.mapsyncer.mca.convert.model.OverlayEntry;
 import com.mapsyncer.mca.convert.overlay.OverlayAccumulator;
@@ -106,7 +108,7 @@ public final class PixelColumnProcessor {
             }
 
             if ((flags & BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID) != 0) {
-                addFluidOverlay(chunk, section, lx, ly, lz, worldY, blockName,
+                addFluidOverlay(chunk, section, lx, ly, lz, worldY, state,
                     overlays, ctx, pos, blockLookup);
                 continue;
             }
@@ -117,12 +119,12 @@ public final class PixelColumnProcessor {
                 byte waterLight = SectionLightAccess.getBlockLightCrossSection(
                     chunk, section, lx, ly, lz, aboveWorldY);
                 overlays = ensureOverlayList(ctx, pos, overlays);
-                OverlayAccumulator.add(overlays, overlays, "minecraft:water", worldY,
+                OverlayAccumulator.add(overlays, overlays, XaeroBlockStateNbtWriter.WATER, worldY,
                     waterOpacity, waterLight, blockLookup);
                 int opacity = blockLookup.getLightBlock(blockName);
                 byte light = SectionLightAccess.getBlockLightCrossSection(
                     chunk, section, lx, ly, lz, aboveWorldY);
-                OverlayAccumulator.add(overlays, overlays, blockName, worldY, opacity, light, blockLookup);
+                OverlayAccumulator.add(overlays, overlays, state, worldY, opacity, light, blockLookup);
                 if (ctx.topPixelH[pos] < 0) {
                     ctx.topPixelH[pos] = worldY;
                 }
@@ -135,7 +137,7 @@ public final class PixelColumnProcessor {
                 byte light = SectionLightAccess.getBlockLightCrossSection(
                     chunk, section, lx, ly, lz, aboveWorldY);
                 overlays = ensureOverlayList(ctx, pos, overlays);
-                OverlayAccumulator.add(overlays, overlays, blockName, worldY, opacity, light, blockLookup);
+                OverlayAccumulator.add(overlays, overlays, state, worldY, opacity, light, blockLookup);
                 if (ctx.topPixelH[pos] < 0) {
                     ctx.topPixelH[pos] = worldY;
                 }
@@ -152,7 +154,7 @@ public final class PixelColumnProcessor {
                 byte light = SectionLightAccess.getBlockLightCrossSection(
                     chunk, section, lx, ly, lz, aboveWorldY);
                 overlays = ensureOverlayList(ctx, pos, overlays);
-                OverlayAccumulator.add(overlays, overlays, blockName, worldY, opacity, light, blockLookup);
+                OverlayAccumulator.add(overlays, overlays, state, worldY, opacity, light, blockLookup);
                 if (ctx.topPixelH[pos] < 0) {
                     ctx.topPixelH[pos] = worldY;
                 }
@@ -195,7 +197,7 @@ public final class PixelColumnProcessor {
                 heightMapValue, overlays, lightMode, worldHasSkylight, blockLookup)
             : SectionLightAccess.getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
         overlays = ensureOverlayList(ctx, pos, overlays);
-        OverlayAccumulator.add(overlays, overlays, "minecraft:water", worldY, opacity, light, blockLookup);
+        OverlayAccumulator.add(overlays, overlays, XaeroBlockStateNbtWriter.WATER, worldY, opacity, light, blockLookup);
         int topBlockY = ctx.topPixelH[pos] < 0 ? worldY : ctx.topPixelH[pos];
         recordPixelScan(data, state, worldY, topBlockY, light, ctx.overlayLists[pos], relX, relZ);
         ctx.blockFound[pos] = true;
@@ -207,17 +209,17 @@ public final class PixelColumnProcessor {
             ChunkSectionParser.SectionData section,
             int lx, int ly, int lz,
             int worldY,
-            String blockName,
+            ChunkSectionParser.BlockState state,
             ArrayList<OverlayEntry> overlays,
             ColumnScanContext ctx,
             int pos,
             BlockPropertyLookup blockLookup) {
 
-        int opacity = blockLookup.getLightBlock(blockName);
+        int opacity = blockLookup.getLightBlock(state.name());
         int aboveWorldY = worldY + 1;
         byte light = SectionLightAccess.getBlockLightCrossSection(chunk, section, lx, ly, lz, aboveWorldY);
         overlays = ensureOverlayList(ctx, pos, overlays);
-        OverlayAccumulator.add(overlays, overlays, blockName, worldY, opacity, light, blockLookup);
+        OverlayAccumulator.add(overlays, overlays, state, worldY, opacity, light, blockLookup);
         if (ctx.topPixelH[pos] < 0) {
             ctx.topPixelH[pos] = worldY;
         }
@@ -239,8 +241,10 @@ public final class PixelColumnProcessor {
             return;
         }
         data.hasData[relX][relZ] = true;
-        data.blockNames[relX][relZ] = surfaceState != null ? surfaceState.name() : "minecraft:air";
-        data.topBlockY[relX][relZ] = highestBlockY >= 0 ? highestBlockY : topY;
+        BlockState stored = surfaceState != null ? surfaceState : XaeroBlockStateNbtWriter.AIR;
+        data.blockStates[relX][relZ] = stored;
+        data.blockNames[relX][relZ] = stored.name();
+        data.topBlockY[relX][relZ] = highestBlockY;
         data.heightMap[relX][relZ] = topY;
         data.lightMap[relX][relZ] = surfaceLight;
         if (overlayList != null && !overlayList.isEmpty()) {
