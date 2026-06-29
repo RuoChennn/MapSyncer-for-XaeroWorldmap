@@ -2,7 +2,6 @@ package com.mapsyncer.server;
 
 import com.mapsyncer.config.CacheConfig;
 import com.mapsyncer.mca.BlockPropertyLookup;
-import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -94,7 +93,7 @@ public class BlockPropertyResolver {
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockPropertyResolver.class);
 
     /** 占位用的BlockGetter和BlockPos（用于需要参数的API调用） */
-    private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = (BlockGetter) PlaceholderBlockGetterFactory.getInstance();
+    private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = PlaceholderBlockGetter.INSTANCE;
     private static final BlockPos PLACEHOLDER_BLOCKPOS = BlockPos.ZERO;
 
     /** 缓存方块属性查询结果（LRU策略，access-order LinkedHashMap） */

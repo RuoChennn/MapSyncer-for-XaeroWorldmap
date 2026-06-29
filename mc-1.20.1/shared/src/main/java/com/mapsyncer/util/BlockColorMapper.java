@@ -1,7 +1,7 @@
 package com.mapsyncer.util;
 
 import com.mapsyncer.config.CacheConfig;
-import com.mapsyncer.platform.PlaceholderBlockGetterFactory;
+import com.mapsyncer.server.PlaceholderBlockGetter;
 import com.mapsyncer.platform.PlatformManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
@@ -505,7 +505,7 @@ public class BlockColorMapper {
     private static int tryGetMapColor(BlockState state, String blockName) {
         try {
             // 使用工厂获取占位 BlockGetter
-            BlockGetter placeholderBlockGetter = (BlockGetter) PlaceholderBlockGetterFactory.getInstance();
+            BlockGetter placeholderBlockGetter = PlaceholderBlockGetter.INSTANCE;
             BlockPos placeholderPos = BlockPos.ZERO;
 
             MapColor mapColor = state.getMapColor(placeholderBlockGetter, placeholderPos);
