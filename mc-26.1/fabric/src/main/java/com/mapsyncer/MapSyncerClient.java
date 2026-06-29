@@ -3,6 +3,7 @@ package com.mapsyncer;
 import com.mapsyncer.client.MapPacketHandler;
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.MapSyncerCommand;
+import com.mapsyncer.client.SyncResumeHelper;
 import com.mapsyncer.client.SyncProgressTracker;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
@@ -48,17 +49,13 @@ public class MapSyncerClient implements ClientModInitializer {
             LOGGER.info("Client joined server, checking sync state...");
             // 注册网络接收器
             MapPacketReceiver.register();
+            SyncResumeHelper.onPlayerLoggingIn();
         });
 
         // Fabric API 26.x 使用 Mojang 官方命名
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             LOGGER.info("Client disconnected from server, resetting state...");
-            // 重置服务端安装状态
-            MapPacketReceiver.resetServerStatus();
-            MapPacketReceiver.clearSyncData();
-            // 清理 XaeroMapIntegrator 区域追踪
-            com.mapsyncer.client.XaeroMapDataHandler.clearRegionTracking();
-            // 关闭进度追踪器的线程池（防止内存泄漏）
+            MapPacketHandler.onDisconnect();
             SyncProgressTracker.shutdown();
         });
 

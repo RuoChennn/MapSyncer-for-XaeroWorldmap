@@ -81,26 +81,17 @@ public class ConversionOrchestrator {
     /** 当前正在处理的维度 */
     private static volatile ResourceKey<Level> currentDimension = null;
 
-    /** 已完成的维度列表（用于全量生成完成提示） */
+    /** 已完成的维度列表（用于全量生成完成提示，线程安全） */
     private static final List<String> completedDimensions = new CopyOnWriteArrayList<>();
 
-    /** 默认缓存输出目录（独立服务器） */
+    /** 缓存输出目录 */
     private static final Path DEFAULT_CACHE_DIR = Path.of("server_map_cache");
-
-    /** 当前有效的缓存目录（内置服务器时由 MapSyncer 主类设置为 Xaero 目录） */
     private static volatile Path effectiveCacheDir = null;
 
-    /**
-     * 获取当前有效的缓存目录。
-     * 独立服务器返回 server_map_cache/，内置服务器返回 Xaero 的 Multiplayer_Singleplayer/。
-     */
     public static Path getCacheDir() {
         return effectiveCacheDir != null ? effectiveCacheDir : DEFAULT_CACHE_DIR;
     }
 
-    /**
-     * 设置缓存目录（内置服务器启动时由平台主类调用）。
-     */
     public static void setCacheDir(Path dir) {
         effectiveCacheDir = dir;
         LOGGER.info("Cache directory set to: {}", dir);
@@ -109,17 +100,13 @@ public class ConversionOrchestrator {
     /**
      * 初始化内置服务器缓存目录。
      * 仅当非独立服务器时生效，复用 Xaero 客户端地图目录避免二次转换。
-     * 由各平台 MapSyncer 主类在服务端启动时调用。
-     *
-     * @param server  MinecraftServer 实例
-     * @param gameDir 游戏根目录（.minecraft）
      */
     public static void tryInitIntegratedServerCache(MinecraftServer server, Path gameDir) {
         if (!server.isDedicatedServer()) {
-            // 与 Xaero convertWorldFolderToRootId 对齐：使用存档文件夹名而非 level.dat 内字段
             String worldName = server.getWorldPath(LevelResource.ROOT).getParent().getFileName().toString();
             setCacheDir(XaeroPathResolver.getWorldMapDir(gameDir).resolve(worldName));
         }
+        // 清理历史残留的 .zip.temp 文件
         XaeroWriter.cleanStaleTempFiles(getCacheDir());
     }
 
@@ -789,7 +776,7 @@ public class ConversionOrchestrator {
                 return Level.END;
         }
 
-        // 尝试解析为 ResourceLocation 并查找维度
+        // 尝试解析为 Identifier 并查找维度
         try {
             Identifier location = Identifier.parse(id);
             // 遍历所有已加载的维度查找匹配
@@ -810,63 +797,52 @@ public class ConversionOrchestrator {
     }
 
     /**
-     * 执行计划增量扫描 - 扫描所有维度并更新时间戳变化的区域
-     *
-     * 由IncrementalUpdateHandler从服务器线程周期性调用。
-     * 扫描所有维度，仅更新时间戳有变化的区域。
-     *
-     * @param server Minecraft服务器实例
+     * 增量扫描快照：在主线程采集维度/路径信息，后台线程仅做磁盘 IO 与转换。
      */
-    public static void performIncrementalScan(MinecraftServer server) {
-        if (!isRunning.compareAndSet(false, true)) {
-            LOGGER.debug("Conversion already in progress, skipping incremental scan");
-            return;
-        }
+    public record IncrementalScanSnapshot(
+            String dimPath,
+            String xaeroDimName,
+            Path regionDir,
+            Path outputDir,
+            DimensionTypeInfo dimTypeInfo,
+            LightMode lightMode,
+            CaveModeParams caveParams,
+            int caveLayer
+    ) {}
 
-        try {
-            // Note: caller is responsible for calling server.saveEverything() before invoking this method.
-            // This method performs heavy I/O (MCA scanning, conversion, writing) and should be called
-            // from a background thread to avoid blocking the server tick.
-
-            List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
-        McaTimestampCache mcaCache = getTimestampCache();
-        GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
-        int totalUpdated = 0;
-        long generationTimeSeconds = System.currentTimeMillis() / 1000;
+    /**
+     * 在主线程构建增量扫描快照（访问 ServerLevel / dimensionType）。
+     */
+    public static List<IncrementalScanSnapshot> buildIncrementalScanSnapshots(MinecraftServer server) {
+        List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
+        List<IncrementalScanSnapshot> snapshots = new ArrayList<>();
 
         for (DimensionRegions dimRegions : allRegions) {
             ServerLevel level = server.getLevel(dimRegions.dimension());
-            if (level == null) continue;
+            if (level == null) {
+                continue;
+            }
 
-            // 获取完整维度 ID（包含 namespace，用于 Xaero 目录映射）
             String fullDimId = dimRegions.dimension().identifier().toString();
-            String dimPath = dimRegions.dimension().identifier().getPath(); // 用于配置查找
+            String dimPath = dimRegions.dimension().identifier().getPath();
 
-            // 从配置获取维度扫描配置
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             ScanMode scanMode = scanConfig.scanMode();
             int caveLayer = scanConfig.getCaveLayer();
-
-            // 获取 Xaero 格式的目录名（使用完整维度 ID，确保新格式路径正确转换）
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
-            // 获取 MCA 文件存放目录（1.21+ 自动检测路径）
             Path regionDir = RegionScanner.getRegionDir(level);
-            if (regionDir == null) continue;
-
-            // 计算输出目录（包含 caves/<layer> 子目录）
-            Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
-            Path outputDir;
-            if (caveLayer == Integer.MAX_VALUE) {
-                outputDir = baseOutputDir;
-            } else {
-                outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
+            if (regionDir == null) {
+                continue;
             }
 
-            // 从运行时获取准确的维度类型信息
+            Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
+            Path outputDir = caveLayer == Integer.MAX_VALUE
+                    ? baseOutputDir
+                    : baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
+
             DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
 
-            // 获取光照模式和洞穴参数
             LightMode lightMode;
             CaveModeParams caveParams;
             if (scanMode == ScanMode.CAVE) {
@@ -878,7 +854,61 @@ public class ConversionOrchestrator {
                 caveParams = CaveModeParams.NONE;
             }
 
-            // Scan for regions that need update
+            snapshots.add(new IncrementalScanSnapshot(
+                    dimPath, xaeroDimName, regionDir, outputDir, dimTypeInfo, lightMode, caveParams, caveLayer));
+        }
+
+        return snapshots;
+    }
+
+    /**
+     * 执行计划增量扫描 - 扫描所有维度并更新时间戳变化的区域
+     *
+     * @param server Minecraft服务器实例
+     */
+    public static void performIncrementalScan(MinecraftServer server) {
+        List<IncrementalScanSnapshot> snapshots;
+        try {
+            snapshots = server.submit(() -> buildIncrementalScanSnapshots(server)).get(5, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOGGER.warn("Incremental scan snapshot interrupted");
+            return;
+        } catch (java.util.concurrent.TimeoutException e) {
+            LOGGER.error("Timed out building incremental scan snapshot on server thread");
+            return;
+        } catch (ExecutionException e) {
+            LOGGER.error("Failed to build incremental scan snapshot on server thread", e.getCause());
+            return;
+        }
+        performIncrementalScan(snapshots);
+    }
+
+    /**
+     * 基于主线程预采集的快照执行增量扫描（可在后台线程调用）。
+     */
+    public static void performIncrementalScan(List<IncrementalScanSnapshot> snapshots) {
+        if (!isRunning.compareAndSet(false, true)) {
+            LOGGER.debug("Conversion already in progress, skipping incremental scan");
+            return;
+        }
+
+        try {
+        McaTimestampCache mcaCache = getTimestampCache();
+        GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
+        int totalUpdated = 0;
+        long generationTimeSeconds = System.currentTimeMillis() / 1000;
+
+        for (IncrementalScanSnapshot snapshot : snapshots) {
+            String dimPath = snapshot.dimPath();
+            Path regionDir = snapshot.regionDir();
+            Path outputDir = snapshot.outputDir();
+            String xaeroDimName = snapshot.xaeroDimName();
+            int caveLayer = snapshot.caveLayer();
+            DimensionTypeInfo dimTypeInfo = snapshot.dimTypeInfo();
+            LightMode lightMode = snapshot.lightMode();
+            CaveModeParams caveParams = snapshot.caveParams();
+
             java.util.List<RegionCoords> needsUpdate = mcaCache.scanAndUpdate(dimPath, regionDir);
 
             if (needsUpdate.isEmpty()) {
@@ -887,7 +917,7 @@ public class ConversionOrchestrator {
             }
 
             LOGGER.info("Dimension {}: {} regions need incremental update (mode={}, hasSkylight={})",
-                dimPath, needsUpdate.size(), scanMode, dimTypeInfo.hasSkylight());
+                dimPath, needsUpdate.size(), lightMode, dimTypeInfo.hasSkylight());
 
             try {
                 Files.createDirectories(outputDir);
@@ -908,7 +938,6 @@ public class ConversionOrchestrator {
                         Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
                         mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
 
-                        // Update GenerationCache with correct relativePath format
                         String relativePath;
                         if (caveLayer == Integer.MAX_VALUE) {
                             relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();

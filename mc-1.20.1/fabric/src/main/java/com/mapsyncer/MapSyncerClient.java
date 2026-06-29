@@ -3,6 +3,7 @@ package com.mapsyncer;
 import com.mapsyncer.client.MapPacketHandler;
 import com.mapsyncer.client.MapPacketReceiver;
 import com.mapsyncer.client.MapSyncerCommand;
+import com.mapsyncer.client.SyncResumeHelper;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
 import net.fabricmc.api.ClientModInitializer;
@@ -41,6 +42,7 @@ public class MapSyncerClient implements ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             LOGGER.info("Client joined server, checking sync state...");
             MapPacketReceiver.register();
+            SyncResumeHelper.onPlayerLoggingIn();
         });
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {

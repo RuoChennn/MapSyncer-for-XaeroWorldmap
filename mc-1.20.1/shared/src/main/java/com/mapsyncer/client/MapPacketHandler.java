@@ -7,8 +7,6 @@ import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
-import com.mapsyncer.platform.PlatformManager;
-import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
@@ -18,8 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,13 +32,19 @@ public class MapPacketHandler {
     /** 同步是否正在进行中，用于协调区块更新的禁用 */
     private static volatile boolean syncInProgress = false;
 
+    /** 同步会话 generation，断线或清状态时递增以作废已入队的 handler */
+    private static volatile int syncGeneration = 0;
+
+    /** 反射初始化是否失败（文件仍会写入，但无法触发重载） */
+    private static volatile boolean reflectionInitFailed = false;
+
     /**
      * 检查同步是否正在进行中。
      *
      * @return true 表示同步正在进行
      */
     public static boolean isSyncInProgress() {
-        return syncInProgress;
+        return syncInProgress || awaitingPendingReloadDrain || !pendingRegionLoads.isEmpty();
     }
 
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
@@ -109,6 +111,11 @@ public class MapPacketHandler {
     private static ChunkMapData assemblePart(ChunkMapData chunk) {
         if (chunk.totalParts <= 1) {
             return chunk;
+        }
+
+        if (chunk.totalParts <= 0 || chunk.partIndex < 0 || chunk.partIndex >= chunk.totalParts) {
+            LOGGER.warn("Invalid chunk part metadata: index={} total={}", chunk.partIndex, chunk.totalParts);
+            return null;
         }
 
         String key = partKey(chunk);
@@ -191,7 +198,10 @@ public class MapPacketHandler {
      * 清除所有累积的同步数据，防止内存泄漏。
      */
     public static void clearSyncData() {
+        syncGeneration++;
         syncInProgress = false;
+        reflectionInitFailed = false;
+        awaitingPendingReloadDrain = false;
         lastMwDir = null;
         syncStartTime = 0;
         clearReceivedChunks();
@@ -245,6 +255,7 @@ public class MapPacketHandler {
                 serverVersion = payload.version();
                 LOGGER.info("Server has MapSyncer installed, version: {}", serverVersion);
 
+                // 显示自动同步状态
                 Object[] statusKey = AutoSyncManager.getStatusKey(payload.autoSyncIntervalMinutes());
                 String key = (String) statusKey[0];
                 if (statusKey.length > 1) {
@@ -304,7 +315,13 @@ public class MapPacketHandler {
      * 处理服务端返回的同步响应数据包。
      */
     private static void handleSyncResponse(SyncResponsePayload payload, PayloadContext context) {
+        final int generationAtEnqueue = syncGeneration;
         context.enqueueWork(() -> {
+            if (generationAtEnqueue != syncGeneration) {
+                LOGGER.debug("Ignoring stale sync response after disconnect/clear");
+                return;
+            }
+
             String status = payload.status();
             List<ChunkMapData> chunks = payload.chunks();
             int serverWorldId = payload.worldId();
@@ -376,8 +393,15 @@ public class MapPacketHandler {
             // 首次收到数据时初始化反射缓存
             if (!syncInProgress) {
                 syncInProgress = true;
+                syncStartTime = System.currentTimeMillis();
                 LOGGER.info("Starting sync (streaming mode)");
-                initializeReflectionCache();
+                if (!initializeReflectionCache()) {
+                    reflectionInitFailed = true;
+                    if (Minecraft.getInstance().player != null) {
+                        Minecraft.getInstance().player.displayClientMessage(
+                                ChatUtils.error("mapsyncer.sync.reflection_failed"), false);
+                    }
+                }
             }
 
             // 获取当前视距范围
@@ -461,12 +485,16 @@ public class MapPacketHandler {
                         }
                     }
 
-                    resumeChunkUpdates();
+                    resumeChunkUpdatesIfIdle();
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
                     }
+                    if (reflectionInitFailed && Minecraft.getInstance().player != null) {
+                        Minecraft.getInstance().player.displayClientMessage(
+                                ChatUtils.error("mapsyncer.sync.reflection_failed"), false);
+                    }
                 } else {
-                    resumeChunkUpdates();
+                    resumeChunkUpdatesIfIdle();
                     LOGGER.info("Sync complete with no data received");
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
@@ -503,10 +531,15 @@ public class MapPacketHandler {
     }
 
     /**
-     * 同步完成后恢复区块更新状态。
+     * 同步完成后恢复区块更新状态（视距外队列排空后再解除 syncInProgress）。
      */
-    private static void resumeChunkUpdates() {
+    private static void resumeChunkUpdatesIfIdle() {
+        if (awaitingPendingReloadDrain || !pendingRegionLoads.isEmpty()) {
+            return;
+        }
         syncInProgress = false;
+        syncStartTime = 0;
+        reflectionInitFailed = false;
         LOGGER.info("Sync complete");
     }
 
@@ -538,6 +571,7 @@ public class MapPacketHandler {
             pendingRegionLoads.clear();
             clearReflectionCache();
             awaitingPendingReloadDrain = false;
+            resumeChunkUpdatesIfIdle();
             return;
         }
         awaitingPendingReloadDrain = true;
@@ -551,6 +585,7 @@ public class MapPacketHandler {
         }
         awaitingPendingReloadDrain = false;
         clearReflectionCache();
+        resumeChunkUpdatesIfIdle();
         LOGGER.debug("视距外 region 重载队列已排空，反射缓存已释放");
     }
 
@@ -578,11 +613,13 @@ public class MapPacketHandler {
 
     /**
      * 初始化反射 API 缓存。
+     *
+     * @return true 表示反射可用
      */
-    private static void initializeReflectionCache() {
+    private static boolean initializeReflectionCache() {
         if (XaeroReflectionHelper.isInitialized()) {
             LOGGER.debug("反射缓存已初始化，跳过重复初始化");
-            return;
+            return true;
         }
 
         LOGGER.info("开始初始化反射 API 缓存...");
@@ -596,14 +633,16 @@ public class MapPacketHandler {
             } else {
                 LOGGER.warn("regionDetectionComplete 设置失败，getLeafMapRegion 可能会返回 null");
             }
-        } else {
-            LOGGER.error("XaeroReflectionHelper 初始化失败！反射功能完全不可用");
-            LOGGER.error("可能原因：");
-            LOGGER.error("  1. Xaero's World Map 模组未安装");
-            LOGGER.error("  2. Xaero 版本与 MapSyncer 不兼容");
-            LOGGER.error("  3. 类加载器问题");
-            LOGGER.error("地图同步功能将无法正常工作，数据会写入文件但不会触发重新加载");
+            return true;
         }
+
+        LOGGER.error("XaeroReflectionHelper 初始化失败！反射功能完全不可用");
+        LOGGER.error("可能原因：");
+        LOGGER.error("  1. Xaero's World Map 模组未安装");
+        LOGGER.error("  2. Xaero 版本与 MapSyncer 不兼容");
+        LOGGER.error("  3. 类加载器问题");
+        LOGGER.error("地图同步功能将无法正常工作，数据会写入文件但不会触发重新加载");
+        return false;
     }
 
     /**
@@ -680,11 +719,13 @@ public class MapPacketHandler {
         try {
             loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
         } catch (IllegalStateException e) {
+            // 平台或客户端配置尚未初始化（启动早期），跳过
             return;
         }
         if (loadsPerTick == 0) return;
 
         if (loadsPerTick == -1) {
+            // 不限制：一次排空全部
             PendingRegionLoad pending;
             while ((pending = pendingRegionLoads.poll()) != null) {
                 XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(

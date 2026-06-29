@@ -129,7 +129,6 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
 
     @Override
     public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
-        if (!confirmedPlayers.contains(player.getUUID())) return;
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ForgeServerInstalledMessage(payload));
     }
 
