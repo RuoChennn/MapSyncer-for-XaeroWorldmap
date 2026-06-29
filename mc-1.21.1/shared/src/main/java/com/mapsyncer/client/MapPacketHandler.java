@@ -43,6 +43,8 @@ public class MapPacketHandler {
 
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
     private static volatile boolean serverInstalled = false;
+    private static volatile long pendingServerGenTime;
+    private static volatile int pendingAutoIntervalMinutes;
 
     /** 服务端版本号 */
     private static volatile String serverVersion = "";
@@ -249,20 +251,17 @@ public class MapPacketHandler {
                         ChatUtils.prefix().append(ChatUtils.desc(key)), false);
                 }
 
-                if (AutoSyncManager.shouldAutoSync(
-                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes())) {
-                    AutoSyncManager.schedule(() -> {
-                        Minecraft.getInstance().execute(() -> {
-                            if (Minecraft.getInstance().player != null
-                                    && !MapPacketHandler.isSyncInProgress()) {
-                                Minecraft.getInstance().player.displayClientMessage(
-                                    ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
-                                AutoSyncManager.markStarted();
-                                MapSyncerCommandLogic.executeSyncAll();
-                            }
-                        });
-                    }, 5);
-                }
+                pendingServerGenTime = payload.lastGenerationTimestamp();
+                pendingAutoIntervalMinutes = payload.autoSyncIntervalMinutes();
+                tryScheduleAutoSync();
+            });
+        });
+
+        handler.registerSyncAllowedHandler((payload, ctx) -> {
+            ctx.enqueueWork(() -> {
+                ClientSyncGate.grant(payload.autoSyncDelaySeconds());
+                SyncResumeHelper.onSyncAllowed();
+                tryScheduleAutoSync();
             });
         });
 
@@ -292,6 +291,29 @@ public class MapPacketHandler {
     public static void resetServerStatus() {
         serverInstalled = false;
         serverVersion = "";
+        pendingServerGenTime = 0;
+        pendingAutoIntervalMinutes = 0;
+        ClientSyncGate.reset();
+    }
+
+    private static void tryScheduleAutoSync() {
+        if (!serverInstalled || !ClientSyncGate.isSyncAllowed()) {
+            return;
+        }
+        if (!AutoSyncManager.shouldAutoSync(pendingServerGenTime, pendingAutoIntervalMinutes)) {
+            return;
+        }
+        int delaySeconds = Math.max(5, ClientSyncGate.getAutoSyncDelaySeconds());
+        AutoSyncManager.schedule(() -> {
+            Minecraft.getInstance().execute(() -> {
+                if (Minecraft.getInstance().player != null && !MapPacketHandler.isSyncInProgress()) {
+                    Minecraft.getInstance().player.displayClientMessage(
+                            ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
+                    AutoSyncManager.markStarted();
+                    MapSyncerCommandLogic.executeSyncAll();
+                }
+            });
+        }, delaySeconds);
     }
 
     /**

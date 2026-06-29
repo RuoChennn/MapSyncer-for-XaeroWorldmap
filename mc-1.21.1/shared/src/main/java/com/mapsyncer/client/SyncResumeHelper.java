@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.client.ClientSyncGate;
 import com.mapsyncer.util.ChatUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
@@ -43,8 +44,7 @@ public class SyncResumeHelper {
             }
             mc.execute(() -> {
                 checkInterruptedSync(mc);
-                // 发送自动探针：告知服务端此客户端已安装 MapSyncer
-                sendAutoProbe(mc);
+                sendAutoProbeIfAllowed(mc);
             });
         }, "mapsyncer-resume-check");
         resumeCheckThread.setDaemon(true);
@@ -130,6 +130,23 @@ public class SyncResumeHelper {
      * 发送自动探针 SyncRequest，使服务端确认此客户端安装了 MapSyncer。
      * 未安装 mod 的原版客户端不会发送此请求，服务端从而可以区分。
      */
+    private static void sendAutoProbeIfAllowed(Minecraft mc) {
+        if (!ClientSyncGate.isSyncAllowed()) {
+            LOGGER.debug("Auto-probe deferred until SyncAllowed");
+            return;
+        }
+        sendAutoProbe(mc);
+    }
+
+    /** 服务端确认登录就绪后由 MapPacketHandler 调用 */
+    public static void onSyncAllowed() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            return;
+        }
+        mc.execute(() -> sendAutoProbeIfAllowed(mc));
+    }
+
     private static void sendAutoProbe(Minecraft mc) {
         try {
             MapSyncerCommandLogic.sendSyncRequest(mc, "all", true);
