@@ -38,7 +38,7 @@ public class CacheGenerateCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, String prefix) {
         dispatcher.register(Commands.literal(prefix)
-                .requires(source -> true)
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
                         .executes(CacheGenerateCommand::showHelp))

@@ -4,8 +4,9 @@ import com.mapsyncer.config.CacheConfig;
 import com.mapsyncer.server.PlaceholderBlockGetter;
 import com.mapsyncer.platform.PlatformManager;
 import net.minecraft.client.Minecraft;
-// MC 26.1: 渲染 API 重构，BakedModel/BlockModelShaper/BakedQuad 已移除
-// TODO: 适配新的 BlockModelSet/BlockModel API
+import net.minecraft.client.renderer.block.BlockStateModelSet;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.resources.model.sprite.Material;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -351,11 +352,39 @@ public class BlockColorMapper {
      * @return 纹理颜色值，失败返回 -1
      */
     private static int tryGetTextureColor(BlockState state, String blockName) {
-        // MC 26.1: 渲染 API 重构，BakedModel/BlockModelShaper 已移除
-        // TODO: 适配新的 BlockModelSet/BlockModel API（net.minecraft.client.renderer.block.BlockModelSet）
-        // 新 API: mc.getBlockRenderer().getBlockModelSet().get(state) 返回 BlockModel
-        // BlockModel 是接口，不再有 getQuads/getParticleIcon 方法
-        LOGGER.debug("Texture color extraction not yet implemented for MC 26.1 (rendering API refactored)");
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            BlockStateModelSet modelSet = mc.getModelManager().getBlockStateModelSet();
+            if (modelSet == null) {
+                return -1;
+            }
+
+            Material.Baked particle = modelSet.getParticleMaterial(state);
+            if (particle == null) {
+                return -1;
+            }
+
+            TextureAtlasSprite texture = particle.sprite();
+            if (texture == null) {
+                return -1;
+            }
+
+            String textureName = texture.contents().name().toString() + ".png";
+            Integer cachedColor = textureColorCache.get(textureName);
+            if (cachedColor != null) {
+                return cachedColor;
+            }
+
+            int color = extractColorFromTexture(textureName, mc);
+            if (color != -1) {
+                textureColorCache.put(textureName, color);
+                return color;
+            }
+
+        } catch (Exception e) {
+            LOGGER.debug("Failed to get texture color for {}: {}", blockName, e.getMessage());
+        }
+
         return -1;
     }
 
