@@ -113,13 +113,10 @@ public class MapSyncer implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             LOGGER.info("Server stopping, cleaning up MapSyncer...");
 
-            // 停止增量更新处理器
             IncrementalUpdateHandlerLogic.getInstance().stop();
-
-            // 关闭转换线程池
             com.mapsyncer.server.ConversionOrchestrator.shutdownExecutor();
+            com.mapsyncer.server.PlayerJoinHandler.onServerStopped();
 
-            // 重置平台实例
             platform.setServer(null);
 
             LOGGER.info("MapSyncer cleanup completed");

@@ -109,7 +109,6 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
 
     @Override
     public void sendToPlayer(ServerPlayer player, ServerInstalledPayload payload) {
-        if (!confirmedPlayers.contains(player.getUUID())) return;
         PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeServerInstalledPayload(payload));
     }

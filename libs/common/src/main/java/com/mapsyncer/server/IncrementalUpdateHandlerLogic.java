@@ -262,10 +262,9 @@ public class IncrementalUpdateHandlerLogic {
                 updateInProgress.set(false);
             }
 
-            // 检查是否有玩家在线，无人则停止处理器节省资源
             if (currentServer.getPlayerList().getPlayerCount() == 0) {
                 LOGGER.info("No players online after incremental update, stopping handler to save resources");
-                stop();
+                currentServer.execute(IncrementalUpdateHandlerLogic.this::stop);
             }
         });
     }

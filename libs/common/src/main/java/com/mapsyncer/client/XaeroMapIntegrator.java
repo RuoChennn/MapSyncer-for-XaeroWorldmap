@@ -137,18 +137,27 @@ public class XaeroMapIntegrator {
             return 0;
         }
 
-        try {
-            Object regionTextureMap = XaeroReflectionHelper.getRegionTextureMap(Integer.MAX_VALUE);
-            if (regionTextureMap == null) {
-                LOGGER.warn("Could not get regionTextureMap for selective reset");
-                return 0;
-            }
+        java.util.Map<Integer, Set<XaeroMapDataHandler.RegionCoord>> byLayer = new java.util.HashMap<>();
+        for (XaeroMapDataHandler.RegionCoord coord : regionsToReset) {
+            byLayer.computeIfAbsent(coord.caveLayer(), k -> new java.util.HashSet<>()).add(coord);
+        }
 
-            if (regionTextureMap instanceof Map<?, ?> map) {
-                for (Object columnEntry : map.values()) {
-                    if (columnEntry instanceof Map<?, ?> column) {
-                        for (Object regionEntry : column.values()) {
-                            resetCount += selectiveResetLeafRegions(regionEntry, regionsToReset);
+        try {
+            for (var entry : byLayer.entrySet()) {
+                int caveLayer = entry.getKey();
+                Set<XaeroMapDataHandler.RegionCoord> layerTargets = entry.getValue();
+                Object regionTextureMap = XaeroReflectionHelper.getRegionTextureMap(caveLayer);
+                if (regionTextureMap == null) {
+                    LOGGER.warn("Could not get regionTextureMap for layer {}", caveLayer);
+                    continue;
+                }
+
+                if (regionTextureMap instanceof Map<?, ?> map) {
+                    for (Object columnEntry : map.values()) {
+                        if (columnEntry instanceof Map<?, ?> column) {
+                            for (Object regionEntry : column.values()) {
+                                resetCount += selectiveResetLeafRegions(regionEntry, layerTargets, caveLayer);
+                            }
                         }
                     }
                 }
@@ -167,7 +176,7 @@ public class XaeroMapIntegrator {
      * 遍历区域并选择性重置目标集合中的区域。
      * 记录原本已加载的 region 到 preUnloadedRegions。
      */
-    private static int selectiveResetLeafRegions(Object region, Set<XaeroMapDataHandler.RegionCoord> regionsToReset) {
+    private static int selectiveResetLeafRegions(Object region, Set<XaeroMapDataHandler.RegionCoord> regionsToReset, int caveLayer) {
         int count = 0;
         try {
             if (XaeroReflectionHelper.isMapRegion(region)) {
@@ -179,7 +188,7 @@ public class XaeroMapIntegrator {
                     return 0;
                 }
 
-                XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(rx, rz);
+                XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(rx, rz, caveLayer);
 
                 if (regionsToReset.contains(coord)) {
                     byte currentLoadState = XaeroReflectionHelper.getLoadState(region);
@@ -195,7 +204,7 @@ public class XaeroMapIntegrator {
                         boolean success = XaeroReflectionHelper.setLoadState(region, XaeroReflectionHelper.LOAD_STATE_UNLOADED);
                         if (success) {
                             count++;
-                            LOGGER.debug("Pre-unloaded region ({}, {}) was loaded, recorded for loadState=4", rx, rz);
+                            LOGGER.debug("Pre-unloaded region ({}, {}) layer={} was loaded, recorded for loadState=4", rx, rz, caveLayer);
                         } else {
                             LOGGER.warn("设置区域 ({}, {}) loadState 失败", rx, rz);
                         }
@@ -219,7 +228,7 @@ public class XaeroMapIntegrator {
                             for (int j = 0; j < innerLength; j++) {
                                 Object child = Array.get(innerArray, j);
                                 if (child != null) {
-                                    count += selectiveResetLeafRegions(child, regionsToReset);
+                                    count += selectiveResetLeafRegions(child, regionsToReset, caveLayer);
                                 }
                             }
                         }

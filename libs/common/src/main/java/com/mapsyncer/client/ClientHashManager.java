@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 /**
@@ -54,6 +55,9 @@ public class ClientHashManager {
 
     /** 当前 pool 使用的线程数（用于检测配置更改） */
     private static volatile int currentPoolThreads;
+
+    /** 正在使用共享 pool 的计算任务数 */
+    private static final AtomicInteger poolUsers = new AtomicInteger(0);
 
     /** 默认线程数（可用处理器数的一半） */
     private static final int DEFAULT_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
@@ -137,6 +141,15 @@ public class ClientHashManager {
      * @return 相对路径到 ClientMeta（时间戳秒 + 哈希）的映射
      */
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
+        poolUsers.incrementAndGet();
+        try {
+            return computeMetaForSyncInternal(mapDir);
+        } finally {
+            poolUsers.decrementAndGet();
+        }
+    }
+
+    private static Map<String, ClientMeta> computeMetaForSyncInternal(Path mapDir) {
         Map<String, ClientMeta> metaMap = new ConcurrentHashMap<>();
 
         if (mapDir == null || !Files.exists(mapDir)) {
@@ -474,19 +487,25 @@ public class ClientHashManager {
      * 在客户端离开服务器或停止时调用，释放资源。
      */
     public static void shutdown() {
-        ForkJoinPool pool = sharedPool;
-        if (pool != null && !pool.isShutdown()) {
-            pool.shutdown();
-            try {
-                if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-                    pool.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                pool.shutdownNow();
-                Thread.currentThread().interrupt();
+        synchronized (ClientHashManager.class) {
+            if (poolUsers.get() > 0) {
+                LOGGER.debug("Deferring ForkJoinPool shutdown, {} active hash computations", poolUsers.get());
+                return;
             }
-            sharedPool = null;
-            LOGGER.debug("ClientHashManager shared ForkJoinPool shutdown (threads={})", currentPoolThreads);
+            ForkJoinPool pool = sharedPool;
+            if (pool != null && !pool.isShutdown()) {
+                pool.shutdown();
+                try {
+                    if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                        pool.shutdownNow();
+                    }
+                } catch (InterruptedException e) {
+                    pool.shutdownNow();
+                    Thread.currentThread().interrupt();
+                }
+                sharedPool = null;
+                LOGGER.debug("ClientHashManager shared ForkJoinPool shutdown (threads={})", currentPoolThreads);
+            }
         }
     }
 }
