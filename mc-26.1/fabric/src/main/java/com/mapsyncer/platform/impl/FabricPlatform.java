@@ -172,6 +172,16 @@ public class FabricPlatform implements Platform {
         return ModConfig.SERVER().getMaxConcurrentRegions();
     }
 
+
+    @Override
+    public com.mapsyncer.security.PolicySettings getPolicySettings() {
+        return new com.mapsyncer.security.PolicySettings(
+                ModConfig.SERVER().getDeferAutoSyncUntilLogin(),
+                ModConfig.SERVER().getAutoSyncDelayAfterLoginSeconds(),
+                ModConfig.SERVER().getLoginWaitTimeoutSeconds()
+        );
+    }
+
     @Override
     public boolean isDebugLoggingEnabled() {
         return ModConfig.SERVER().getEnableDebugLogging();

@@ -285,6 +285,11 @@ public class ModConfig {
         private volatile int maxSyncPacketSize = 262144;
         private volatile int syncSpeedLimitKBps = 1024;
 
+        // ========== 策略门控 ==========
+        private volatile boolean deferAutoSyncUntilLogin = false;
+        private volatile int autoSyncDelayAfterLoginSeconds = 3;
+        private volatile int loginWaitTimeoutSeconds = 0;
+
         // ========== 增量更新设置 ==========
         private volatile UpdateMode incrementalUpdateMode = UpdateMode.DISABLED;
         private volatile int incrementalUpdateIntervalTicks = 200;
@@ -342,6 +347,10 @@ public class ModConfig {
                 maxConcurrentRegions = Integer.parseInt(props.getProperty("maxConcurrentRegions", "4"));
                 maxSyncPacketSize = Integer.parseInt(props.getProperty("maxSyncPacketSize", "262144"));
                 syncSpeedLimitKBps = Integer.parseInt(props.getProperty("syncSpeedLimitKBps", "1024"));
+
+                deferAutoSyncUntilLogin = Boolean.parseBoolean(props.getProperty("deferAutoSyncUntilLogin", "false"));
+                autoSyncDelayAfterLoginSeconds = Math.max(0, Integer.parseInt(props.getProperty("autoSyncDelayAfterLoginSeconds", "3")));
+                loginWaitTimeoutSeconds = Math.max(0, Integer.parseInt(props.getProperty("loginWaitTimeoutSeconds", "0")));
 
                 // 增量更新设置
                 incrementalUpdateMode = UpdateMode.valueOf(props.getProperty("incrementalUpdateMode", "DISABLED"));
@@ -437,6 +446,13 @@ public class ModConfig {
                 sb.append("syncSpeedLimitKBps=" + syncSpeedLimitKBps + "\n");
                 sb.append("\n");
 
+                // ========== 策略门控 ==========
+                sb.append("# Policy / login gate settings / 策略与登录门控\n");
+                sb.append("deferAutoSyncUntilLogin=" + deferAutoSyncUntilLogin + "\n");
+                sb.append("autoSyncDelayAfterLoginSeconds=" + autoSyncDelayAfterLoginSeconds + "\n");
+                sb.append("loginWaitTimeoutSeconds=" + loginWaitTimeoutSeconds + "\n");
+                sb.append("\n");
+
                 // ========== 增量更新设置 ==========
                 sb.append("# ========================================\n");
                 sb.append("# Incremental update settings / 增量更新设置\n");
@@ -491,6 +507,18 @@ public class ModConfig {
             } catch (Exception e) {
                 LOGGER.error("Failed to save config: {}", e.getMessage());
             }
+        }
+
+        public boolean getDeferAutoSyncUntilLogin() {
+            return deferAutoSyncUntilLogin;
+        }
+
+        public int getAutoSyncDelayAfterLoginSeconds() {
+            return autoSyncDelayAfterLoginSeconds;
+        }
+
+        public int getLoginWaitTimeoutSeconds() {
+            return loginWaitTimeoutSeconds;
         }
 
         // ========== Getter 方法 ==========

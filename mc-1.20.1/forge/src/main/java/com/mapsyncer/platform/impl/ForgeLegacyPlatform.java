@@ -165,6 +165,16 @@ public class ForgeLegacyPlatform implements Platform {
         return ModConfig.SERVER.maxConcurrentRegions.get();
     }
 
+
+    @Override
+    public com.mapsyncer.security.PolicySettings getPolicySettings() {
+        return new com.mapsyncer.security.PolicySettings(
+                ModConfig.SERVER.deferAutoSyncUntilLogin.get(),
+                ModConfig.SERVER.autoSyncDelayAfterLoginSeconds.get(),
+                ModConfig.SERVER.loginWaitTimeoutSeconds.get()
+        );
+    }
+
     @Override
     public boolean isDebugLoggingEnabled() {
         return ModConfig.SERVER.enableDebugLogging.get();

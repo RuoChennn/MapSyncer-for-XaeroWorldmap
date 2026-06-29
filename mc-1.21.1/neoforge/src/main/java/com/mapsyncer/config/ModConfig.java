@@ -207,6 +207,10 @@ public class ModConfig {
          */
         public final IntValue syncSpeedLimitKBps;
 
+        public final BooleanValue deferAutoSyncUntilLogin;
+        public final IntValue autoSyncDelayAfterLoginSeconds;
+        public final IntValue loginWaitTimeoutSeconds;
+
         // ========== 增量更新设置 ==========
 
         /**
@@ -307,6 +311,19 @@ public class ModConfig {
                              "Default: 1024 (1MiB/s), Range: 0 - 10240",
                              "默认：1024（1MiB/s），范围：0 - 10240")
                     .defineInRange("syncSpeedLimitKBps", 1024, 0, 10240);
+
+            deferAutoSyncUntilLogin = builder
+                    .comment("Defer auto-sync until login mod confirms player",
+                             "登录 mod 验证完成前推迟自动同步")
+                    .define("deferAutoSyncUntilLogin", false);
+            autoSyncDelayAfterLoginSeconds = builder
+                    .comment("Delay after login before auto-sync (seconds)",
+                             "登录就绪后、自动同步前的延迟（秒）")
+                    .defineInRange("autoSyncDelayAfterLoginSeconds", 3, 0, 300);
+            loginWaitTimeoutSeconds = builder
+                    .comment("Max wait for login in seconds (0 = no timeout)",
+                             "等待登录的最长时间（秒，0 = 不超时）")
+                    .defineInRange("loginWaitTimeoutSeconds", 0, 0, 3600);
 
             builder.pop();
 
