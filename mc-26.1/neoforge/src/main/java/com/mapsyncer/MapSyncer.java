@@ -7,6 +7,7 @@ import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.impl.NeoForgeNetworkHandler;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.security.PolicyBootstrap;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.NeoForge26Platform;
 import com.mapsyncer.server.CacheGenerateCommand;
@@ -54,6 +55,7 @@ public class MapSyncer {
 
         // 初始化 Platform（NeoForge 26.x 实现）
         PlatformManager.initialize(new NeoForge26Platform());
+        PolicyBootstrap.initializeVanilla();
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
         // 初始化 DimensionPathMapping（26.1+ 使用新格式）

@@ -2,6 +2,7 @@ package com.mapsyncer.platform;
 
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
+import com.mapsyncer.security.PolicySettings;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -125,6 +126,15 @@ public interface Platform {
      * 获取是否启用调试日志
      */
     boolean isDebugLoggingEnabled();
+
+    /**
+     * 权限与登录门控策略（服务端）。
+     *
+     * <p>默认不推迟自动同步；各 loader 从 ModConfig 覆盖。</p>
+     */
+    default PolicySettings getPolicySettings() {
+        return PolicySettings.DEFAULT;
+    }
 
     /**
      * 获取客户端哈希计算线程数

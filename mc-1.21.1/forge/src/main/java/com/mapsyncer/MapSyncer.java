@@ -7,6 +7,7 @@ import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.impl.ForgeNetworkHandler;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.security.PolicyBootstrap;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.ForgePlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
@@ -53,6 +54,7 @@ public class MapSyncer {
 
         // 初始化 Platform（Forge 1.21.1 实现）
         PlatformManager.initialize(new ForgePlatform());
+        PolicyBootstrap.initializeVanilla();
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
         // 初始化 DimensionPathMapping（1.21.X 使用传统格式）

@@ -5,6 +5,7 @@ import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.impl.FabricNetworkHandler;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.security.PolicyBootstrap;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.platform.impl.FabricPlatform;
 import com.mapsyncer.server.CacheGenerateCommand;
@@ -58,6 +59,7 @@ public class MapSyncer implements ModInitializer {
         // 初始化 Platform（Fabric 实现）
         platform = new FabricPlatform();
         PlatformManager.initialize(platform);
+        PolicyBootstrap.initializeVanilla();
         LOGGER.info("Platform initialized: {}", PlatformManager.getPlatform().getPlatformName());
 
         // 初始化 DimensionPathMapping（26.1+ 使用新格式）
