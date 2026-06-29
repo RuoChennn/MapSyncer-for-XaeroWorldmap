@@ -193,14 +193,9 @@ public class GenerationCache {
             return false;
         }
 
-        if (clientMeta.timestampSeconds() < serverMeta.timestampSeconds()) {
-            LOGGER.debug("Need sync {}: client ts={} < server ts={}",
-                relativePath, clientMeta.timestampSeconds(), serverMeta.timestampSeconds());
-            return true;
-        }
-
-        LOGGER.debug("Skip sync {}: client has newer data", relativePath);
-        return false;
+        LOGGER.debug("Need sync {}: hash mismatch (client={}, server={})",
+                relativePath, clientMeta.hash(), serverMeta.hash());
+        return true;
     }
 
     /**

@@ -396,10 +396,14 @@ public class MapPacketHandler {
                 updatedRegionCoords.add(coord);
 
                 // 写入文件
-                Path mwDir = XaeroMapIntegrator.writeChunkDataAndGetMwDir(assembled, serverWorldId);
-                if (mwDir != null) {
-                    lastMwDir = mwDir;
+                XaeroMapDataHandler.RegionWriteResult writeResult =
+                        XaeroMapIntegrator.writeChunkDataResult(assembled, serverWorldId);
+                if (writeResult == null) {
+                    LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
+                            assembled.regionX, assembled.regionZ, assembled.data.length);
+                    continue;
                 }
+                lastMwDir = writeResult.mwDir();
 
                 // 根据维度类型决定处理哪个层
                 boolean shouldProcess = isCaveDimension
@@ -422,10 +426,10 @@ public class MapPacketHandler {
                         coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
                 }
 
-                // 更新时间戳缓存
+                // 更新时间戳缓存（使用磁盘文件哈希，与下次同步请求一致）
                 if (tsCache != null) {
                     String relativePath = buildRelativePathForCache(assembled);
-                    String hash = HashUtils.computeHash(assembled.data);
+                    String hash = HashUtils.computeFileHash(writeResult.outputFile());
                     tsCache.update(relativePath, assembled.timestampSeconds, hash);
                 }
             }
@@ -435,7 +439,7 @@ public class MapPacketHandler {
                 tsCache.save();
             }
 
-            // 同步完成时处理
+            // 同步完成时处理（服务端比对哈希后决定发送哪些 region，收到 isComplete 即视为成功）
             if (payload.isComplete()) {
                 int totalReceived = updatedRegionCoords.size();
                 LOGGER.info("同步完成: 总计 {} 个区域已处理", totalReceived);

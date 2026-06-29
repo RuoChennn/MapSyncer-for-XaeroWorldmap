@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
@@ -178,7 +179,7 @@ public class ClientHashManager {
                                     if (!fileName.endsWith(".zip")) return;
 
                                     String relativePath = buildRelativePath(zipPath, serverDir);
-                                    String hash = computeFileHash(zipPath);
+                                    String hash = resolveRegionHash(zipPath, cachedTimestamps.get(relativePath));
 
                                     TimestampHashEntry cached = cachedTimestamps.get(relativePath);
                                     long timestampSeconds;
@@ -204,9 +205,78 @@ public class ClientHashManager {
             LOGGER.error("Failed to compute hashes in parallel", e);
         }
 
+        addMissingCacheEntries(metaMap, cachedTimestamps, collectDimPrefixes(mapDir, serverDir));
+
         LOGGER.info("Found {} regions with metadata", metaMap.size());
 
         return metaMap;
+    }
+
+    /**
+     * 计算 region 哈希：损坏/不完整 zip 返回 DEFAULT_HASH，触发服务端重传。
+     */
+    private static String resolveRegionHash(Path zipPath, TimestampHashEntry cached) {
+        if (!HashUtils.isValidRegionZip(zipPath)) {
+            LOGGER.warn("Region file invalid or corrupt, will request re-sync: {}", zipPath);
+            return HashUtils.DEFAULT_HASH;
+        }
+        String fileHash = HashUtils.computeFileHash(zipPath);
+        if (cached != null && !fileHash.equals(cached.hash())) {
+            LOGGER.warn("Region {} file hash {} differs from cached {}, using file hash",
+                    zipPath.getFileName(), fileHash, cached.hash());
+        }
+        return fileHash;
+    }
+
+    /**
+     * 缓存中有记录但磁盘无对应 zip 时，加入 DEFAULT_HASH 元数据以触发补传。
+     */
+    private static void addMissingCacheEntries(Map<String, ClientMeta> metaMap,
+            Map<String, TimestampHashEntry> cachedTimestamps, Set<String> dimPrefixes) {
+        if (dimPrefixes.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, TimestampHashEntry> entry : cachedTimestamps.entrySet()) {
+            String key = entry.getKey();
+            if (metaMap.containsKey(key)) {
+                continue;
+            }
+            for (String prefix : dimPrefixes) {
+                if (key.startsWith(prefix)) {
+                    metaMap.put(key, new ClientMeta(entry.getValue().timestampSeconds(), HashUtils.DEFAULT_HASH));
+                    LOGGER.warn("Region {} in cache but file missing, will request re-sync", key);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** 根据扫描目录推断需要补全的维度前缀（如 {@code null/}）。 */
+    private static Set<String> collectDimPrefixes(Path mapDir, Path serverDir) {
+        Set<String> prefixes = new java.util.HashSet<>();
+        Path current = mapDir;
+        while (current != null && !current.equals(serverDir)) {
+            String name = current.getFileName() != null ? current.getFileName().toString() : "";
+            if (name.startsWith("mw$")) {
+                Path dimDir = current.getParent();
+                if (dimDir != null) {
+                    prefixes.add(dimDir.getFileName().toString() + "/");
+                }
+                break;
+            }
+            current = current.getParent();
+        }
+        if (prefixes.isEmpty() && mapDir.equals(serverDir)) {
+            try (Stream<Path> dirs = Files.list(serverDir)) {
+                dirs.filter(Files::isDirectory)
+                        .map(p -> p.getFileName().toString())
+                        .filter(n -> !n.startsWith("_"))
+                        .forEach(n -> prefixes.add(n + "/"));
+            } catch (IOException e) {
+                LOGGER.warn("Failed to list dimension dirs under {}", serverDir, e);
+            }
+        }
+        return prefixes;
     }
 
     /**
@@ -246,16 +316,6 @@ public class ClientHashManager {
             LOGGER.error("Failed to get modification time for {}", path, e);
             return 0;
         }
-    }
-
-    /**
-     * 计算文件内容的 CRC32 哈希值（使用 HashUtils）。
-     *
-     * @param filePath 文件路径
-     * @return CRC32 哈希值（8位十六进制字符串）
-     */
-    private static String computeFileHash(Path filePath) {
-        return HashUtils.computeFileHash(filePath);
     }
 
     /**

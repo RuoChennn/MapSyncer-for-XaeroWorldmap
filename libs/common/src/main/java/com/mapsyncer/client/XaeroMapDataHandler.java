@@ -138,6 +138,9 @@ public final class XaeroMapDataHandler {
         LOGGER.debug("Recorded {} updated region coords for selective reset", updatedRegions.size());
     }
 
+    /** 写入结果：mw 目录与最终 zip 路径。 */
+    public record RegionWriteResult(Path mwDir, Path outputFile) {}
+
     /**
      * 写入区块数据到 Xaero 地图目录结构。
      * 支持 caves/&lt;layer&gt; 目录结构：
@@ -149,9 +152,9 @@ public final class XaeroMapDataHandler {
      * @param chunk 区块数据
      * @param serverDir 服务器目录（Multiplayer_&lt;serverIP&gt;）
      * @param worldId 服务端 worldId
-     * @return mw 目录路径
+     * @return 写入成功时返回 mw 目录与 zip 路径，失败返回 null
      */
-    public static Path writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
+    public static RegionWriteResult writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
         String xaeroDim = chunk.dimension;
         Path dimDir = serverDir.resolve(xaeroDim);
         Path mwDir = dimDir.resolve("mw$" + worldId);
@@ -166,6 +169,11 @@ public final class XaeroMapDataHandler {
         Path outputFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip");
         Path tempFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip.temp");
 
+        if (!HashUtils.isValidRegionZip(chunk.data)) {
+            LOGGER.error("Refusing to write invalid region zip: {} ({} bytes)", outputFile, chunk.data.length);
+            return null;
+        }
+
         try {
             Files.createDirectories(targetDir);
 
@@ -175,9 +183,10 @@ public final class XaeroMapDataHandler {
                 chunk.isSurfaceLayer() ? "surface" : chunk.caveLayer, chunk.data.length);
         } catch (IOException e) {
             LOGGER.error("Failed to write map file: {}", outputFile, e);
+            return null;
         }
 
-        return mwDir;
+        return new RegionWriteResult(mwDir, outputFile);
     }
 
     /**
@@ -193,11 +202,15 @@ public final class XaeroMapDataHandler {
 
         Path lastMwDir = null;
         for (ChunkMapData chunk : chunks) {
-            lastMwDir = writeChunkData(chunk, serverDir, worldId);
+            RegionWriteResult result = writeChunkData(chunk, serverDir, worldId);
+            if (result == null) {
+                continue;
+            }
+            lastMwDir = result.mwDir();
 
             if (tsCache != null) {
                 String relativePath = buildRelativePathForCache(chunk);
-                String hash = HashUtils.computeHash(chunk.data);
+                String hash = HashUtils.computeFileHash(result.outputFile());
                 tsCache.update(relativePath, chunk.timestampSeconds, hash);
                 LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
                         relativePath, chunk.timestampSeconds, hash);

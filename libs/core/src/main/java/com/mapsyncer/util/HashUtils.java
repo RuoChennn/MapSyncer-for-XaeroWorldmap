@@ -78,4 +78,36 @@ public final class HashUtils {
     public static boolean isValidHash(String hash) {
         return hash != null && !hash.isEmpty() && !DEFAULT_HASH.equals(hash);
     }
+
+    /**
+     * 校验 region zip 字节是否为完整 ZIP（含 central directory）。
+     * 用于拒绝分片残留或损坏文件，避免 Xaero 加载崩溃。
+     */
+    public static boolean isValidRegionZip(byte[] data) {
+        if (data == null || data.length < 22) {
+            return false;
+        }
+        if (data[0] != 0x50 || data[1] != 0x4B || data[2] != 0x03 || data[3] != 0x04) {
+            return false;
+        }
+        for (int i = data.length - 22; i >= 0; i--) {
+            if (data[i] == 0x50 && data[i + 1] == 0x4B && data[i + 2] == 0x05 && data[i + 3] == 0x06) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 校验磁盘上的 region zip 是否完整。 */
+    public static boolean isValidRegionZip(Path filePath) {
+        if (filePath == null || !Files.exists(filePath)) {
+            return false;
+        }
+        try {
+            return isValidRegionZip(Files.readAllBytes(filePath));
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read zip for validation: {}", filePath, e);
+            return false;
+        }
+    }
 }

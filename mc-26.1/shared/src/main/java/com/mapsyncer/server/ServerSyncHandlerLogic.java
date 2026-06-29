@@ -729,11 +729,9 @@ public class ServerSyncHandlerLogic {
                                 shouldSync = true;
                                 timestamp = serverMeta.timestampSeconds();
                             } else if (!serverMeta.hash().equals(clientMetaEntry.hash())) {
-                                // Hash mismatch → check timestamps
-                                if (clientMetaEntry.timestampSeconds() < serverMeta.timestampSeconds()) {
-                                    shouldSync = true;
-                                    timestamp = serverMeta.timestampSeconds();
-                                }
+                                // 哈希不一致 → 以服务端为准重传（客户端不自行生成地图）
+                                shouldSync = true;
+                                timestamp = serverMeta.timestampSeconds();
                             }
                         }
 

@@ -405,6 +405,22 @@ public class XaeroMapIntegrator {
     }
 
     /**
+     * 写入单个区块数据并返回写入结果。
+     *
+     * @param chunk 区块数据
+     * @param worldId 服务端 worldId
+     * @return 写入结果，失败或无法获取服务器目录时返回 null
+     */
+    public static XaeroMapDataHandler.RegionWriteResult writeChunkDataResult(ChunkMapData chunk, int worldId) {
+        Path serverDir = getCurrentServerDirectory();
+        if (serverDir == null) {
+            LOGGER.warn("无法获取服务器目录");
+            return null;
+        }
+        return XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId);
+    }
+
+    /**
      * 写入单个区块数据并返回 mw 目录路径。
      * 委托给 {@link XaeroMapDataHandler#writeChunkData}，同时获取 MC 上下文。
      *
@@ -413,11 +429,7 @@ public class XaeroMapIntegrator {
      * @return mw 目录路径，如果获取服务器目录失败返回 null
      */
     public static Path writeChunkDataAndGetMwDir(ChunkMapData chunk, int worldId) {
-        Path serverDir = getCurrentServerDirectory();
-        if (serverDir == null) {
-            LOGGER.warn("无法获取服务器目录");
-            return null;
-        }
-        return XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId);
+        XaeroMapDataHandler.RegionWriteResult result = writeChunkDataResult(chunk, worldId);
+        return result != null ? result.mwDir() : null;
     }
 }

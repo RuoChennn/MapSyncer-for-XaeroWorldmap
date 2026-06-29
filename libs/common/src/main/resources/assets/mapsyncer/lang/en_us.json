@@ -6,6 +6,7 @@
   "mapsyncer.sync.progress": "Progress: %d/%d (%d%%)",
   "mapsyncer.sync.cancelled": "Sync cancelled",
   "mapsyncer.sync.timeout": "Sync timed out, please try again",
+  "mapsyncer.sync.incomplete": "Sync incomplete: received %d/%d regions, please sync again",
   "mapsyncer.sync.server_not_installed": "Server doesn't have MapSyncer installed",
   "mapsyncer.sync.unloading_regions": "Unloading %d view distance regions for update",
 
