@@ -369,7 +369,7 @@ public class MapPacketHandler {
                 session.setOutcome(SyncOutcome.SILENT_SKIP);
                 clearSyncData();
                 clearReflectionCache();
-                SyncProgressTracker.cancelTracking();
+                SyncProgressTracker.finishUptodate();
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
                 }

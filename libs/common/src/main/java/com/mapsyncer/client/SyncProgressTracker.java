@@ -232,6 +232,16 @@ public class SyncProgressTracker {
     }
 
     /**
+     * 结束进度追踪（地图已是最新，无需下载）。
+     * 不显示“已取消”，服务端会发送 map_uptodate 消息。
+     */
+    public static void finishUptodate() {
+        tracking = false;
+        hashScanning = false;
+        stopTimeoutChecker();
+    }
+
+    /**
      * 取消进度追踪。
      * 在同步被中断或取消时调用。
      */

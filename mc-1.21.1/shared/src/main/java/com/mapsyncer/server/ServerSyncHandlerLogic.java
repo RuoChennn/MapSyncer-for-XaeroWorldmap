@@ -772,9 +772,12 @@ public class ServerSyncHandlerLogic {
         sortByViewDistancePriority(regionsToSync, startBlockX, startBlockZ, viewDistanceRegions);
 
         final int initialTotal = total;
-        enqueueIfCurrent(server, playerId, syncVersion, player ->
+        enqueueIfCurrent(server, playerId, syncVersion, player -> {
+                player.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start",
+                        initialTotal, finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(player,
-                        new SyncProgressPayload(0, initialTotal, "Sync started")));
+                        new SyncProgressPayload(0, initialTotal, "Sync started"));
+        });
 
         List<ChunkMapData> batch = new ArrayList<>();
         int batchBytes = 0;
