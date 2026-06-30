@@ -286,6 +286,13 @@ public class ClientTimestampCache {
         cache.put(relativePath, new TimestampHashEntry(timestampSeconds, hash));
     }
 
+    /** 移除单条 region 缓存（空 region、写盘失败等场景）。 */
+    public void remove(String relativePath) {
+        if (relativePath != null) {
+            cache.remove(relativePath);
+        }
+    }
+
     /**
      * 获取区域的缓存信息。
      */

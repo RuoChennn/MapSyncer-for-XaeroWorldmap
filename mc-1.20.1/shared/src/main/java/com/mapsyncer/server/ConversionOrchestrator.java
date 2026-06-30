@@ -704,6 +704,18 @@ public class ConversionOrchestrator {
 
         Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
+        String relativePath = caveLayer == Integer.MAX_VALUE
+            ? xaeroDimName + "/" + coords.x() + "_" + coords.z()
+            : xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
+
+        if (!com.mapsyncer.mca.McaContentProbe.hasAnyChunk(mcaPath)) {
+            EmptyRegionSupport.purgeGeneratedArtifacts(outputDir, coords.x(), coords.z(), relativePath, genCache);
+            if (logProgress) {
+                processedCountAtomic.incrementAndGet();
+            }
+            return;
+        }
+
         ConvertedRegion converted = RegionConverterStandalone.convertRegion(
             mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
 
@@ -712,13 +724,17 @@ public class ConversionOrchestrator {
             return;
         }
 
+        if (EmptyRegionSupport.isEmptyConverted(converted)) {
+            EmptyRegionSupport.purgeGeneratedArtifacts(outputDir, coords.x(), coords.z(), relativePath, genCache);
+            if (logProgress) {
+                processedCountAtomic.incrementAndGet();
+            }
+            return;
+        }
+
         try {
             XaeroWriter.RegionWriteResult writeResult = XaeroWriter.writeRegionFile(outputDir, converted);
             mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-
-            String relativePath = caveLayer == Integer.MAX_VALUE
-                ? xaeroDimName + "/" + coords.x() + "_" + coords.z()
-                : xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
 
             genCache.update(relativePath, generationTimeSeconds, writeResult.crc32Hash());
 

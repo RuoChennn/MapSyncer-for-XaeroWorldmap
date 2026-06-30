@@ -215,18 +215,15 @@ public class ClientHashManager {
                                     if (!fileName.endsWith(".zip")) return;
 
                                     String relativePath = buildRelativePath(zipPath, serverDir);
-                                    String hash = resolveRegionHash(zipPath, cachedTimestamps.get(relativePath));
-
                                     TimestampHashEntry cached = cachedTimestamps.get(relativePath);
-                                    long timestampSeconds;
+                                    String hash = resolveSyncHash(zipPath, cached);
+
+                                    long timestampSeconds = resolveSyncTimestamp(zipPath, cached);
                                     if (cached != null) {
-                                        timestampSeconds = cached.timestampSeconds();
-                                        LOGGER.debug("Region {}: using cached ts={}s, hash={}",
+                                        LOGGER.debug("Region {}: ts={}s, hash={} (cache-first)",
                                                 relativePath, timestampSeconds, hash);
                                     } else {
-                                        long timestampMillis = getFileModificationTime(zipPath);
-                                        timestampSeconds = timestampMillis / 1000;
-                                        LOGGER.debug("Region {}: using file ts={}s, hash={} (no cache)",
+                                        LOGGER.debug("Region {}: ts={}s, hash={} (no cache)",
                                                 relativePath, timestampSeconds, hash);
                                     }
 
@@ -259,19 +256,28 @@ public class ClientHashManager {
     }
 
     /**
-     * 计算 region 哈希：损坏/不完整 zip 返回 DEFAULT_HASH，触发服务端重传。
+     * 计算 region 同步 hash：zip 存在且合法时优先 cache（服务端对齐版本）；否则 DEFAULT 触发补传。
      */
-    private static String resolveRegionHash(Path zipPath, TimestampHashEntry cached) {
-        if (!HashUtils.isValidRegionZip(zipPath)) {
-            LOGGER.warn("Region file invalid or corrupt, will request re-sync: {}", zipPath);
+    private static String resolveSyncHash(Path zipPath, TimestampHashEntry cached) {
+        if (zipPath == null || !Files.exists(zipPath) || !HashUtils.isValidRegionZip(zipPath)) {
+            if (cached != null) {
+                LOGGER.warn("Region {} missing or invalid on disk, will request re-sync",
+                        zipPath != null ? zipPath.getFileName() : "unknown");
+            }
             return HashUtils.DEFAULT_HASH;
         }
-        String fileHash = HashUtils.computeFileHash(zipPath);
-        if (cached != null && !fileHash.equals(cached.hash())) {
-            LOGGER.warn("Region {} file hash {} differs from cached {}, using file hash",
-                    zipPath.getFileName(), fileHash, cached.hash());
+        if (cached != null && HashUtils.isValidHash(cached.hash())) {
+            return cached.hash();
         }
-        return fileHash;
+        return HashUtils.computeFileHash(zipPath);
+    }
+
+    private static long resolveSyncTimestamp(Path zipPath, TimestampHashEntry cached) {
+        long fileTs = getFileModificationTime(zipPath) / 1000;
+        if (cached != null) {
+            return Math.max(cached.timestampSeconds(), fileTs);
+        }
+        return fileTs;
     }
 
     /**

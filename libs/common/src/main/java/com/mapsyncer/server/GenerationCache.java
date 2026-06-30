@@ -7,6 +7,8 @@ import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
@@ -193,9 +195,79 @@ public class GenerationCache {
             return false;
         }
 
+        if (clientMeta.timestampSeconds() >= serverMeta.timestampSeconds()) {
+            LOGGER.debug("Skip sync {}: client ts {} >= server ts {}",
+                    relativePath, clientMeta.timestampSeconds(), serverMeta.timestampSeconds());
+            return false;
+        }
+
         LOGGER.debug("Need sync {}: hash mismatch (client={}, server={})",
                 relativePath, clientMeta.hash(), serverMeta.hash());
         return true;
+    }
+
+    /**
+     * 移除单条缓存记录（不写盘；调用方在批次结束时 {@link #save()}）。
+     */
+    public void remove(String relativePath) {
+        if (relativePath != null) {
+            cache.remove(relativePath);
+        }
+    }
+
+    /**
+     * 删除 cache 中有记录但磁盘 zip 无效或缺失的条目。
+     *
+     * @param cacheRoot server_map_cache 根目录
+     * @return 移除条目数
+     */
+    public int pruneInvalidEntries(Path cacheRoot) {
+        if (cacheRoot == null || !Files.exists(cacheRoot)) {
+            return 0;
+        }
+        int removed = 0;
+        for (String key : List.copyOf(cache.keySet())) {
+            Path zipPath = resolveZipPath(cacheRoot, key);
+            if (zipPath == null || !HashUtils.isValidRegionZip(zipPath)) {
+                cache.remove(key);
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            save();
+            LOGGER.info("Pruned {} invalid generation_cache entries under {}", removed, cacheRoot);
+        }
+        return removed;
+    }
+
+    private static Path resolveZipPath(Path cacheRoot, String relativePath) {
+        String normalized = relativePath.replace("\\", "/");
+        String[] parts = normalized.split("/");
+        if (parts.length < 2) {
+            return null;
+        }
+        Path dimDir = cacheRoot.resolve(parts[0]);
+        if (!Files.isDirectory(dimDir)) {
+            return null;
+        }
+        Path mwDir;
+        try (var stream = Files.list(dimDir)) {
+            mwDir = stream.filter(p -> p.getFileName().toString().startsWith("mw$"))
+                    .findFirst().orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
+        if (mwDir == null) {
+            return null;
+        }
+        String fileName = parts[parts.length - 1] + ".zip";
+        if (parts.length == 2) {
+            return mwDir.resolve(fileName);
+        }
+        if (parts.length == 4 && "caves".equals(parts[1])) {
+            return mwDir.resolve("caves").resolve(parts[2]).resolve(fileName);
+        }
+        return null;
     }
 
     /**

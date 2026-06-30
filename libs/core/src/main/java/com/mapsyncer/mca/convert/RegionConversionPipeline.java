@@ -27,6 +27,10 @@ public final class RegionConversionPipeline {
         MapRegionData regionData = McaRegionLoader.load(
             mcaPath, minBuildHeight, worldTopY, lightMode, caveParams, worldHasSkylight, blockLookup);
 
+        if (!regionData.hasAnyMapData()) {
+            return new RegionConverterStandalone.ConvertedRegion(regionX, regionZ, new byte[0]);
+        }
+
         byte[] xaeroData = XaeroBinaryWriter.serialize(regionData, minBuildHeight, blockLookup);
         return new RegionConverterStandalone.ConvertedRegion(regionX, regionZ, xaeroData);
     }

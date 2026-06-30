@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.mca.McaContentProbe;
 import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.server.MinecraftServer;
@@ -186,7 +187,7 @@ public class RegionScanner {
                 try {
                     BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
                     long size = attrs.size();
-                    if (size == 0) {
+                    if (size == 0 || !McaContentProbe.hasAnyChunk(file)) {
                         continue;
                     }
                     int regionX = Integer.parseInt(matcher.group(1));
@@ -234,6 +235,11 @@ public class RegionScanner {
                         if (fileSize == 0) {
                             skippedEmpty++;
                             LOGGER.debug("Skipping empty MCA file: {} (0 bytes)", fileName);
+                            continue;
+                        }
+                        if (!McaContentProbe.hasAnyChunk(file)) {
+                            skippedEmpty++;
+                            LOGGER.debug("Skipping header-only MCA file: {} ({} bytes)", fileName, fileSize);
                             continue;
                         }
                         int regionX = Integer.parseInt(matcher.group(1));

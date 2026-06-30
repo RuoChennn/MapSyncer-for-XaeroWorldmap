@@ -450,6 +450,10 @@ public class MapPacketHandler {
                             if (writeResult == null) {
                                 LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
                                         assembled.regionX, assembled.regionZ, assembled.data.length);
+                                if (batchTsCache != null) {
+                                    batchTsCache.remove(
+                                            XaeroMapDataHandler.buildRelativePathForCache(assembled));
+                                }
                             } else {
                                 lastMwDir = writeResult.mwDir();
 

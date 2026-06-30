@@ -616,10 +616,10 @@ public class ServerSyncHandlerLogic {
 
         LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
 
-        GenerationCache genCache = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir());
-        Map<String, TimestampHashEntry> serverCache = genCache.getAll();
-
         Path cacheDir = ConversionOrchestrator.getCacheDir();
+        GenerationCache genCache = GenerationCache.getInstance(cacheDir);
+        genCache.pruneInvalidEntries(cacheDir);
+        Map<String, TimestampHashEntry> serverCache = genCache.getAll();
 
         if (!Files.exists(cacheDir)) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
@@ -716,35 +716,32 @@ public class ServerSyncHandlerLogic {
                         TimestampHashEntry serverMeta = serverCache.get(normalizedPath);
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
 
-                        boolean shouldSync = false;
-                        long timestamp = 0;
-
-                        if (serverMeta == null) {
-                            String serverHash = HashUtils.computeFileHash(zipPath);
-                            timestamp = System.currentTimeMillis() / 1000;
-
-                            if (clientMetaEntry == null) {
-                                shouldSync = true;
-                            } else if (!serverHash.equals(clientMetaEntry.hash())) {
-                                shouldSync = true;
+                        if (!HashUtils.isValidRegionZip(zipPath)) {
+                            if (serverMeta != null) {
+                                genCache.remove(normalizedPath);
                             }
-                        } else {
-                            if (clientMetaEntry == null) {
-                                shouldSync = true;
-                                timestamp = serverMeta.timestampSeconds();
-                            } else if (!serverMeta.hash().equals(clientMetaEntry.hash())) {
-                                shouldSync = true;
-                                timestamp = serverMeta.timestampSeconds();
-                            }
+                            return;
                         }
 
-                        if (shouldSync) {
+                        String serverHash;
+                        long timestamp;
+                        if (serverMeta == null) {
+                            serverHash = HashUtils.computeFileHash(zipPath);
+                            timestamp = System.currentTimeMillis() / 1000;
+                        } else {
+                            serverHash = serverMeta.hash();
+                            timestamp = serverMeta.timestampSeconds();
+                        }
+
+                        if (RegionSyncPolicy.shouldTransfer(serverHash, timestamp, clientMetaEntry)) {
                             RegionSyncInfo info = parseRegionInfo(zipPath, normalizedPath, timestamp);
                             if (info != null) {
                                 regionsToSync.add(info);
                             }
                         }
                     });
+
+        genCache.save();
 
         for (Map.Entry<String, TimestampHashEntry> entry : serverCache.entrySet()) {
             ClientMeta cm = clientMeta.get(entry.getKey());

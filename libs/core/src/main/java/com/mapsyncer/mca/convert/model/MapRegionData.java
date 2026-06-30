@@ -44,4 +44,16 @@ public class MapRegionData {
         overlays = new HashMap<>();
         chunkGrid = new ChunkDataParser.ChunkInfo[CHUNKS_PER_REGION][CHUNKS_PER_REGION];
     }
+
+    /** 是否至少有一个 tile 被扫描写入（非空 region）。 */
+    public boolean hasAnyMapData() {
+        for (int x = 0; x < REGION_SIZE_BLOCKS; x++) {
+            for (int z = 0; z < REGION_SIZE_BLOCKS; z++) {
+                if (hasData[x][z]) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 }
