@@ -607,9 +607,10 @@ public class ConversionOrchestrator {
             ConcurrentLinkedQueue<RegionCoords> failedRegions, boolean logProgress) {
 
         List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        Set<RegionCoords> validRegions = new HashSet<>(allRegions);
 
         for (RegionCoords coords : coordsToProcess) {
-            if (!allRegions.contains(coords)) continue;
+            if (!validRegions.contains(coords)) continue;
 
             java.util.concurrent.Future<?> future = executor.submit(() ->
                 convertSingleRegion(coords, regionDir, outputDir, xaeroDimName, dimPath,
