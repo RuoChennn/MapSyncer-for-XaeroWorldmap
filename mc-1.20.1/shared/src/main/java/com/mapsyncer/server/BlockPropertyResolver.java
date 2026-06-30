@@ -55,7 +55,6 @@ import net.minecraft.world.level.material.MapColor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -96,14 +95,8 @@ public class BlockPropertyResolver {
     private static final BlockGetter PLACEHOLDER_BLOCK_GETTER = PlaceholderBlockGetter.INSTANCE;
     private static final BlockPos PLACEHOLDER_BLOCKPOS = BlockPos.ZERO;
 
-    /** 缓存方块属性查询结果（LRU策略，access-order LinkedHashMap） */
-    private static final LinkedHashMap<String, BlockProperties> propertiesCache =
-        new LinkedHashMap<>(16, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, BlockProperties> eldest) {
-                return size() > MAX_CACHE_SIZE;
-            }
-        };
+    /** 缓存方块属性查询结果（并发安全，超过上限时批量淘汰） */
+    private static final ConcurrentHashMap<String, BlockProperties> propertiesCache = new ConcurrentHashMap<>();
 
     /** 缓存最大容量（使用集中配置，便于管理） */
     private static final int MAX_CACHE_SIZE = CacheConfig.MAX_BLOCK_PROPERTIES_CACHE;
@@ -182,8 +175,26 @@ public class BlockPropertyResolver {
      * @return 方块属性集合
      */
     public static BlockProperties getProperties(String blockName) {
-        synchronized (propertiesCache) {
-            return propertiesCache.computeIfAbsent(blockName, BlockPropertyResolver::resolveProperties);
+        BlockProperties cached = propertiesCache.get(blockName);
+        if (cached != null) {
+            return cached;
+        }
+        BlockProperties resolved = resolveProperties(blockName);
+        propertiesCache.put(blockName, resolved);
+        trimCacheIfNeeded();
+        return resolved;
+    }
+
+    private static void trimCacheIfNeeded() {
+        int excess = propertiesCache.size() - MAX_CACHE_SIZE;
+        if (excess <= 0) {
+            return;
+        }
+        var it = propertiesCache.keySet().iterator();
+        while (excess > 0 && it.hasNext()) {
+            it.next();
+            it.remove();
+            excess--;
         }
     }
 
