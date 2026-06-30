@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 写入 Xaero MapSaveLoad / NbtUtils.writeBlockState 风格的方块状态 NBT。
@@ -18,6 +19,8 @@ public final class XaeroBlockStateNbtWriter {
 
     public static final BlockState AIR = new BlockState("minecraft:air", Map.of());
     public static final BlockState WATER = new BlockState("minecraft:water", Map.of());
+
+    private static final ConcurrentHashMap<BlockState, PaletteKey> PALETTE_KEY_CACHE = new ConcurrentHashMap<>();
 
     private XaeroBlockStateNbtWriter() {}
 
@@ -30,8 +33,10 @@ public final class XaeroBlockStateNbtWriter {
             if (state == null) {
                 return from(AIR);
             }
-            TreeMap<String, String> sorted = new TreeMap<>(state.properties());
-            return new PaletteKey(state.name(), List.copyOf(sorted.entrySet()));
+            return PALETTE_KEY_CACHE.computeIfAbsent(state, s -> {
+                TreeMap<String, String> sorted = new TreeMap<>(s.properties());
+                return new PaletteKey(s.name(), List.copyOf(sorted.entrySet()));
+            });
         }
 
         public BlockState toBlockState() {
