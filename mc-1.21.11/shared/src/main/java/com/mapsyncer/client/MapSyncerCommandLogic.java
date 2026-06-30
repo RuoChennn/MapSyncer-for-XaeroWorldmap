@@ -4,6 +4,7 @@ import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.SyncRequestPayload;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
@@ -44,6 +45,7 @@ public class MapSyncerCommandLogic {
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync"), false);
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_dim"), false);
         mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_sync_all"), false);
+        mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.command.help_autosync"), false);
         mc.player.displayClientMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"), false);
 
         if (hasServerPermission) {
@@ -324,5 +326,26 @@ public class MapSyncerCommandLogic {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /** 显示客户端自动同步开关状态 */
+    public static int executeAutoSyncStatus() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return 0;
+        boolean enabled = PlatformManager.getPlatform().isClientAutoSyncEnabled();
+        mc.player.displayClientMessage(
+                ChatUtils.prefix().append(ChatUtils.desc(
+                        enabled ? "mapsyncer.autosync.client.enabled" : "mapsyncer.autosync.client.disabled")),
+                false);
+        return 1;
+    }
+
+    /** 设置客户端自动同步开关并持久化 */
+    public static int setClientAutoSync(boolean enabled) {
+        PlatformManager.getPlatform().setClientAutoSyncEnabled(enabled);
+        if (!enabled) {
+            AutoSyncManager.stopPeriodicSync();
+        }
+        return executeAutoSyncStatus();
     }
 }

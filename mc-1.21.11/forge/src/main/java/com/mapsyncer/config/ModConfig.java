@@ -83,6 +83,10 @@ public class ModConfig {
         SERVER_SPEC = serverPair.getRight();
     }
 
+    public static void saveClientConfig() {
+        CLIENT_SPEC.save();
+    }
+
     /**
      * 客户端配置内部类
      *
@@ -107,6 +111,8 @@ public class ModConfig {
         public final IntValue hashThreads;
 
         public final IntValue mapRegionLoadsPerTick;
+
+        public final BooleanValue autoSyncEnabled;
 
         /**
          * 构造客户端配置
@@ -152,6 +158,13 @@ public class ModConfig {
                              "  -1 = 不限制, 0 = 仅加载视距内, 1-5 = 每 tick 加载 N 个（默认 1）")
                     .defineInRange("mapRegionLoadsPerTick", 1, -1, 5);
 
+            autoSyncEnabled = builder
+                    .comment("Enable automatic sync on join and periodic TICK sync",
+                             "启用进服自动同步与 TICK 在线周期同步",
+                             "Manual /mapsyncer sync is always available",
+                             "手动 /mapsyncer sync 始终可用")
+                    .define("autoSyncEnabled", true);
+
             builder.pop();
         }
 
@@ -161,6 +174,14 @@ public class ModConfig {
 
         public int getMapRegionLoadsPerTick() {
             return mapRegionLoadsPerTick.get();
+        }
+
+        public boolean isAutoSyncEnabled() {
+            return autoSyncEnabled.get();
+        }
+
+        public void setAutoSyncEnabled(boolean enabled) {
+            autoSyncEnabled.set(enabled);
         }
     }
 

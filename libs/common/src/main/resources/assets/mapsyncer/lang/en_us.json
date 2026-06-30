@@ -23,6 +23,7 @@
   "mapsyncer.command.help_sync": "/mapsyncer sync - Sync current dimension",
   "mapsyncer.command.help_sync_dim": "/mapsyncer sync <dimension> - Sync specified dimension",
   "mapsyncer.command.help_sync_all": "/mapsyncer sync all - Sync all dimensions",
+  "mapsyncer.command.help_autosync": "/mapsyncer autosync [on|off] - View or toggle client auto-sync",
   "mapsyncer.command.help_dimension_note": "Dimension names: overworld, the_nether, the_end or full ID like twilightforest:twilight_forest",
 
   "mapsyncer.cache.all_cleared": "All caches cleared, no reload needed",
@@ -94,6 +95,8 @@
   "mapsyncer.autosync.status.disabled": "Auto-sync: Disabled",
   "mapsyncer.autosync.status.minutes": "Auto-sync: Every %d min",
   "mapsyncer.autosync.status.daily": "Auto-sync: Daily",
+  "mapsyncer.autosync.client.enabled": "Client auto-sync: Enabled",
+  "mapsyncer.autosync.client.disabled": "Client auto-sync: Disabled",
 
   "mapsyncer.autosync.periodic.start": "Periodic sync: waiting for server...",
   "mapsyncer.autosync.periodic.hash_computing": "Periodic sync: scanning local maps...",

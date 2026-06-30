@@ -1,5 +1,6 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.AutoSyncConfig;
 import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
@@ -66,8 +67,11 @@ public class AutoSyncManager {
         return serverAutoSyncIntervalMinutes >= 0;
     }
 
-    /** 增量更新已开启，允许加入时自动同步 */
+    /** 增量更新已开启且客户端允许自动同步时，加入时自动同步 */
     public static boolean isJoinAutoSyncEnabled() {
+        if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
+            return false;
+        }
         if (serverUpdateMode == UpdateMode.SCHEDULED || serverUpdateMode == UpdateMode.TICK) {
             return true;
         }
@@ -128,6 +132,9 @@ public class AutoSyncManager {
      * SCHEDULED：仅比对客户端/服务端时间戳；TICK：时间戳 + 冷却间隔。
      */
     public static boolean shouldAutoSyncOnJoin(long serverGenTime, int intervalMinutes) {
+        if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
+            return false;
+        }
         if (hasPendingResume()) {
             LOGGER.info("Join auto-sync: resuming interrupted sync");
             return true;
@@ -161,6 +168,9 @@ public class AutoSyncManager {
      */
     public static void startTickPeriodicSync(Runnable syncAction) {
         cancelPeriodic();
+        if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
+            return;
+        }
         if (serverUpdateMode != UpdateMode.TICK || serverIntervalTicks <= 0) {
             return;
         }
@@ -239,6 +249,11 @@ public class AutoSyncManager {
             periodicTask.cancel(false);
             periodicTask = null;
         }
+    }
+
+    /** 停止 TICK 在线周期同步（客户端关闭自动同步时调用） */
+    public static void stopPeriodicSync() {
+        cancelPeriodic();
     }
 
     public static void shutdown() {

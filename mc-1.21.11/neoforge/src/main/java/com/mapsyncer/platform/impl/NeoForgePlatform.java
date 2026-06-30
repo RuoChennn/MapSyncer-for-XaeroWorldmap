@@ -165,6 +165,17 @@ public class NeoForgePlatform implements Platform {
     }
 
     @Override
+    public boolean isClientAutoSyncEnabled() {
+        return ModConfig.CLIENT.isAutoSyncEnabled();
+    }
+
+    @Override
+    public void setClientAutoSyncEnabled(boolean enabled) {
+        ModConfig.CLIENT.setAutoSyncEnabled(enabled);
+        ModConfig.saveClientConfig();
+    }
+
+    @Override
     public boolean isDebugLoggingEnabled() {
         return ModConfig.SERVER.enableDebugLogging.get();
     }

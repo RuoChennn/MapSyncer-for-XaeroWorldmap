@@ -31,6 +31,12 @@ public class MapSyncerCommand {
                                             Identifier loc = ctx.getArgument("dimension", Identifier.class);
                                             return MapSyncerCommandLogic.executeSyncDimension(loc.toString());
                                         })))
+                        .then(ClientCommands.literal("autosync")
+                                .executes(ctx -> MapSyncerCommandLogic.executeAutoSyncStatus())
+                                .then(ClientCommands.literal("on")
+                                        .executes(ctx -> MapSyncerCommandLogic.setClientAutoSync(true)))
+                                .then(ClientCommands.literal("off")
+                                        .executes(ctx -> MapSyncerCommandLogic.setClientAutoSync(false))))
                         .then(ClientCommands.literal("clearstate")
                                 .requires(source -> false)
                                 .executes(ctx -> MapSyncerCommandLogic.clearSyncState()))

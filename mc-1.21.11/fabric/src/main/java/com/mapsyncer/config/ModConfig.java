@@ -143,6 +143,9 @@ public class ModConfig {
 
         private volatile int mapRegionLoadsPerTick = 1;
 
+        /** 客户端自动同步（进服/在线周期） */
+        private volatile boolean autoSyncEnabled = true;
+
         /** 配置文件路径 */
         private final Path configFile;
 
@@ -184,7 +187,10 @@ public class ModConfig {
                 int loadedLoadsPerTick = Integer.parseInt(props.getProperty("mapRegionLoadsPerTick", "1"));
                 mapRegionLoadsPerTick = Math.max(-1, Math.min(5, loadedLoadsPerTick));
 
-                LOGGER.info("Loaded client config from: {} (hashThreads={}, mapRegionLoadsPerTick={})", configFile, hashThreads, mapRegionLoadsPerTick);
+                autoSyncEnabled = Boolean.parseBoolean(
+                        props.getProperty("autoSyncEnabled", "true"));
+
+                LOGGER.info("Loaded client config from: {} (hashThreads={}, mapRegionLoadsPerTick={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadsPerTick, autoSyncEnabled);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load client config, using defaults: {}", e.getMessage());
             }
@@ -238,10 +244,16 @@ public class ModConfig {
                 sb.append("# 1-5 = 每 tick 加载 N 个（默认：1）\n");
                 sb.append("#\n");
                 sb.append("mapRegionLoadsPerTick=" + mapRegionLoadsPerTick + "\n");
+                sb.append("#\n");
+                sb.append("# Enable automatic sync on join and periodic TICK sync\n");
+                sb.append("# 启用进服自动同步与 TICK 在线周期同步\n");
+                sb.append("# Manual /mapsyncer sync is always available\n");
+                sb.append("# 手动 /mapsyncer sync 始终可用\n");
+                sb.append("autoSyncEnabled=" + autoSyncEnabled + "\n");
 
                 Files.writeString(configFile, sb.toString());
 
-                LOGGER.info("Saved client config to: {} (hashThreads={}, mapRegionLoadsPerTick={})", configFile, hashThreads, mapRegionLoadsPerTick);
+                LOGGER.info("Saved client config to: {} (hashThreads={}, mapRegionLoadsPerTick={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadsPerTick, autoSyncEnabled);
             } catch (Exception e) {
                 LOGGER.error("Failed to save client config: {}", e.getMessage());
             }
@@ -268,6 +280,14 @@ public class ModConfig {
         public void setHashThreads(int value) {
             int maxThreads = Runtime.getRuntime().availableProcessors();
             hashThreads = Math.max(1, Math.min(maxThreads, value));
+        }
+
+        public boolean isAutoSyncEnabled() {
+            return autoSyncEnabled;
+        }
+
+        public void setAutoSyncEnabled(boolean enabled) {
+            autoSyncEnabled = enabled;
         }
     }
 

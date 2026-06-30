@@ -59,6 +59,8 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 | `/mapsyncer sync` | Sync current dimension |
 | `/mapsyncer sync <dim>` | Sync a specific dimension |
 | `/mapsyncer sync all` | Sync all dimensions |
+| `/mapsyncer autosync` | Show client auto-sync toggle status |
+| `/mapsyncer autosync on\|off` | Enable/disable client auto-sync (saved to config) |
 
 **Dimension arguments**: `overworld`, `the_nether`, `the_end`, or mod dimension IDs like `twilightforest:twilight_forest`
 
@@ -86,6 +88,9 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 | Option | Default | Range | Description |
 |--------|--------|-------|-------------|
 | `hashThreads` | CPU cores/2 | 1–cores | Number of threads for CRC32 computation |
+| `autoSyncEnabled` | true | - | Client auto-sync (join + TICK periodic); manual `/mapsyncer sync` always works |
+
+Fabric: `config/mapsyncer-client.properties`; Forge/NeoForge: `[client]` section in `config/mapsyncer-client.toml`.
 
 ### Server Config
 
@@ -135,7 +140,7 @@ Format: `dimensionID|scanMode|caveStart|hasSkylight|hasCeiling|minY|height|logic
 
 ## Incremental Update Modes & Client Auto-Sync
 
-The server `incrementalUpdateMode` controls when the **map cache** is rescanned from MCA files. On join, the client receives `ServerInstalledPayload` and may **auto-sync** using the same hash/timestamp rules as manual `/mapsyncer sync`.
+The server `incrementalUpdateMode` controls when the **map cache** is rescanned from MCA files. On join, the client receives `ServerInstalledPayload` and may **auto-sync** when **`autoSyncEnabled` is true**, using the same hash/timestamp rules as manual `/mapsyncer sync`. Use `/mapsyncer autosync off` or the config file to disable client auto-sync.
 
 ### DISABLED
 

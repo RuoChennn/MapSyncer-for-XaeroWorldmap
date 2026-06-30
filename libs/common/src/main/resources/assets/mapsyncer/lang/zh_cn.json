@@ -23,6 +23,7 @@
   "mapsyncer.command.help_sync": "/mapsyncer sync - 同步当前维度",
   "mapsyncer.command.help_sync_dim": "/mapsyncer sync <维度> - 同步指定维度",
   "mapsyncer.command.help_sync_all": "/mapsyncer sync all - 同步所有维度",
+  "mapsyncer.command.help_autosync": "/mapsyncer autosync [on|off] - 查看或切换客户端自动同步",
   "mapsyncer.command.help_dimension_note": "维度名: overworld, the_nether, the_end 或 namespace:path 格式（如 twilightforest:twilight_forest）",
 
   "mapsyncer.cache.all_cleared": "所有缓存已清除，无需重新加载",
@@ -94,6 +95,8 @@
   "mapsyncer.autosync.status.disabled": "自动同步：已关闭",
   "mapsyncer.autosync.status.minutes": "自动同步：每 %d 分钟",
   "mapsyncer.autosync.status.daily": "自动同步：每天",
+  "mapsyncer.autosync.client.enabled": "客户端自动同步：已开启",
+  "mapsyncer.autosync.client.disabled": "客户端自动同步：已关闭",
 
   "mapsyncer.autosync.periodic.start": "周期同步：等待服务端响应...",
   "mapsyncer.autosync.periodic.hash_computing": "周期同步：正在扫描本地地图...",

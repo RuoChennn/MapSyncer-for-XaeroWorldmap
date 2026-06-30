@@ -67,6 +67,8 @@
 | `/mapsyncer sync` | 同步当前维度 |
 | `/mapsyncer sync <维度>` | 同步指定维度 |
 | `/mapsyncer sync all` | 同步所有维度 |
+| `/mapsyncer autosync` | 查看客户端自动同步开关状态 |
+| `/mapsyncer autosync on\|off` | 开启/关闭客户端自动同步（写入配置文件） |
 | `/mapsyncer clearstate` | 清除同步恢复状态（忽略断点续传） |
 
 **维度参数支持**：
@@ -97,6 +99,9 @@
 | 配置项 | 默认值 | 范围 | 说明 |
 |--------|--------|------|------|
 | `hashThreads` | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
+| `autoSyncEnabled` | true | - | 客户端自动同步（进服 + TICK 在线周期）；关闭后仍可手动 `/mapsyncer sync` |
+
+Fabric 配置文件：`config/mapsyncer-client.properties`；Forge/NeoForge：`config/mapsyncer-client.toml` 的 `[client]` 段。
 
 ### 服务端配置
 
@@ -146,7 +151,7 @@ dimension_configs = [
 
 ## 增量更新模式与客户端自动同步
 
-服务端通过 `incrementalUpdateMode` 控制**地图缓存**何时重新扫描 MCA 并生成；客户端在收到 `ServerInstalledPayload` 后，根据同一模式决定是否**自动发起 sync**（与手动 `/mapsyncer sync` 共用同一套 hash/时间戳比对，无需传输的区域会被跳过）。
+服务端通过 `incrementalUpdateMode` 控制**地图缓存**何时重新扫描 MCA 并生成；客户端在收到 `ServerInstalledPayload` 后，根据同一模式且 **`autoSyncEnabled` 为 true** 时决定是否**自动发起 sync**（与手动 `/mapsyncer sync` 共用同一套 hash/时间戳比对，无需传输的区域会被跳过）。可通过 `/mapsyncer autosync off` 或配置文件关闭客户端自动同步。
 
 ### DISABLED（禁用）
 

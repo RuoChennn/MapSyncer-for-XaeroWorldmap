@@ -148,6 +148,16 @@ public interface Platform {
     int getMapRegionLoadsPerTick();
 
     /**
+     * 客户端是否启用自动同步（进服/在线周期）。
+     */
+    boolean isClientAutoSyncEnabled();
+
+    /**
+     * 设置客户端自动同步开关并持久化到配置文件。
+     */
+    void setClientAutoSyncEnabled(boolean enabled);
+
+    /**
      * 获取增量更新模式
      */
     UpdateMode getIncrementalUpdateMode();

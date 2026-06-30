@@ -188,6 +188,17 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
+    public boolean isClientAutoSyncEnabled() {
+        return ModConfig.CLIENT().isAutoSyncEnabled();
+    }
+
+    @Override
+    public void setClientAutoSyncEnabled(boolean enabled) {
+        ModConfig.CLIENT().setAutoSyncEnabled(enabled);
+        ModConfig.CLIENT().save();
+    }
+
+    @Override
     public UpdateMode getIncrementalUpdateMode() {
         return ModConfig.SERVER().getIncrementalUpdateMode();
     }
