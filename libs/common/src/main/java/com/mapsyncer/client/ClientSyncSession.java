@@ -50,7 +50,7 @@ public final class ClientSyncSession {
         return gen == generation;
     }
 
-    /** 会话是否占用同步通道（含视距外重载排空阶段） */
+    /** 会话是否占用同步通道（含视距外重载排空阶段；新 sync 是否可发起见 {@code MapPacketHandler.isSyncInProgress}） */
     public boolean isSessionActive() {
         return phase != SyncPhase.IDLE;
     }

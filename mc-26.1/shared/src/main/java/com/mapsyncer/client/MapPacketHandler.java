@@ -35,13 +35,18 @@ public class MapPacketHandler {
     private static final ClientSyncSession session = ClientSyncSession.get();
 
     /**
-     * 检查同步是否正在进行中。
-     *
-     * @return true 表示同步正在进行（含视距外重载排空）
+     * 是否正在接收/写入同步数据（阻塞新 sync 请求）。
+     * 视距外重载排空（{@link SyncPhase#DRAINING_RELOAD}）不计入，数据完成后可立即再次同步。
      */
     public static boolean isSyncInProgress() {
-        return session.isSessionActive() || !pendingRegionLoads.isEmpty()
-                || ClientSyncWriteQueue.hasPendingWrites();
+        return session.phase() == SyncPhase.RECEIVING
+                || ClientSyncWriteQueue.hasPendingWrites()
+                || pendingWriteApplyCallbacks.get() > 0;
+    }
+
+    /** 是否有视距外 region 重载仍在后台排队/排空 */
+    public static boolean isBackgroundReloadPending() {
+        return session.phase() == SyncPhase.DRAINING_RELOAD || !pendingRegionLoads.isEmpty();
     }
 
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
@@ -91,6 +96,9 @@ public class MapPacketHandler {
     private static volatile int syncFinishGeneration = -1;
     private static volatile SyncOutcome syncFinishOutcome = SyncOutcome.NONE;
     private static volatile ClientTimestampCache syncFinishTsCache = null;
+
+    /** 写盘 IO 完成但主线程 apply 回调尚未全部执行 */
+    private static final AtomicInteger pendingWriteApplyCallbacks = new AtomicInteger(0);
 
     private static String partKey(ChunkMapData chunk) {
         return chunk.regionX + "," + chunk.regionZ + "," + chunk.dimension + "," + chunk.caveLayer;
@@ -199,6 +207,7 @@ public class MapPacketHandler {
         syncFinishGeneration = -1;
         syncFinishOutcome = SyncOutcome.NONE;
         syncFinishTsCache = null;
+        pendingWriteApplyCallbacks.set(0);
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
@@ -379,8 +388,8 @@ public class MapPacketHandler {
                 return;
             }
 
-            // 首次收到数据时初始化反射缓存
-            if (session.phase() == SyncPhase.IDLE) {
+            // 首次收到数据时初始化反射缓存（含 DRAINING 阶段收到新 sync 的情况）
+            if (session.phase() == SyncPhase.IDLE || session.phase() == SyncPhase.DRAINING_RELOAD) {
                 session.beginReceiving();
                 LOGGER.info("Starting sync (streaming mode)");
                 if (!initializeReflectionCache()) {
@@ -430,38 +439,43 @@ public class MapPacketHandler {
                 final int gen = generationAtEnqueue;
                 final ClientTimestampCache batchTsCache = tsCache;
 
+                pendingWriteApplyCallbacks.incrementAndGet();
                 ClientSyncWriteQueue.submit(assembled, serverDir, serverWorldId, tsCache, writeResult -> {
                     mc.execute(() -> {
-                        if (!session.isCurrent(gen)) {
-                            return;
-                        }
-
-                        if (writeResult == null) {
-                            LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
-                                    assembled.regionX, assembled.regionZ, assembled.data.length);
-                        } else {
-                            lastMwDir = writeResult.mwDir();
-
-                            if (shouldProcess && !session.reflectionFailed()) {
-                                if (inViewDistance) {
-                                    triggerSingleRegionLoad(coord, assembled.caveLayer, true);
-                                } else {
-                                    pendingRegionLoads.add(new PendingRegionLoad(
-                                            coord.x(), coord.z(), assembled.caveLayer));
-                                }
-                                LOGGER.debug("区域 ({}, {}) layer={} inView={} 已写入并触发加载",
-                                        coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
-                            } else if (shouldProcess) {
-                                LOGGER.debug("区域 ({}, {}) 已写入磁盘，反射不可用跳过运行时重载",
-                                        coord.x(), coord.z());
+                        try {
+                            if (!session.isCurrent(gen)) {
+                                return;
                             }
-                        }
 
-                        if (batchPending.decrementAndGet() == 0 && batchTsCache != null
-                                && submittedCount.get() > 0) {
-                            ClientSyncWriteQueue.saveTimestampCacheAsync(batchTsCache);
+                            if (writeResult == null) {
+                                LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
+                                        assembled.regionX, assembled.regionZ, assembled.data.length);
+                            } else {
+                                lastMwDir = writeResult.mwDir();
+
+                                if (shouldProcess && !session.reflectionFailed()) {
+                                    if (inViewDistance) {
+                                        triggerSingleRegionLoad(coord, assembled.caveLayer, true);
+                                    } else {
+                                        pendingRegionLoads.add(new PendingRegionLoad(
+                                                coord.x(), coord.z(), assembled.caveLayer));
+                                    }
+                                    LOGGER.debug("区域 ({}, {}) layer={} inView={} 已写入并触发加载",
+                                            coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
+                                } else if (shouldProcess) {
+                                    LOGGER.debug("区域 ({}, {}) 已写入磁盘，反射不可用跳过运行时重载",
+                                            coord.x(), coord.z());
+                                }
+                            }
+
+                            if (batchPending.decrementAndGet() == 0 && batchTsCache != null
+                                    && submittedCount.get() > 0) {
+                                ClientSyncWriteQueue.saveTimestampCacheAsync(batchTsCache);
+                            }
+                        } finally {
+                            pendingWriteApplyCallbacks.decrementAndGet();
+                            tryCompleteSync(gen);
                         }
-                        tryCompleteSync(gen);
                     });
                 });
             }
@@ -484,7 +498,8 @@ public class MapPacketHandler {
     }
 
     private static void tryCompleteSync(int generation) {
-        if (!syncFinishRequested || ClientSyncWriteQueue.hasPendingWrites()) {
+        if (!syncFinishRequested || ClientSyncWriteQueue.hasPendingWrites()
+                || pendingWriteApplyCallbacks.get() > 0) {
             return;
         }
         if (!session.isCurrent(generation)) {
@@ -571,14 +586,16 @@ public class MapPacketHandler {
     }
 
     /**
-     * 视距外队列排空后再将会话置为 IDLE（isSyncInProgress 在此之前保持 true）。
+     * 视距外重载队列排空后将 DRAINING_RELOAD 会话置为 IDLE。
      */
     private static void resumeChunkUpdatesIfIdle() {
-        if (session.phase() == SyncPhase.DRAINING_RELOAD || !pendingRegionLoads.isEmpty()) {
+        if (!pendingRegionLoads.isEmpty()) {
             return;
         }
-        session.completeSession();
-        LOGGER.info("Sync complete");
+        if (session.phase() == SyncPhase.DRAINING_RELOAD) {
+            session.completeSession();
+            LOGGER.info("Deferred reload queue drained, sync session idle");
+        }
     }
 
     /**
