@@ -67,6 +67,13 @@ public final class BiomeQuartResolver {
     private static String resolveBiomeAtAbsoluteY(ChunkDataParser.ChunkInfo chunk,
                                                    int lx, int absoluteY, int lz,
                                                    boolean smoothBoundary) {
+        if (!smoothBoundary && chunk.biomeGrid() != null) {
+            String gridBiome = chunk.biomeGrid().lookup(lx, absoluteY, lz);
+            if (isValidBiome(gridBiome)) {
+                return gridBiome;
+            }
+        }
+
         String biome = ChunkDataParser.getBiomeAt(chunk, lx, absoluteY, lz, smoothBoundary);
         if (isValidBiome(biome)) {
             return biome;

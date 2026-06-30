@@ -1,5 +1,6 @@
 package com.mapsyncer.mca;
 
+import com.mapsyncer.mca.convert.biome.BiomeQuartGrid;
 import com.mapsyncer.nbt.Tag;
 
 import java.util.ArrayList;
@@ -89,7 +90,8 @@ public class ChunkDataParser {
      * @param chunkBottomY Chunk底部世界Y坐标
      * @param status Chunk状态字符串（如 "minecraft:full"）
      * @param heightmap 高度图数组（16x16，存储世界绝对Y坐标）
-     * @param sections 所有Section数据列表（按Y坐标从高到低排序）
+     * @param sectionLookup O(1) section 查询数组
+     * @param biomeGrid 预计算的 quart biome 查表
      */
     public record ChunkInfo(
         int chunkX,                 // Chunk的局部坐标 (0-31)
@@ -100,7 +102,8 @@ public class ChunkDataParser {
         int[][] heightmap,          // 高度图 (16x16, 世界绝对Y坐标)
         List<ChunkSectionParser.SectionData> sections,
         int minSectionY,            // 最底section的Y，用于sectionLookup偏移
-        ChunkSectionParser.SectionData[] sectionLookup  // O(1) section查询
+        ChunkSectionParser.SectionData[] sectionLookup,  // O(1) section查询
+        BiomeQuartGrid biomeGrid
     ) {}
 
     /**
@@ -178,7 +181,9 @@ public class ChunkDataParser {
             }
         }
 
-        return new ChunkInfo(localX, localZ, yPos, chunkBottomY, status, heightmap, sections, minSectionY, sectionLookup);
+        BiomeQuartGrid biomeGrid = BiomeQuartGrid.build(sections, minSectionY, sectionLookup);
+
+        return new ChunkInfo(localX, localZ, yPos, chunkBottomY, status, heightmap, sections, minSectionY, sectionLookup, biomeGrid);
     }
 
     
