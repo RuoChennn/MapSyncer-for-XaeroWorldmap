@@ -1,1 +1,23 @@
-@echo offcd /d "%~dp0..\.."echo Building: Fabric 1.20.1call gradlew.bat :mc-1.20.1:fabric:clean :mc-1.20.1:fabric:build -x testif %errorlevel% neq 0 (    echo Build failed!    exit /b 1)echo.echo Collecting JARs to output...if not exist output mkdir outputcopy /y mc-1.20.1\fabric\build\libs\*.jar output\ >nulcopy /y libs\core\build\libs\*.jar output\ >nulcopy /y libs\platform-api\build\libs\*.jar output\ >nulecho.echo Output: output\dir /b output\*.jar
+@echo off
+setlocal
+cd /d "%~dp0..\.."
+
+echo ============================================
+echo   Building: Fabric 1.20.1
+echo ============================================
+
+call gradlew.bat :mc-1.20.1:fabric:clean :mc-1.20.1:fabric:build -x test
+if %errorlevel% neq 0 (
+    echo Build failed!
+    exit /b 1
+)
+
+echo.
+echo Collecting JARs to output...
+if not exist output mkdir output
+call "%~dp0copy-release-jars.bat" mc-1.20.1\fabric\build\libs
+
+echo.
+echo Output: output\
+dir /b output\*-fabric-1.20.1*.jar 2>nul
+exit /b 0

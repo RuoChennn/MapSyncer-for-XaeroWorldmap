@@ -15,6 +15,12 @@
 | NeoForge 1.20.1 | 8.5 | NeoGradle 6.x 最高支持 Gradle 8.5 |
 | 其他所有平台 | 8.9 | Loom 1.7+ / ForgeGradle 6.x+ / ModDev 2.x |
 
+## 产物收集
+
+所有 `scripts/fastbuild/*.bat` 构建脚本通过 `copy-release-jars.ps1` 收集 JAR 到 `output/`，**自动排除 `-slim.jar`**（Forge/NeoForge 的未打包依赖版本）以及 `-sources.jar` / `-javadoc.jar`。
+
+根项目 `collectJars` Gradle 任务同样会排除上述附属 JAR。
+
 ## 使用构建脚本
 
 ### PowerShell 构建工具

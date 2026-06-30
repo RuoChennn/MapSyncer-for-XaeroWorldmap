@@ -45,6 +45,7 @@ tasks.register('collectJars', Copy) {
     subprojects { sub ->
         from(sub.layout.buildDirectory.dir('libs')) {
             include '*.jar'
+            exclude '*-slim.jar', '*-sources.jar', '*-javadoc.jar'
         }
     }
     // 排除 libs 模块的 JAR（不需要分发）

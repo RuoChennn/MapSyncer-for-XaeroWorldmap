@@ -11,6 +11,7 @@ import com.mapsyncer.sync.SyncPhase;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
@@ -819,7 +820,7 @@ public class MapPacketHandler {
         }
 
         String currentXaeroDim = DimensionPathMapping.getInstance().toXaeroDimension(
-                mc.level.dimension().location().toString());
+                DimensionApiHelper.getDimId(mc.level.dimension()));
 
         if (targetDimension.equals(currentXaeroDim)) {
             LOGGER.info("Syncing current dimension {}, unloading view distance regions", targetDimension);

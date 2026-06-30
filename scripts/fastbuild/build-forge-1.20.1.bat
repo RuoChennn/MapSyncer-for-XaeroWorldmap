@@ -41,7 +41,7 @@ if %RESULT% neq 0 (
 
 echo Collecting JARs...
 if not exist output mkdir output
-copy /y mc-1.20.1\forge\build\libs\mapsyncer-*-forge-*.jar output\ >nul
+call "%~dp0copy-release-jars.bat" mc-1.20.1\forge\build\libs
 echo Output:
-dir /b output\*-forge-1.20.1*.jar 2>nul
+dir /b output\*.jar 2>nul | findstr /v /i "-slim"
 exit /b 0

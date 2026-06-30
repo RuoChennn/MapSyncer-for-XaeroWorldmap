@@ -9,6 +9,7 @@ set GRADLE_89=gradle-8.9\bin\gradle.bat
 set PROPS_BAK=gradle.properties.bak
 set PROPS_FILE=gradle.properties
 set OUTPUT_DIR=output
+set COPY_JARS=%~dp0copy-release-jars.bat
 
 echo ============================================
 echo   MapSyncer Build: Forge (1.20.1 + 1.21.1 + 1.21.11)
@@ -70,15 +71,13 @@ if %FORGE121X% neq 0 goto :fail
 echo.
 echo Collecting JARs to output...
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
-copy /y mc-1.20.1\forge\build\libs\mapsyncer-*-forge-*.jar "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-1.21.1\forge\build\libs\mapsyncer-*-forge-*.jar "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-1.21.11\forge\build\libs\mapsyncer-*-forge-*.jar "%OUTPUT_DIR%\" >nul 2>&1
+call "%COPY_JARS%" mc-1.20.1\forge\build\libs mc-1.21.1\forge\build\libs mc-1.21.11\forge\build\libs
 
 echo.
 echo ============================================
 echo   Forge BUILD SUCCESSFUL
 echo ============================================
-dir /b "%OUTPUT_DIR%\*-forge-*.jar" 2>nul
+dir /b "%OUTPUT_DIR%\*.jar" 2>nul | findstr /v /i "-slim"
 echo.
 echo ============================================
 exit /b 0

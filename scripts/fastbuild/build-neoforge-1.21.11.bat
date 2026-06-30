@@ -1,1 +1,23 @@
-@echo offcd /d "%~dp0..\.."echo ============================================echo   Building: NeoForge 1.21.11echo ============================================call gradlew.bat :mc-1.21.11:neoforge:clean :mc-1.21.11:neoforge:build -x testif %errorlevel% neq 0 (    echo Build failed!    exit /b 1)echo.echo Collecting JARs to output...if not exist output mkdir outputcopy /y mc-1.21.11\neoforge\build\libs\*.jar output\ >nulecho.echo Output: output\dir /b output\*-neoforge-1.21.11*.jar 2>nul
+@echo off
+setlocal
+cd /d "%~dp0..\.."
+
+echo ============================================
+echo   Building: NeoForge 1.21.11
+echo ============================================
+
+call gradlew.bat :mc-1.21.11:neoforge:clean :mc-1.21.11:neoforge:build -x test
+if %errorlevel% neq 0 (
+    echo Build failed!
+    exit /b 1
+)
+
+echo.
+echo Collecting JARs to output...
+if not exist output mkdir output
+call "%~dp0copy-release-jars.bat" mc-1.21.11\neoforge\build\libs
+
+echo.
+echo Output: output\
+dir /b output\*-neoforge-1.21.11*.jar 2>nul | findstr /v /i "-slim"
+exit /b 0

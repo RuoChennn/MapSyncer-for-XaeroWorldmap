@@ -14,6 +14,7 @@ set GRADLE_89=%PROJECT_ROOT%\gradle-8.9\bin\gradle.bat
 set PROPS_BAK=gradle.properties.bak
 set PROPS_FILE=gradle.properties
 set OUTPUT_DIR=output
+set COPY_JARS=%~dp0copy-release-jars.bat
 
 echo ============================================
 echo   MapSyncer - Build ALL Platforms
@@ -37,11 +38,11 @@ call "%PROJECT_ROOT%\gradlew.bat" ^
     -x test --parallel
 if %errorlevel% neq 0 echo   Phase 1 had errors, continuing...
 
-copy /y mc-1.20.1\fabric\build\libs\*.jar   "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-1.21.1\fabric\build\libs\*.jar    "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-1.21.1\neoforge\build\libs\*.jar  "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-1.21.11\neoforge\build\libs\*.jar "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-26.1\neoforge\build\libs\*.jar    "%OUTPUT_DIR%\" >nul 2>&1
+call "%COPY_JARS%" mc-1.20.1\fabric\build\libs
+call "%COPY_JARS%" mc-1.21.1\fabric\build\libs
+call "%COPY_JARS%" mc-1.21.1\neoforge\build\libs
+call "%COPY_JARS%" mc-1.21.11\neoforge\build\libs
+call "%COPY_JARS%" mc-26.1\neoforge\build\libs
 echo   Phase 1: done
 
 :: ============================================================
@@ -69,7 +70,7 @@ call %GRADLE_89% --stop >nul 2>&1
 call %GRADLE_89% :mc-1.20.1:forge:clean :mc-1.20.1:forge:build -x test --no-daemon
 if %errorlevel% neq 0 echo   1.20.1 Forge had errors, continuing...
 
-copy /y mc-1.20.1\forge\build\libs\*.jar "%OUTPUT_DIR%\" >nul 2>&1
+call "%COPY_JARS%" mc-1.20.1\forge\build\libs
 
 :: 1.21.1 + 1.21.11 (JDK 21)
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot
@@ -78,8 +79,8 @@ call %GRADLE_89% --stop >nul 2>&1
 call %GRADLE_89% :mc-1.21.1:forge:clean :mc-1.21.1:forge:build :mc-1.21.11:forge:clean :mc-1.21.11:forge:build -x test --no-daemon
 if %errorlevel% neq 0 echo   1.21.x Forge had errors, continuing...
 
-copy /y mc-1.21.1\forge\build\libs\*.jar  "%OUTPUT_DIR%\" >nul 2>&1
-copy /y mc-1.21.11\forge\build\libs\*.jar "%OUTPUT_DIR%\" >nul 2>&1
+call "%COPY_JARS%" mc-1.21.1\forge\build\libs
+call "%COPY_JARS%" mc-1.21.11\forge\build\libs
 
 :: Restore settings and gradle.properties
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
@@ -101,7 +102,7 @@ set FABRIC12111_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
 if %FABRIC12111_RESULT% neq 0 echo   Fabric 1.21.11 FAILED
-copy /y mc-1.21.11\fabric\build\libs\*.jar "%OUTPUT_DIR%\" >nul 2>&1
+call "%COPY_JARS%" mc-1.21.11\fabric\build\libs
 echo   Phase 3: done
 
 :: ============================================================
@@ -117,7 +118,7 @@ set FABRIC26_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
 if %FABRIC26_RESULT% neq 0 echo   Fabric 26.1 FAILED
-copy /y mc-26.1\fabric\build\libs\*.jar "%OUTPUT_DIR%\" >nul 2>&1
+call "%COPY_JARS%" mc-26.1\fabric\build\libs
 echo   Phase 4: done
 
 :: ============================================================
@@ -127,6 +128,8 @@ echo.
 echo ============================================
 echo   Build Complete - %OUTPUT_DIR%\
 echo ============================================
-for /r "%OUTPUT_DIR%" %%f in (*.jar) do echo   %%~nxf
+for /r "%OUTPUT_DIR%" %%f in (*.jar) do (
+    echo %%~nxf | findstr /i /c:"-slim.jar" >nul || echo   %%~nxf
+)
 echo ============================================
 exit /b 0
