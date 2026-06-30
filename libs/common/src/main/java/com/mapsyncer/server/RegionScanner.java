@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -44,12 +45,18 @@ public class RegionScanner {
     }
 
     /**
+     * 单个 MCA 文件扫描条目（坐标、路径、mtime、大小）。
+     */
+    public record RegionFileEntry(RegionCoords coords, Path path, long lastModifiedMillis, long sizeBytes) {}
+
+    /**
      * 区域扫描结果
      *
      * @param regions 扫描到的区域坐标列表
      * @param skippedEmptyCount 跳过的空文件数量
+     * @param fileEntries 非空 MCA 文件条目（含 mtime，供增量检测复用）
      */
-    public record RegionScanResult(List<RegionCoords> regions, int skippedEmptyCount) {
+    public record RegionScanResult(List<RegionCoords> regions, int skippedEmptyCount, List<RegionFileEntry> fileEntries) {
     }
 
     /**
@@ -58,8 +65,10 @@ public class RegionScanner {
      * @param dimension 维度ResourceKey
      * @param regions 区域坐标列表
      * @param skippedEmptyCount 跳过的空文件数量
+     * @param fileEntries 非空 MCA 文件条目（与 {@link #regions} 对应，避免二次目录遍历）
      */
-    public record DimensionRegions(net.minecraft.resources.ResourceKey<Level> dimension, List<RegionCoords> regions, int skippedEmptyCount) {
+    public record DimensionRegions(net.minecraft.resources.ResourceKey<Level> dimension, List<RegionCoords> regions,
+                                   int skippedEmptyCount, List<RegionFileEntry> fileEntries) {
     }
 
     /**
@@ -81,7 +90,7 @@ public class RegionScanner {
         List<DimensionRegions> result = new ArrayList<>();
         for (DimensionNames dn : dimNames) {
             RegionScanResult scanResult = scanRegionDir(server.getWorldPath(LevelResource.ROOT), dn.key());
-            result.add(new DimensionRegions(dn.key(), scanResult.regions(), scanResult.skippedEmptyCount()));
+            result.add(new DimensionRegions(dn.key(), scanResult.regions(), scanResult.skippedEmptyCount(), scanResult.fileEntries()));
         }
         return result;
     }
@@ -152,10 +161,49 @@ public class RegionScanner {
 
         if (regionDir == null || !Files.exists(regionDir)) {
             LOGGER.warn("Region directory not found for dimension: {}", dimId);
-            return new RegionScanResult(List.of(), 0);
+            return new RegionScanResult(List.of(), 0, List.of());
         }
 
         return scanRegionDirectory(regionDir);
+    }
+
+    /**
+     * 单次目录遍历：列出非空 MCA 文件及其 mtime（供 RegionScanner 与 McaTimestampCache 共用）。
+     */
+    public static List<RegionFileEntry> listRegionFiles(Path regionDir) {
+        List<RegionFileEntry> entries = new ArrayList<>();
+        if (!Files.exists(regionDir)) {
+            return entries;
+        }
+
+        try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(regionDir)) {
+            for (Path file : stream) {
+                String fileName = file.getFileName().toString();
+                Matcher matcher = REGION_PATTERN.matcher(fileName);
+                if (!matcher.matches()) {
+                    continue;
+                }
+                try {
+                    BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+                    long size = attrs.size();
+                    if (size == 0) {
+                        continue;
+                    }
+                    int regionX = Integer.parseInt(matcher.group(1));
+                    int regionZ = Integer.parseInt(matcher.group(2));
+                    entries.add(new RegionFileEntry(
+                            new RegionCoords(regionX, regionZ),
+                            file,
+                            attrs.lastModifiedTime().toMillis(),
+                            size));
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to read attributes for {}", fileName, e);
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to list region directory: {}", regionDir, e);
+        }
+        return entries;
     }
 
     /**
@@ -169,31 +217,34 @@ public class RegionScanner {
     public static RegionScanResult scanRegionDirectory(Path regionDir) {
         List<RegionCoords> regions = new ArrayList<>();
         if (!Files.exists(regionDir)) {
-            return new RegionScanResult(regions, 0);
+            return new RegionScanResult(regions, 0, List.of());
         }
 
         int skippedEmpty = 0;
+        List<RegionFileEntry> fileEntries = new ArrayList<>();
+
         try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(regionDir)) {
             for (Path file : stream) {
                 String fileName = file.getFileName().toString();
                 Matcher matcher = REGION_PATTERN.matcher(fileName);
                 if (matcher.matches()) {
-                    // Skip empty (0KB) MCA files - they contain no chunk data
                     try {
-                        long fileSize = Files.size(file);
+                        BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+                        long fileSize = attrs.size();
                         if (fileSize == 0) {
                             skippedEmpty++;
                             LOGGER.debug("Skipping empty MCA file: {} (0 bytes)", fileName);
                             continue;
                         }
+                        int regionX = Integer.parseInt(matcher.group(1));
+                        int regionZ = Integer.parseInt(matcher.group(2));
+                        RegionCoords coords = new RegionCoords(regionX, regionZ);
+                        regions.add(coords);
+                        fileEntries.add(new RegionFileEntry(
+                                coords, file, attrs.lastModifiedTime().toMillis(), fileSize));
                     } catch (IOException e) {
-                        LOGGER.warn("Failed to check file size for {}", fileName, e);
-                        continue;
+                        LOGGER.warn("Failed to check file attributes for {}", fileName, e);
                     }
-
-                    int regionX = Integer.parseInt(matcher.group(1));
-                    int regionZ = Integer.parseInt(matcher.group(2));
-                    regions.add(new RegionCoords(regionX, regionZ));
                 }
             }
         } catch (IOException e) {
@@ -204,7 +255,7 @@ public class RegionScanner {
             LOGGER.info("Skipped {} empty (0KB) MCA files in {}", skippedEmpty, regionDir);
         }
 
-        return new RegionScanResult(regions, skippedEmpty);
+        return new RegionScanResult(regions, skippedEmpty, fileEntries);
     }
 
     /**

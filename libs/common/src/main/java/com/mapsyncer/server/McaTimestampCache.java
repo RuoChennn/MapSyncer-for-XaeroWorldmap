@@ -284,58 +284,54 @@ public class McaTimestampCache {
     }
 
     /**
+     * 根据已扫描的 MCA 条目比对时间戳，返回需要重新生成的 region（不再遍历目录）。
+     */
+    public java.util.List<RegionScanner.RegionCoords> classifyUpdates(
+            String dimension, java.util.List<RegionScanner.RegionFileEntry> fileEntries) {
+        java.util.List<RegionScanner.RegionCoords> needsRegeneration = new java.util.ArrayList<>();
+        Map<String, Long> dimCache = timestampCache.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>());
+
+        for (RegionScanner.RegionFileEntry entry : fileEntries) {
+            RegionScanner.RegionCoords coords = entry.coords();
+            String regionKey = coords.x() + "_" + coords.z();
+            long currentTimestamp = entry.lastModifiedMillis();
+            Long cachedTimestamp = dimCache.get(regionKey);
+
+            long currentSeconds = currentTimestamp / 1000;
+            long cachedSeconds = cachedTimestamp != null ? cachedTimestamp / 1000 : 0;
+
+            if (cachedTimestamp == null || currentSeconds > cachedSeconds) {
+                needsRegeneration.add(coords);
+                dimCache.put(regionKey, currentTimestamp);
+                if (cachedTimestamp != null) {
+                    LOGGER.info("Detected update in {} / {}: cached={}s, current={}s",
+                            dimension, regionKey, cachedSeconds, currentSeconds);
+                }
+            }
+        }
+
+        if (getTotalCachedRegions() > MAX_CACHE_REGIONS) {
+            Path regionDir = fileEntries.isEmpty() ? null : fileEntries.get(0).path().getParent();
+            if (regionDir != null) {
+                trimStaleEntries(dimension, regionDir);
+            }
+        }
+
+        return needsRegeneration;
+    }
+
+    /**
      * 批量扫描并更新所有区域的时间戳
      * @param dimension 维度名称
      * @param regionDir 区域目录
      * @return 需要重新生成的区域列表
      */
     public java.util.List<RegionScanner.RegionCoords> scanAndUpdate(String dimension, Path regionDir) {
-        java.util.List<RegionScanner.RegionCoords> needsRegeneration = new java.util.ArrayList<>();
-        Map<String, Long> dimCache = timestampCache.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>());
-
         if (!Files.exists(regionDir)) {
             LOGGER.warn("Region directory not found: {}", regionDir);
-            return needsRegeneration;
+            return new java.util.ArrayList<>();
         }
-
-        try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(regionDir)) {
-            for (Path mcaFile : stream) {
-                String fileName = mcaFile.getFileName().toString();
-                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^r\\.(-?[0-9]+)\\.(-?[0-9]+)\\.mc[ar]$").matcher(fileName);
-
-                if (matcher.matches()) {
-                    int regionX = Integer.parseInt(matcher.group(1));
-                    int regionZ = Integer.parseInt(matcher.group(2));
-                    String regionKey = regionX + "_" + regionZ;
-
-                    long currentTimestamp = getFileTimestamp(mcaFile);
-                    Long cachedTimestamp = dimCache.get(regionKey);
-
-                    // 比较时都转换为秒级，避免缓存存储时的精度损失
-                    long currentSeconds = currentTimestamp / 1000;
-                    long cachedSeconds = cachedTimestamp != null ? cachedTimestamp / 1000 : 0;
-
-                    if (cachedTimestamp == null || currentSeconds > cachedSeconds) {
-                        needsRegeneration.add(new RegionScanner.RegionCoords(regionX, regionZ));
-                        dimCache.put(regionKey, currentTimestamp);
-
-                        if (cachedTimestamp != null) {
-                            LOGGER.info("Detected update in {} / {}: cached={}s, current={}s",
-                                dimension, regionKey, cachedSeconds, currentSeconds);
-                        }
-                    }
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.error("Failed to scan region directory: {}", regionDir, e);
-        }
-
-        // 扫描后清理已不存在的 MCA 条目，防止缓存无限增长
-        if (getTotalCachedRegions() > MAX_CACHE_REGIONS) {
-            trimStaleEntries(dimension, regionDir);
-        }
-
-        return needsRegeneration;
+        return classifyUpdates(dimension, RegionScanner.listRegionFiles(regionDir));
     }
 
     /**

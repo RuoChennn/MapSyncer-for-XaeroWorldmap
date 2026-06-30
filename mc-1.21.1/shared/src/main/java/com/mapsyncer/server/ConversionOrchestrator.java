@@ -286,7 +286,7 @@ public class ConversionOrchestrator {
         totalCount = regions.size();
         currentDimension = dimKey;
         try {
-            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()), false);
+            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount(), scanResult.fileEntries()), false);
         } finally {
             isRunning.set(false);
             currentStatus = "completed";
@@ -329,7 +329,7 @@ public class ConversionOrchestrator {
         totalCount = regions.size();
         currentDimension = dimKey;
         try {
-            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount()), true);
+            convertDimension(server, new DimensionRegions(dimKey, regions, scanResult.skippedEmptyCount(), scanResult.fileEntries()), true);
         } finally {
             isRunning.set(false);
             currentStatus = "completed";
@@ -513,7 +513,10 @@ public class ConversionOrchestrator {
 
         McaTimestampCache mcaCache = getTimestampCache();
         GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
-        List<RegionCoords> needsUpdate = force ? dimRegions.regions() : mcaCache.scanAndUpdate(dimPath, regionDir);
+        List<RegionCoords> needsUpdate = force ? dimRegions.regions()
+            : (!dimRegions.fileEntries().isEmpty()
+                ? mcaCache.classifyUpdates(dimPath, dimRegions.fileEntries())
+                : mcaCache.scanAndUpdate(dimPath, regionDir));
         List<RegionCoords> regions = dimRegions.regions();
 
         LOGGER.info("Dimension {}: {} total regions, {} need update (force={})", dimPath, regions.size(), needsUpdate.size(), force);
