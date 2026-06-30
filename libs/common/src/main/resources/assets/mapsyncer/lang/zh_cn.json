@@ -4,6 +4,8 @@
   "mapsyncer.sync.completed": "同步完成! %d 个区域，耗时 %d 秒",
   "mapsyncer.sync.in_progress": "正在同步中，请等待当前同步完成后再试",
   "mapsyncer.sync.progress": "进度: %d/%d (%d%%)",
+  "mapsyncer.sync.hash_computing": "正在计算区域哈希...",
+  "mapsyncer.sync.hash_progress": "计算哈希: %d/%d (%d%%)",
   "mapsyncer.sync.cancelled": "同步已取消",
   "mapsyncer.sync.timeout": "同步超时，请重试",
   "mapsyncer.sync.partial": "地图同步部分完成，部分区域可能未成功应用",

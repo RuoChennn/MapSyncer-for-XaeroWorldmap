@@ -32,6 +32,15 @@ public class SyncProgressTracker {
     /** 是否正在追踪进度 */
     private static volatile boolean tracking = false;
 
+    /** 是否正在计算同步前哈希 */
+    private static volatile boolean hashScanning = false;
+
+    /** 哈希扫描已处理数 */
+    private static volatile int hashScanProcessed = 0;
+
+    /** 哈希扫描总数 */
+    private static volatile int hashScanTotal = 0;
+
     /** 已处理的区域数 */
     private static volatile int processed = 0;
 
@@ -58,6 +67,60 @@ public class SyncProgressTracker {
 
     /** 当前超时检查任务的Future（用于取消） */
     private static volatile java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
+
+    /**
+     * 开始同步前哈希扫描进度追踪。
+     */
+    public static void startHashScan(int total) {
+        hashScanning = true;
+        hashScanProcessed = 0;
+        hashScanTotal = total;
+        lastDisplayedPercent = -1;
+        scheduleHashScanDisplay();
+    }
+
+    /**
+     * 更新哈希扫描进度（可从后台线程调用）。
+     */
+    public static void updateHashScan(int processed, int total) {
+        if (!hashScanning) {
+            return;
+        }
+        hashScanProcessed = processed;
+        hashScanTotal = total;
+        scheduleHashScanDisplay();
+    }
+
+    /**
+     * 结束哈希扫描进度追踪。
+     */
+    public static void completeHashScan() {
+        hashScanning = false;
+    }
+
+    /**
+     * 是否正在计算同步前哈希。
+     */
+    public static boolean isHashScanning() {
+        return hashScanning;
+    }
+
+    private static void scheduleHashScanDisplay() {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.player == null || !hashScanning) {
+                return;
+            }
+            if (hashScanTotal > 0) {
+                int percent = (hashScanProcessed * 100) / hashScanTotal;
+                ClientMessageHelper.sendOverlayMessage(
+                        ChatUtils.message("mapsyncer.sync.hash_progress", hashScanProcessed, hashScanTotal, percent));
+            } else {
+                ClientMessageHelper.sendOverlayMessage(
+                        ChatUtils.message("mapsyncer.sync.hash_computing"));
+            }
+        });
+    }
 
     /**
      * 开始追踪同步进度。

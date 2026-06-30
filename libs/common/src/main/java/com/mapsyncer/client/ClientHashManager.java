@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -121,35 +122,49 @@ public class ClientHashManager {
     }
 
     /**
-     * 收集所有区域的修改时间戳和哈希值。
-     * 用于与服务端的生成缓存进行比较。
+     * 是否有哈希元数据计算正在进行。
+     */
+    public static boolean isComputingMeta() {
+        return poolUsers.get() > 0;
+    }
+
+    /**
+     * 收集所有区域的修改时间戳和哈希值（同步，阻塞调用线程）。
      *
-     * <p>同步逻辑：</p>
-     * <ul>
-     *   <li>哈希匹配 → 跳过同步（文件内容相同）</li>
-     *   <li>哈希不匹配 + 客户端时间戳较旧 → 同步</li>
-     * </ul>
-     *
-     * <p>使用上次同步时缓存的（存储在 sync_timestamps.cache 中）
-     * 时间戳，避免文件写入后修改时间变化导致的问题。</p>
-     *
-     * <p>使用并行处理（限制2个线程）避免在计算大量区域哈希时阻塞游戏。</p>
-     *
-     * @param mapDir 要扫描的目录：
-     *               - 单维度同步时使用 mw$worldId 目录
-     *               - 全维度同步时使用 Multiplayer_<server> 目录
-     * @return 相对路径到 ClientMeta（时间戳秒 + 哈希）的映射
+     * @see #computeMetaForSyncAsync(Path, Consumer)
      */
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
         poolUsers.incrementAndGet();
         try {
-            return computeMetaForSyncInternal(mapDir);
+            return computeMetaForSyncWorker(mapDir, false);
         } finally {
             poolUsers.decrementAndGet();
         }
     }
 
-    private static Map<String, ClientMeta> computeMetaForSyncInternal(Path mapDir) {
+    /**
+     * 异步收集区域元数据，不阻塞调用线程；计算期间通过 {@link SyncProgressTracker} 显示进度。
+     *
+     * @param mapDir 要扫描的目录
+     * @param onComplete 完成回调（在后台线程调用，调用方应调度到主线程后再发网络包）
+     */
+    public static void computeMetaForSyncAsync(Path mapDir, Consumer<Map<String, ClientMeta>> onComplete) {
+        poolUsers.incrementAndGet();
+        getSharedPool().submit(() -> {
+            try {
+                Map<String, ClientMeta> result = computeMetaForSyncWorker(mapDir, true);
+                onComplete.accept(result);
+            } catch (Exception e) {
+                LOGGER.error("Failed to compute hashes asynchronously", e);
+                onComplete.accept(new ConcurrentHashMap<>());
+            } finally {
+                SyncProgressTracker.completeHashScan();
+                poolUsers.decrementAndGet();
+            }
+        });
+    }
+
+    private static Map<String, ClientMeta> computeMetaForSyncWorker(Path mapDir, boolean reportProgress) {
         Map<String, ClientMeta> metaMap = new ConcurrentHashMap<>();
 
         if (mapDir == null || !Files.exists(mapDir)) {
@@ -181,6 +196,14 @@ public class ClientHashManager {
 
         LOGGER.info("Computing hashes for {} region files in {} (parallel threads={})", zipFiles.size(), mapDir, currentPoolThreads);
 
+        if (reportProgress && !zipFiles.isEmpty()) {
+            SyncProgressTracker.startHashScan(zipFiles.size());
+        }
+
+        AtomicInteger processed = new AtomicInteger();
+        AtomicInteger lastReportedPercent = new AtomicInteger(-1);
+        int totalFiles = zipFiles.size();
+
         // 使用共享的 ForkJoinPool（配置线程数）避免阻塞游戏和重复创建开销
         ForkJoinPool pool = getSharedPool();
         try {
@@ -211,9 +234,19 @@ public class ClientHashManager {
 
                                 } catch (Exception e) {
                                     LOGGER.warn("Invalid region filename: {}", zipPath, e);
+                                } finally {
+                                    if (reportProgress && totalFiles > 0) {
+                                        int done = processed.incrementAndGet();
+                                        int percent = (done * 100) / totalFiles;
+                                        int prev = lastReportedPercent.get();
+                                        if (done == totalFiles || percent >= prev + 10) {
+                                            lastReportedPercent.set(percent);
+                                            SyncProgressTracker.updateHashScan(done, totalFiles);
+                                        }
+                                    }
                                 }
                             })
-            ).get(60, TimeUnit.SECONDS);  // Wait for completion with timeout
+            ).join();
         } catch (Exception e) {
             LOGGER.error("Failed to compute hashes in parallel", e);
         }

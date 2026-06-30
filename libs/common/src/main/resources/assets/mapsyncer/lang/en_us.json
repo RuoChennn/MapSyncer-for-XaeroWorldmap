@@ -4,6 +4,8 @@
   "mapsyncer.sync.completed": "Sync completed! %d regions in %ds",
   "mapsyncer.sync.in_progress": "Sync is already in progress, please wait",
   "mapsyncer.sync.progress": "Progress: %d/%d (%d%%)",
+  "mapsyncer.sync.hash_computing": "Computing region hashes...",
+  "mapsyncer.sync.hash_progress": "Computing hashes: %d/%d (%d%%)",
   "mapsyncer.sync.cancelled": "Sync cancelled",
   "mapsyncer.sync.timeout": "Sync timed out, please try again",
   "mapsyncer.sync.partial": "Map sync partially complete; some regions may be missing on the client",

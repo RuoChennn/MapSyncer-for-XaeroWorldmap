@@ -225,14 +225,12 @@ public class MapSyncerCommandLogic {
      * 发送同步请求到服务端。
      */
     public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
-        if (MapPacketHandler.isSyncInProgress()) {
+        if (MapPacketHandler.isSyncInProgress() || ClientHashManager.isComputingMeta()) {
             if (mc.player != null) {
                 mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.in_progress"));
             }
             return;
         }
-
-        Map<String, ClientMeta> metaMap;
 
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
 
@@ -242,31 +240,55 @@ public class MapSyncerCommandLogic {
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         String xaeroDim = syncAll ? null : dimMapping.toXaeroDimension(dimensionId);
 
+        Path scanDir = null;
+        Map<String, ClientMeta> immediateMeta = null;
+
         if (syncAll) {
             if (serverDir != null && tsCache != null && tsCache.cacheFileExists()) {
-                metaMap = ClientHashManager.computeMetaForSync(serverDir);
-                LOGGER.debug("Sync all: {} cached entries", metaMap.size());
+                scanDir = serverDir;
             } else {
-                metaMap = new java.util.HashMap<>();
+                immediateMeta = new java.util.HashMap<>();
                 LOGGER.debug("First sync all, sending empty request");
             }
-        } else {
-            if (tsCache != null && tsCache.cacheFileExists() && tsCache.hasDimensionSynced(xaeroDim)) {
-                Path dimDir = serverDir.resolve(xaeroDim);
-                Path mwDir = findMwDir(dimDir);
-                if (mwDir != null) {
-                    metaMap = ClientHashManager.computeMetaForSync(mwDir);
-                    LOGGER.debug("Dimension {} previously synced, {} entries", dimensionId, metaMap.size());
-                } else {
-                    metaMap = new java.util.HashMap<>();
-                    metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
-                    LOGGER.warn("Dimension {} has cache but no mw$ dir", dimensionId);
-                }
+        } else if (tsCache != null && tsCache.cacheFileExists() && tsCache.hasDimensionSynced(xaeroDim)) {
+            Path dimDir = serverDir.resolve(xaeroDim);
+            Path mwDir = findMwDir(dimDir);
+            if (mwDir != null) {
+                scanDir = mwDir;
             } else {
-                metaMap = new java.util.HashMap<>();
-                metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
-                LOGGER.debug("First sync for {}", dimensionId);
+                immediateMeta = new java.util.HashMap<>();
+                immediateMeta.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
+                LOGGER.warn("Dimension {} has cache but no mw$ dir", dimensionId);
             }
+        } else {
+            immediateMeta = new java.util.HashMap<>();
+            immediateMeta.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
+            LOGGER.debug("First sync for {}", dimensionId);
+        }
+
+        if (immediateMeta != null) {
+            dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, immediateMeta);
+            return;
+        }
+
+        ClientHashManager.computeMetaForSyncAsync(scanDir, metaMap ->
+                mc.execute(() -> {
+                    if (mc.player == null) {
+                        return;
+                    }
+                    LOGGER.debug("Sync hash scan complete: {} entries", metaMap.size());
+                    dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, metaMap);
+                }));
+    }
+
+    private static void dispatchSyncRequest(Minecraft mc, String dimensionId, boolean syncAll,
+            Path serverDir, ClientTimestampCache tsCache, String xaeroDim,
+            Map<String, ClientMeta> metaMap) {
+        if (MapPacketHandler.isSyncInProgress()) {
+            if (mc.player != null) {
+                mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.in_progress"));
+            }
+            return;
         }
 
         LOGGER.debug("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);

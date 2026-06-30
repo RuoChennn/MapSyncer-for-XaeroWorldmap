@@ -6,12 +6,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.CheckedOutputStream;
+import java.util.zip.CRC32;
 
 /**
  * Xaero 地图数据处理器（跨版本公共）。
@@ -138,8 +144,10 @@ public final class XaeroMapDataHandler {
         LOGGER.debug("Recorded {} updated region coords for selective reset", updatedRegions.size());
     }
 
-    /** 写入结果：mw 目录与最终 zip 路径。 */
-    public record RegionWriteResult(Path mwDir, Path outputFile) {}
+    /**
+     * 写入结果：mw 目录、最终 zip 路径，以及写盘时计算的 CRC32（与 {@link HashUtils#computeFileHash} 一致）。
+     */
+    public record RegionWriteResult(Path mwDir, Path outputFile, String crc32Hash) {}
 
     /**
      * 写入区块数据到 Xaero 地图目录结构。
@@ -174,10 +182,14 @@ public final class XaeroMapDataHandler {
             return null;
         }
 
+        CRC32 crc32 = new CRC32();
         try {
             Files.createDirectories(targetDir);
 
-            Files.write(tempFile, chunk.data);
+            try (OutputStream fileOut = Files.newOutputStream(tempFile);
+                 CheckedOutputStream checkedOut = new CheckedOutputStream(fileOut, crc32)) {
+                checkedOut.write(chunk.data);
+            }
             Files.move(tempFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
             LOGGER.debug("Wrote map file: {} (layer={}, {} bytes)", outputFile,
                 chunk.isSurfaceLayer() ? "surface" : chunk.caveLayer, chunk.data.length);
@@ -186,7 +198,7 @@ public final class XaeroMapDataHandler {
             return null;
         }
 
-        return new RegionWriteResult(mwDir, outputFile);
+        return new RegionWriteResult(mwDir, outputFile, String.format("%08x", crc32.getValue()));
     }
 
     /**
@@ -210,10 +222,9 @@ public final class XaeroMapDataHandler {
 
             if (tsCache != null) {
                 String relativePath = buildRelativePathForCache(chunk);
-                String hash = HashUtils.computeFileHash(result.outputFile());
-                tsCache.update(relativePath, chunk.timestampSeconds, hash);
+                tsCache.update(relativePath, chunk.timestampSeconds, result.crc32Hash());
                 LOGGER.debug("Updated timestamp cache for {}: ts={}s, hash={}",
-                        relativePath, chunk.timestampSeconds, hash);
+                        relativePath, chunk.timestampSeconds, result.crc32Hash());
             }
         }
 
@@ -227,17 +238,8 @@ public final class XaeroMapDataHandler {
 
     /**
      * 构建时间戳缓存的相对路径（匹配服务端 GenerationCache 格式）。
-     *
-     * <p>格式：</p>
-     * <ul>
-     *   <li>地表：xaeroDim/regionX_regionZ（如 twilightforest$twilight_forest/0_0）</li>
-     *   <li>洞穴：xaeroDim/caves/layer/regionX_regionZ</li>
-     * </ul>
-     *
-     * @param chunk 区块数据
-     * @return 相对路径字符串
      */
-    private static String buildRelativePathForCache(ChunkMapData chunk) {
+    public static String buildRelativePathForCache(ChunkMapData chunk) {
         String xaeroDim = chunk.dimension;
 
         if (chunk.caveLayer == Integer.MAX_VALUE) {
@@ -245,5 +247,56 @@ public final class XaeroMapDataHandler {
         } else {
             return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
         }
+    }
+
+    /**
+     * 清除单个 region 的 Xaero 运行时缓存文件（.xwmc），可在 IO 线程调用。
+     */
+    public static void clearRegionCacheFiles(Path mwDir, RegionCoord coord) {
+        if (mwDir == null) {
+            return;
+        }
+
+        String cacheFileName = coord.x() + "_" + coord.z() + ".xwmc";
+        for (Path cacheDir : findCacheDirectories(mwDir)) {
+            Path cacheFile = cacheDir.resolve(cacheFileName);
+            if (Files.exists(cacheFile)) {
+                try {
+                    Files.deleteIfExists(cacheFile);
+                    LOGGER.debug("Cleared region cache: {}", cacheFile);
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to clear region cache: {}", cacheFile, e);
+                }
+                return;
+            }
+        }
+    }
+
+    private static List<Path> findCacheDirectories(Path mwDir) {
+        List<Path> cacheDirs = new ArrayList<>();
+
+        try {
+            Path cache = mwDir.resolve("cache");
+            Path cache1 = mwDir.resolve("cache_1");
+
+            if (Files.isDirectory(cache)) {
+                cacheDirs.add(cache);
+            }
+            if (Files.isDirectory(cache1)) {
+                cacheDirs.add(cache1);
+            }
+
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(mwDir, "cache_*")) {
+                for (Path dir : stream) {
+                    if (Files.isDirectory(dir) && !cacheDirs.contains(dir)) {
+                        cacheDirs.add(dir);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Failed to find cache directories under {}", mwDir, e);
+        }
+
+        return cacheDirs;
     }
 }

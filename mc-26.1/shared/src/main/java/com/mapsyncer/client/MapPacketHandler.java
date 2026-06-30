@@ -12,7 +12,6 @@ import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
-import com.mapsyncer.util.HashUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
@@ -23,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 客户端断开连接时的统一清理入口。
@@ -40,7 +40,8 @@ public class MapPacketHandler {
      * @return true 表示同步正在进行（含视距外重载排空）
      */
     public static boolean isSyncInProgress() {
-        return session.isSessionActive() || !pendingRegionLoads.isEmpty();
+        return session.isSessionActive() || !pendingRegionLoads.isEmpty()
+                || ClientSyncWriteQueue.hasPendingWrites();
     }
 
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
@@ -84,6 +85,12 @@ public class MapPacketHandler {
     /** 分片重组缓冲区：key = "regionX,regionZ,dimension,caveLayer"，value = 分片数组+首片到达时间 */
     private record PartEntry(ChunkMapData[] parts, long firstArrivedMs) {}
     private static final ConcurrentHashMap<String, PartEntry> partBuffer = new ConcurrentHashMap<>();
+
+    /** 已收到 isComplete 但仍有异步写盘未完成 */
+    private static volatile boolean syncFinishRequested = false;
+    private static volatile int syncFinishGeneration = -1;
+    private static volatile SyncOutcome syncFinishOutcome = SyncOutcome.NONE;
+    private static volatile ClientTimestampCache syncFinishTsCache = null;
 
     private static String partKey(ChunkMapData chunk) {
         return chunk.regionX + "," + chunk.regionZ + "," + chunk.dimension + "," + chunk.caveLayer;
@@ -188,6 +195,10 @@ public class MapPacketHandler {
         partBuffer.clear();
         pendingRegionLoads.clear();
         lastMwDir = null;
+        syncFinishRequested = false;
+        syncFinishGeneration = -1;
+        syncFinishOutcome = SyncOutcome.NONE;
+        syncFinishTsCache = null;
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
@@ -385,104 +396,140 @@ public class MapPacketHandler {
             Minecraft mc = Minecraft.getInstance();
             boolean isCaveDimension = mc.level != null && mc.level.dimension() == Level.NETHER;
 
-            // 流式处理：写入后立即处理
+            // 流式处理：异步写盘，主线程仅做 Xaero 反射重载
             cleanStaleParts();
+            AtomicInteger batchPending = new AtomicInteger();
+            AtomicInteger submittedCount = new AtomicInteger();
+
             for (ChunkMapData chunk : chunks) {
-                // 组装分片
                 ChunkMapData assembled = assemblePart(chunk);
                 if (assembled == null) {
-                    continue; // 分片尚未到齐，等待后续包
+                    continue;
+                }
+
+                if (serverDir == null) {
+                    LOGGER.error("无法获取服务器目录，跳过 region ({}, {})",
+                            assembled.regionX, assembled.regionZ);
+                    continue;
                 }
 
                 XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                     assembled.regionX, assembled.regionZ, assembled.caveLayer);
                 updatedRegionCoords.add(coord);
 
-                // 写入文件
-                XaeroMapDataHandler.RegionWriteResult writeResult =
-                        XaeroMapIntegrator.writeChunkDataResult(assembled, serverWorldId);
-                if (writeResult == null) {
-                    LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
-                            assembled.regionX, assembled.regionZ, assembled.data.length);
-                    continue;
-                }
-                lastMwDir = writeResult.mwDir();
-
-                // 根据维度类型决定处理哪个层
                 boolean shouldProcess = isCaveDimension
-                    ? (assembled.caveLayer != Integer.MAX_VALUE)  // 地狱：洞穴层
-                    : (assembled.caveLayer == Integer.MAX_VALUE); // 主世界/末地：地表层
+                    ? (assembled.caveLayer != Integer.MAX_VALUE)
+                    : (assembled.caveLayer == Integer.MAX_VALUE);
 
-                // 判断是否在视距内
                 Set<XaeroMapDataHandler.RegionCoord> viewRegionsForLayer =
                     XaeroMapIntegrator.getViewDistanceRegions(assembled.caveLayer);
                 boolean inViewDistance = viewRegionsForLayer.contains(coord);
 
-                if (shouldProcess && !session.reflectionFailed()) {
-                    clearSingleRegionCache(coord);
-                    if (inViewDistance) {
-                        triggerSingleRegionLoad(coord, assembled.caveLayer, true);
-                    } else {
-                        pendingRegionLoads.add(new PendingRegionLoad(coord.x(), coord.z(), assembled.caveLayer));
-                    }
-                    LOGGER.debug("区域 ({}, {}) layer={} inView={} 已清除缓存并触发加载",
-                        coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
-                } else if (shouldProcess) {
-                    LOGGER.debug("区域 ({}, {}) 已写入磁盘，反射不可用跳过运行时重载", coord.x(), coord.z());
-                }
+                submittedCount.incrementAndGet();
+                batchPending.incrementAndGet();
+                final int gen = generationAtEnqueue;
+                final ClientTimestampCache batchTsCache = tsCache;
 
-                // 更新时间戳缓存（使用磁盘文件哈希，与下次同步请求一致）
-                if (tsCache != null) {
-                    String relativePath = buildRelativePathForCache(assembled);
-                    String hash = HashUtils.computeFileHash(writeResult.outputFile());
-                    tsCache.update(relativePath, assembled.timestampSeconds, hash);
-                }
-            }
-
-            // 保存时间戳缓存
-            if (tsCache != null && !chunks.isEmpty()) {
-                tsCache.save();
-            }
-
-            // 同步完成时处理（服务端比对哈希后决定发送哪些 region，收到 isComplete 即视为成功）
-            if (payload.isComplete()) {
-                int totalReceived = updatedRegionCoords.size();
-                LOGGER.info("同步完成: 总计 {} 个区域已处理", totalReceived);
-
-                lastSyncCompleteTs = System.currentTimeMillis();
-
-                SyncOutcome finalOutcome = serverOutcome == SyncOutcome.PARTIAL_SUCCESS || session.reflectionFailed()
-                        ? SyncOutcome.PARTIAL_SUCCESS
-                        : SyncOutcome.SUCCESS;
-                session.setOutcome(finalOutcome);
-
-                if (!updatedRegionCoords.isEmpty()) {
-                    XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
-                    SyncProgressTracker.completeWithCount(totalReceived);
-
-                    if (AutoSyncManager.isActive()) {
-                        AutoSyncManager.markComplete();
-                        if (Minecraft.getInstance().player != null) {
-                            Minecraft.getInstance().player.sendSystemMessage(
-                                ChatUtils.success("mapsyncer.autosync.complete"));
+                ClientSyncWriteQueue.submit(assembled, serverDir, serverWorldId, tsCache, writeResult -> {
+                    mc.execute(() -> {
+                        if (!session.isCurrent(gen)) {
+                            return;
                         }
-                    }
 
-                    if (tsCache != null) {
-                        tsCache.markSyncComplete();
-                    }
-                    notifySyncOutcome(finalOutcome);
-                } else {
-                    LOGGER.info("Sync complete with no data received");
-                    if (tsCache != null) {
-                        tsCache.markSyncComplete();
-                    }
-                }
+                        if (writeResult == null) {
+                            LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
+                                    assembled.regionX, assembled.regionZ, assembled.data.length);
+                        } else {
+                            lastMwDir = writeResult.mwDir();
 
-                clearSyncStateAfterComplete();
-                scheduleDeferredReloadCleanup();
+                            if (shouldProcess && !session.reflectionFailed()) {
+                                if (inViewDistance) {
+                                    triggerSingleRegionLoad(coord, assembled.caveLayer, true);
+                                } else {
+                                    pendingRegionLoads.add(new PendingRegionLoad(
+                                            coord.x(), coord.z(), assembled.caveLayer));
+                                }
+                                LOGGER.debug("区域 ({}, {}) layer={} inView={} 已写入并触发加载",
+                                        coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
+                            } else if (shouldProcess) {
+                                LOGGER.debug("区域 ({}, {}) 已写入磁盘，反射不可用跳过运行时重载",
+                                        coord.x(), coord.z());
+                            }
+                        }
+
+                        if (batchPending.decrementAndGet() == 0 && batchTsCache != null
+                                && submittedCount.get() > 0) {
+                            ClientSyncWriteQueue.saveTimestampCacheAsync(batchTsCache);
+                        }
+                        tryCompleteSync(gen);
+                    });
+                });
+            }
+
+            if (payload.isComplete()) {
+                requestSyncFinish(generationAtEnqueue, serverOutcome, tsCache);
+            }
+            if (submittedCount.get() == 0) {
+                tryCompleteSync(generationAtEnqueue);
             }
         });
+    }
+
+    private static void requestSyncFinish(int generation, SyncOutcome serverOutcome, ClientTimestampCache tsCache) {
+        syncFinishRequested = true;
+        syncFinishGeneration = generation;
+        syncFinishOutcome = serverOutcome;
+        syncFinishTsCache = tsCache;
+        tryCompleteSync(generation);
+    }
+
+    private static void tryCompleteSync(int generation) {
+        if (!syncFinishRequested || ClientSyncWriteQueue.hasPendingWrites()) {
+            return;
+        }
+        if (!session.isCurrent(generation)) {
+            return;
+        }
+
+        syncFinishRequested = false;
+        SyncOutcome serverOutcome = syncFinishOutcome;
+        ClientTimestampCache tsCache = syncFinishTsCache;
+
+        int totalReceived = updatedRegionCoords.size();
+        LOGGER.info("同步完成: 总计 {} 个区域已处理", totalReceived);
+
+        lastSyncCompleteTs = System.currentTimeMillis();
+
+        SyncOutcome finalOutcome = serverOutcome == SyncOutcome.PARTIAL_SUCCESS || session.reflectionFailed()
+                ? SyncOutcome.PARTIAL_SUCCESS
+                : SyncOutcome.SUCCESS;
+        session.setOutcome(finalOutcome);
+
+        if (!updatedRegionCoords.isEmpty()) {
+            XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
+            SyncProgressTracker.completeWithCount(totalReceived);
+
+            if (AutoSyncManager.isActive()) {
+                AutoSyncManager.markComplete();
+                if (Minecraft.getInstance().player != null) {
+                    Minecraft.getInstance().player.sendSystemMessage(
+                            ChatUtils.success("mapsyncer.autosync.complete"));
+                }
+            }
+
+            if (tsCache != null) {
+                tsCache.markSyncComplete();
+            }
+            notifySyncOutcome(finalOutcome);
+        } else {
+            LOGGER.info("Sync complete with no data received");
+            if (tsCache != null) {
+                tsCache.markSyncComplete();
+            }
+        }
+
+        clearSyncStateAfterComplete();
+        scheduleDeferredReloadCleanup();
     }
 
     private static void notifySyncOutcome(SyncOutcome outcome) {
@@ -738,74 +785,6 @@ public class MapPacketHandler {
      */
     public static boolean hasPendingLoads() {
         return !pendingRegionLoads.isEmpty();
-    }
-
-    /**
-     * 清除单个区域的缓存文件。
-     */
-    private static void clearSingleRegionCache(XaeroMapDataHandler.RegionCoord coord) {
-        if (lastMwDir == null) return;
-
-        String cacheFileName = coord.x() + "_" + coord.z() + ".xwmc";
-        List<Path> cacheDirs = findCacheDirectories(lastMwDir);
-
-        for (Path cacheDir : cacheDirs) {
-            Path cacheFile = cacheDir.resolve(cacheFileName);
-            if (cacheFile.toFile().exists()) {
-                try {
-                    java.nio.file.Files.deleteIfExists(cacheFile);
-                    LOGGER.debug("已清除缓存: {}", cacheFile);
-                } catch (Exception e) {
-                    LOGGER.warn("清除缓存失败: {}", cacheFile);
-                }
-                return;
-            }
-        }
-    }
-
-    /**
-     * 构建时间戳缓存的服务器格式相对路径。
-     */
-    private static String buildRelativePathForCache(ChunkMapData chunk) {
-        String xaeroDim = chunk.dimension;
-        if (chunk.caveLayer == Integer.MAX_VALUE) {
-            return xaeroDim + "/" + chunk.regionX + "_" + chunk.regionZ;
-        } else {
-            return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
-        }
-    }
-
-    /**
-     * 在 mw 目录下查找所有缓存目录。
-     */
-    private static java.util.List<Path> findCacheDirectories(Path mwDir) {
-        java.util.List<Path> cacheDirs = new java.util.ArrayList<>();
-
-        try {
-            Path cache = mwDir.resolve("cache");
-            Path cache1 = mwDir.resolve("cache_1");
-
-            if (cache.toFile().exists() && cache.toFile().isDirectory()) {
-                cacheDirs.add(cache);
-            }
-            if (cache1.toFile().exists() && cache1.toFile().isDirectory()) {
-                cacheDirs.add(cache1);
-            }
-
-            try (java.nio.file.DirectoryStream<Path> stream = java.nio.file.Files.newDirectoryStream(mwDir, "cache_*")) {
-                for (Path dir : stream) {
-                    if (dir.toFile().isDirectory() && !cacheDirs.contains(dir)) {
-                        cacheDirs.add(dir);
-                    }
-                }
-            }
-
-            LOGGER.debug("Found {} cache directories", cacheDirs.size());
-        } catch (Exception e) {
-            LOGGER.warn("Failed to find cache directories: {}", e.getMessage());
-        }
-
-        return cacheDirs;
     }
 
     /**
