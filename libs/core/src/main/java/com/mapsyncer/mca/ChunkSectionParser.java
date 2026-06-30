@@ -55,6 +55,9 @@ public class ChunkSectionParser {
         String name,                        // 方块名称 "minecraft:stone"
         Map<String, String> properties      // 属性 {snowy: "false", facing: "north"}
     ) {
+        /** 无属性方块的共享空 map，避免 parse 时重复分配。 */
+        public static final Map<String, String> EMPTY_PROPERTIES = Map.of();
+
         /**
          * 获取完整方块ID（带属性）
          *
@@ -352,16 +355,26 @@ public class ChunkSectionParser {
      */
     private static BlockState parseBlockState(Tag.Compound stateTag) {
         String name = stateTag.getString("Name");
-        Map<String, String> properties = new LinkedHashMap<>();
 
-        if (stateTag.contains("Properties", Tag.TAG_COMPOUND)) {
-            Tag.Compound propsTag = stateTag.getCompound("Properties");
-            for (Map.Entry<String, Tag> entry : propsTag.children().entrySet()) {
-                Tag propTag = entry.getValue();
-                if (propTag instanceof Tag.StringTag str) {
-                    properties.put(entry.getKey(), str.value());
-                }
+        if (!stateTag.contains("Properties", Tag.TAG_COMPOUND)) {
+            return new BlockState(name, BlockState.EMPTY_PROPERTIES);
+        }
+
+        Tag.Compound propsTag = stateTag.getCompound("Properties");
+        if (propsTag.children().isEmpty()) {
+            return new BlockState(name, BlockState.EMPTY_PROPERTIES);
+        }
+
+        Map<String, String> properties = new LinkedHashMap<>();
+        for (Map.Entry<String, Tag> entry : propsTag.children().entrySet()) {
+            Tag propTag = entry.getValue();
+            if (propTag instanceof Tag.StringTag str) {
+                properties.put(entry.getKey(), str.value());
             }
+        }
+
+        if (properties.isEmpty()) {
+            return new BlockState(name, BlockState.EMPTY_PROPERTIES);
         }
 
         return new BlockState(name, properties);

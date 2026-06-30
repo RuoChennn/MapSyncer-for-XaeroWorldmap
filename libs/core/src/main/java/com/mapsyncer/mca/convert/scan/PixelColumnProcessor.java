@@ -243,7 +243,6 @@ public final class PixelColumnProcessor {
         data.hasData[relX][relZ] = true;
         BlockState stored = surfaceState != null ? surfaceState : XaeroBlockStateNbtWriter.AIR;
         data.blockStates[relX][relZ] = stored;
-        data.blockNames[relX][relZ] = stored.name();
         data.topBlockY[relX][relZ] = highestBlockY;
         data.heightMap[relX][relZ] = topY;
         data.lightMap[relX][relZ] = surfaceLight;
