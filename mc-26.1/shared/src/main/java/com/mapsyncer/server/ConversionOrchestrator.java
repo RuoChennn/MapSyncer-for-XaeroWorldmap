@@ -709,14 +709,14 @@ public class ConversionOrchestrator {
         }
 
         try {
-            Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
+            XaeroWriter.RegionWriteResult writeResult = XaeroWriter.writeRegionFile(outputDir, converted);
             mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
 
             String relativePath = caveLayer == Integer.MAX_VALUE
                 ? xaeroDimName + "/" + coords.x() + "_" + coords.z()
                 : xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
 
-            genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
+            genCache.update(relativePath, generationTimeSeconds, writeResult.crc32Hash());
 
         } catch (IOException e) {
             LOGGER.error("Failed to write region file", e);
@@ -935,7 +935,7 @@ public class ConversionOrchestrator {
 
                 if (converted != null) {
                     try {
-                        Path outputFile = XaeroWriter.writeRegionFile(outputDir, converted);
+                        XaeroWriter.RegionWriteResult writeResult = XaeroWriter.writeRegionFile(outputDir, converted);
                         mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
 
                         String relativePath;
@@ -944,7 +944,7 @@ public class ConversionOrchestrator {
                         } else {
                             relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
                         }
-                        genCache.updateWithHash(relativePath, outputFile, generationTimeSeconds);
+                        genCache.update(relativePath, generationTimeSeconds, writeResult.crc32Hash());
 
                         totalUpdated++;
                         LOGGER.debug("Incrementally updated region ({}, {}) in {} (layer={})", coords.x(), coords.z(), dimPath, caveLayer == Integer.MAX_VALUE ? "surface" : caveLayer);

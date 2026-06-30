@@ -3,10 +3,13 @@ package com.mapsyncer.server;
 import com.mapsyncer.mca.RegionConverterStandalone.ConvertedRegion;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.zip.CheckedOutputStream;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -63,21 +66,29 @@ public class XaeroWriter {
     }
 
     /**
-     * 将转换后的区域数据写入zip文件
+     * 区域 zip 写入结果（路径 + 写入时计算的 CRC32，与 {@link com.mapsyncer.util.HashUtils} 读盘结果一致）。
+     */
+    public record RegionWriteResult(Path path, String crc32Hash) {}
+
+    /**
+     * 将转换后的区域数据写入 zip 文件，并在单次写盘中计算 CRC32。
      *
      * @param outputDir 输出目录路径
      * @param region 转换后的区域数据
-     * @return 写入的zip文件路径
-     * @throws IOException 如果写入过程中发生IO错误
+     * @return 最终文件路径与 CRC32 哈希（8 位十六进制）
+     * @throws IOException 如果写入过程中发生 IO 错误
      */
-    public static Path writeRegionFile(Path outputDir, ConvertedRegion region) throws IOException {
+    public static RegionWriteResult writeRegionFile(Path outputDir, ConvertedRegion region) throws IOException {
         Files.createDirectories(outputDir);
 
         String fileName = region.regionX() + "_" + region.regionZ();
         Path tempFile = outputDir.resolve(fileName + ".zip.temp");
         Path finalFile = outputDir.resolve(fileName + ".zip");
 
-        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tempFile))) {
+        CRC32 crc32 = new CRC32();
+        try (OutputStream fileOut = Files.newOutputStream(tempFile);
+             CheckedOutputStream checkedOut = new CheckedOutputStream(fileOut, crc32);
+             ZipOutputStream zos = new ZipOutputStream(checkedOut)) {
             ZipEntry entry = new ZipEntry("region.xaero");
             zos.putNextEntry(entry);
             zos.write(region.xaeroData());
@@ -85,7 +96,7 @@ public class XaeroWriter {
         }
 
         Files.move(tempFile, finalFile, StandardCopyOption.REPLACE_EXISTING);
-        return finalFile;
+        return new RegionWriteResult(finalFile, String.format("%08x", crc32.getValue()));
     }
 
     /**
