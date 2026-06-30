@@ -4,6 +4,7 @@ import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.ServerInstalledWireCodec;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncRequestWireCodec;
@@ -142,13 +143,11 @@ public class FabricPayloadAdapters {
     // ===== 服务端已安装序列化 =====
 
     private static void writeServerInstalled(RegistryFriendlyByteBuf buf, ServerInstalledPayload payload) {
-        buf.writeUtf(payload.version());
-        buf.writeLong(payload.lastGenerationTimestamp());
-        buf.writeInt(payload.autoSyncIntervalMinutes());
+        ServerInstalledWireCodec.write(buf, payload);
     }
 
     private static ServerInstalledPayload readServerInstalled(RegistryFriendlyByteBuf buf) {
-        return new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt());
+        return ServerInstalledWireCodec.read(buf);
     }
 
     // ===== ChunkMapData 序列化 =====

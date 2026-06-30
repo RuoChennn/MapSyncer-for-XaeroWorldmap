@@ -95,13 +95,20 @@
   "mapsyncer.autosync.status.minutes": "Auto-sync: Every %d min",
   "mapsyncer.autosync.status.daily": "Auto-sync: Daily",
 
+  "mapsyncer.autosync.periodic.start": "Periodic sync: waiting for server...",
+  "mapsyncer.autosync.periodic.hash_computing": "Periodic sync: scanning local maps...",
+  "mapsyncer.autosync.periodic.hash_progress": "Periodic sync: scanning %d/%d (%d%%)",
+  "mapsyncer.autosync.periodic.progress": "Periodic sync: %d/%d (%d%%)",
+  "mapsyncer.autosync.periodic.complete": "Periodic sync complete: %d regions (%ds)",
+  "mapsyncer.autosync.periodic.uptodate": "Periodic sync: map already up-to-date",
+
   "option.mapsyncer.hash_threads.tooltip": "Parallel threads used when scanning local map files and reading cached version info before sync. Higher values may speed up preparation but increase CPU usage.",
   "option.mapsyncer.debug.tooltip": "When enabled, detailed map generation debug information will be output to the log.",
   "option.mapsyncer.concurrent_regions.tooltip": "Maximum number of regions converted simultaneously. Higher values process faster but demand more server CPU.",
   "option.mapsyncer.packet_size.tooltip": "Maximum bytes per network packet during sync. Excessively large packets may be dropped on unstable connections.",
   "option.mapsyncer.speed_limit.tooltip": "Maximum transfer rate (KB/s) during sync. Set to 0 for unlimited. Too high may impact game network quality.",
-  "option.mapsyncer.update_mode.tooltip": "Server-side map cache incremental update strategy.\n\nDISABLED - No incremental updates, also disables client auto-sync.\nTICK - Periodic tick-based updates. Client auto-sync interval = max(tick_minutes, 60).\nSCHEDULED - Daily scheduled update. Client auto-syncs every 24h.",
-  "option.mapsyncer.interval_ticks.tooltip": "Update interval in TICK mode. 20 ticks = 1 second. Also determines the client auto-sync cooldown (max of tick interval in minutes and 60 minutes).",
+  "option.mapsyncer.update_mode.tooltip": "Server-side map cache incremental update strategy.\n\nDISABLED - No incremental updates, also disables client auto-sync.\nTICK - Periodic tick-based updates. Client auto-syncs on join and on the same interval while online.\nSCHEDULED - Daily scheduled update. Client auto-syncs every 24h.",
+  "option.mapsyncer.interval_ticks.tooltip": "Update interval in TICK mode. 20 ticks = 1 second (default 6000 = 5 minutes, min 2400 = 2 minutes). Also determines the client online periodic sync interval.",
   "option.mapsyncer.scheduled_hour.tooltip": "Hour of day (0-23) for incremental updates and auto-sync in SCHEDULED mode.",
   "option.mapsyncer.scheduled_minute.tooltip": "Minute of hour (0-59) for incremental updates and auto-sync in SCHEDULED mode."
 }

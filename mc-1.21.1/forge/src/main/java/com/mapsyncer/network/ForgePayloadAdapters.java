@@ -4,6 +4,7 @@ import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.ServerInstalledWireCodec;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncRequestWireCodec;
@@ -120,13 +121,11 @@ public class ForgePayloadAdapters {
         }
 
         public static void encode(ForgeServerInstalledMessage msg, FriendlyByteBuf buf) {
-            buf.writeUtf(msg.data.version());
-            buf.writeLong(msg.data.lastGenerationTimestamp());
-            buf.writeInt(msg.data.autoSyncIntervalMinutes());
+            ServerInstalledWireCodec.write(buf, msg.data);
         }
 
         public static ForgeServerInstalledMessage decode(FriendlyByteBuf buf) {
-            return new ForgeServerInstalledMessage(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
+            return new ForgeServerInstalledMessage(ServerInstalledWireCodec.read(buf));
         }
     }
 

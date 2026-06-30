@@ -33,14 +33,13 @@ public class PlayerJoinHandlerLogic {
         if (server == null) return;
 
         // 发送 ServerInstalled 通知（跨加载器兼容：无论客户端使用什么加载器都能接收）
-                long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir()).getLastGenerationTime();
-        int autoInterval = AutoSyncConfig.computeInterval(
-            PlatformManager.getPlatform().getIncrementalUpdateMode(),
-            PlatformManager.getPlatform().getIncrementalUpdateIntervalTicks());
-        NetworkManager.sendToPlayer(player,
-            new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval));
-
+        long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir()).getLastGenerationTime();
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
+        int intervalTicks = PlatformManager.getPlatform().getIncrementalUpdateIntervalTicks();
+        int autoInterval = AutoSyncConfig.computeInterval(mode, intervalTicks);
+        NetworkManager.sendToPlayer(player,
+            new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval, mode, intervalTicks));
+
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {
             IncrementalUpdateHandlerLogic.getInstance().start(server);
         }

@@ -287,7 +287,7 @@ public class ModConfig {
 
         // ========== 增量更新设置 ==========
         private volatile UpdateMode incrementalUpdateMode = UpdateMode.DISABLED;
-        private volatile int incrementalUpdateIntervalTicks = 200;
+        private volatile int incrementalUpdateIntervalTicks = 6000;
         private volatile int scheduledUpdateHour = 4;
         private volatile int scheduledUpdateMinute = 0;
 
@@ -345,7 +345,7 @@ public class ModConfig {
 
                 // 增量更新设置
                 incrementalUpdateMode = UpdateMode.valueOf(props.getProperty("incrementalUpdateMode", "DISABLED"));
-                incrementalUpdateIntervalTicks = Integer.parseInt(props.getProperty("incrementalUpdateIntervalTicks", "200"));
+                incrementalUpdateIntervalTicks = Integer.parseInt(props.getProperty("incrementalUpdateIntervalTicks", "6000"));
                 scheduledUpdateHour = Integer.parseInt(props.getProperty("scheduledUpdateHour", "4"));
                 scheduledUpdateMinute = Integer.parseInt(props.getProperty("scheduledUpdateMinute", "0"));
 
@@ -446,9 +446,9 @@ public class ModConfig {
                 sb.append("# 增量更新模式：DISABLED（禁用），TICK（按 tick 周期更新），SCHEDULED（每日定时更新）\n");
                 sb.append("incrementalUpdateMode=" + incrementalUpdateMode.name() + "\n");
                 sb.append("\n");
-                sb.append("# Interval in server ticks for TICK mode (20 ticks = 1 second, default 200 = 10 seconds)\n");
-                sb.append("# TICK 模式的更新间隔（20 ticks = 1 秒，默认 200 = 10 秒）\n");
-                sb.append("# Range: 20 - 72000 / 范围：20 - 72000\n");
+                sb.append("# Interval in server ticks for TICK mode (20 ticks = 1 second, default 6000 = 5 minutes)\n");
+                sb.append("# TICK 模式的更新间隔（20 ticks = 1 秒，默认 6000 = 5 分钟）\n");
+                sb.append("# Range: 2400 - 72000 / 范围：2400 - 72000\n");
                 sb.append("incrementalUpdateIntervalTicks=" + incrementalUpdateIntervalTicks + "\n");
                 sb.append("\n");
                 sb.append("# Hour of day for SCHEDULED mode (0-23, uses server's local timezone)\n");
@@ -562,7 +562,7 @@ public class ModConfig {
         }
 
         public void setIncrementalUpdateIntervalTicks(int value) {
-            incrementalUpdateIntervalTicks = Math.max(20, Math.min(72000, value));
+            incrementalUpdateIntervalTicks = Math.max(2400, Math.min(72000, value));
         }
 
         public void setScheduledUpdateHour(int value) {

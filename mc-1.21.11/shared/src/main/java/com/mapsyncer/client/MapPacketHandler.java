@@ -249,9 +249,10 @@ public class MapPacketHandler {
                 serverInstalled = true;
                 serverVersion = payload.version();
                 int intervalMinutes = payload.autoSyncIntervalMinutes();
-                AutoSyncManager.configureFromServer(intervalMinutes);
-                LOGGER.info("Server has MapSyncer installed, version: {}, joinAutoSync={}",
-                        serverVersion, intervalMinutes > 0);
+                AutoSyncManager.configureFromServer(
+                        payload.updateMode(), intervalMinutes, payload.incrementalUpdateIntervalTicks());
+                LOGGER.info("Server has MapSyncer installed, version: {}, mode={}, joinAutoSync={}",
+                        serverVersion, payload.updateMode(), intervalMinutes > 0);
 
                 // 显示自动同步状态
                 Object[] statusKey = AutoSyncManager.getStatusKey(intervalMinutes);
@@ -278,6 +279,16 @@ public class MapPacketHandler {
                         });
                     }, 5);
                 }
+
+                AutoSyncManager.startTickPeriodicSync(() ->
+                        Minecraft.getInstance().execute(() -> {
+                            if (Minecraft.getInstance().player != null
+                                    && !MapPacketHandler.isSyncInProgress()) {
+                                LOGGER.debug("TICK periodic auto-sync: requesting sync");
+                                AutoSyncManager.markPeriodicSync();
+                                MapSyncerCommandLogic.executeSyncAll();
+                            }
+                        }));
             });
         });
 

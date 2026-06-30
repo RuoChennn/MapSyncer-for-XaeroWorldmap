@@ -68,7 +68,9 @@ public class SyncProgressTracker {
         tracking = true;
         processed = 0;
         total = 0;
-        status = Component.translatable("mapsyncer.sync.waiting").getString();
+        status = AutoSyncManager.isPeriodicSync()
+                ? Component.translatable("mapsyncer.autosync.periodic.start").getString()
+                : Component.translatable("mapsyncer.sync.waiting").getString();
         startTime = System.currentTimeMillis();
         receivedFirstResponse = false;
 
@@ -119,14 +121,19 @@ public class SyncProgressTracker {
     public static void completeWithCount(int count) {
         tracking = false;
         hashScanning = false;
-        status = Component.translatable("mapsyncer.sync.completed", count, getElapsedSeconds()).getString();
         stopTimeoutChecker();
         setOverlayActive(false);
 
         long elapsed = getElapsedSeconds();
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
-            ClientMessageHelper.sendChatMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed));
+            if (AutoSyncManager.isPeriodicSync()) {
+                AutoSyncManager.clearPeriodicSync();
+                ClientMessageHelper.sendOverlayMessage(
+                        ChatUtils.message("mapsyncer.autosync.periodic.complete", count, elapsed));
+            } else {
+                ClientMessageHelper.sendChatMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed));
+            }
         }
     }
 
@@ -134,12 +141,21 @@ public class SyncProgressTracker {
         tracking = false;
         hashScanning = false;
         stopTimeoutChecker();
+        if (AutoSyncManager.isPeriodicSync()) {
+            AutoSyncManager.clearPeriodicSync();
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                ClientMessageHelper.sendOverlayMessage(
+                        ChatUtils.message("mapsyncer.autosync.periodic.uptodate"));
+            }
+        }
         setOverlayActive(false);
     }
 
     public static void cancelTracking() {
         tracking = false;
         hashScanning = false;
+        AutoSyncManager.clearPeriodicSync();
         status = Component.translatable("mapsyncer.sync.cancelled").getString();
         stopTimeoutChecker();
         setOverlayActive(false);
@@ -189,8 +205,16 @@ public class SyncProgressTracker {
             int scanTotal = hashScanTotal;
             if (scanTotal > 0) {
                 int percent = (done * 100) / scanTotal;
+                if (AutoSyncManager.isPeriodicSync()) {
+                    ClientMessageHelper.sendOverlayMessage(
+                            ChatUtils.message("mapsyncer.autosync.periodic.hash_progress", done, scanTotal, percent));
+                } else {
+                    ClientMessageHelper.sendOverlayMessage(
+                            ChatUtils.message("mapsyncer.sync.hash_progress", done, scanTotal, percent));
+                }
+            } else if (AutoSyncManager.isPeriodicSync()) {
                 ClientMessageHelper.sendOverlayMessage(
-                        ChatUtils.message("mapsyncer.sync.hash_progress", done, scanTotal, percent));
+                        ChatUtils.message("mapsyncer.autosync.periodic.hash_computing"));
             } else {
                 ClientMessageHelper.sendOverlayMessage(
                         ChatUtils.message("mapsyncer.sync.hash_computing"));
@@ -205,8 +229,13 @@ public class SyncProgressTracker {
         String currentStatus = status;
         if (currentTotal > 0) {
             int percent = (currentProcessed * 100) / currentTotal;
-            ClientMessageHelper.sendOverlayMessage(
-                    ChatUtils.message("mapsyncer.sync.progress", currentProcessed, currentTotal, percent));
+            if (AutoSyncManager.isPeriodicSync()) {
+                ClientMessageHelper.sendOverlayMessage(
+                        ChatUtils.message("mapsyncer.autosync.periodic.progress", currentProcessed, currentTotal, percent));
+            } else {
+                ClientMessageHelper.sendOverlayMessage(
+                        ChatUtils.message("mapsyncer.sync.progress", currentProcessed, currentTotal, percent));
+            }
         } else {
             ClientMessageHelper.sendOverlayMessage(
                     ChatUtils.prefix().append(Component.literal(currentStatus)));

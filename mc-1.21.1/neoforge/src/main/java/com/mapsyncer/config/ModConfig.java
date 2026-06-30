@@ -319,9 +319,9 @@ public class ModConfig {
                     .defineEnum("incrementalUpdateMode", UpdateMode.DISABLED);
 
             incrementalUpdateIntervalTicks = builder
-                    .comment("Interval in server ticks for TICK mode (20 ticks = 1 second, default 200 = 10 seconds)",
-                             "TICK 模式的更新间隔（20 ticks = 1 秒，默认 200 = 10 秒）")
-                    .defineInRange("incrementalUpdateIntervalTicks", 200, 20, 72000);
+                    .comment("Interval in server ticks for TICK mode (20 ticks = 1 second, default 6000 = 5 minutes)",
+                             "TICK 模式的更新间隔（20 ticks = 1 秒，默认 6000 = 5 分钟）")
+                    .defineInRange("incrementalUpdateIntervalTicks", 6000, 2400, 72000);
 
             scheduledUpdateHour = builder
                     .comment("Hour of day for SCHEDULED mode (0-23, uses server's local timezone)",

@@ -4,6 +4,7 @@ import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
+import com.mapsyncer.network.payload.ServerInstalledWireCodec;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncRequestWireCodec;
@@ -126,13 +127,11 @@ public class NeoForgePayloadAdapters {
         }
 
         public static void encode(RegistryFriendlyByteBuf buf, NeoForgeServerInstalledPayload payload) {
-            buf.writeUtf(payload.data.version());
-            buf.writeLong(payload.data.lastGenerationTimestamp());
-            buf.writeInt(payload.data.autoSyncIntervalMinutes());
+            ServerInstalledWireCodec.write(buf, payload.data);
         }
 
         public static NeoForgeServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
-            return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
+            return new NeoForgeServerInstalledPayload(ServerInstalledWireCodec.read(buf));
         }
     }
 

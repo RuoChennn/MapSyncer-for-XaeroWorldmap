@@ -2,6 +2,7 @@ package com.mapsyncer.client;
 
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.ClientMessageHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
@@ -83,7 +84,7 @@ public class SyncResumeHelper {
                 .append(ChatUtils.desc("mapsyncer.sync.interrupted"))
                 .append(Component.literal(" "))
                 .append(Component.literal(command));
-        mc.player.displayClientMessage(message, false);
+        ClientMessageHelper.sendChatMessage(message);
     }
 
     public static void clearSyncState() {
@@ -97,7 +98,7 @@ public class SyncResumeHelper {
         if (tsCache != null) {
             tsCache.clearSyncState();
             if (mc.player != null) {
-                mc.player.displayClientMessage(ChatUtils.success("mapsyncer.sync.state_cleared"), false);
+                ClientMessageHelper.sendChatMessage(ChatUtils.success("mapsyncer.sync.state_cleared"));
             }
         }
     }

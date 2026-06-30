@@ -95,13 +95,20 @@
   "mapsyncer.autosync.status.minutes": "自动同步：每 %d 分钟",
   "mapsyncer.autosync.status.daily": "自动同步：每天",
 
+  "mapsyncer.autosync.periodic.start": "周期同步：等待服务端响应...",
+  "mapsyncer.autosync.periodic.hash_computing": "周期同步：正在扫描本地地图...",
+  "mapsyncer.autosync.periodic.hash_progress": "周期同步：扫描本地地图 %d/%d (%d%%)",
+  "mapsyncer.autosync.periodic.progress": "周期同步：下载 %d/%d (%d%%)",
+  "mapsyncer.autosync.periodic.complete": "周期同步完成，已更新 %d 个区域（%d 秒）",
+  "mapsyncer.autosync.periodic.uptodate": "周期同步：地图已是最新",
+
   "option.mapsyncer.hash_threads.tooltip": "同步前扫描本地地图文件、读取缓存版本信息时使用的并行线程数。较高值可能加快准备速度，但会增加 CPU 占用。",
   "option.mapsyncer.debug.tooltip": "启用后会在日志中输出详细的地图生成调试信息。",
   "option.mapsyncer.concurrent_regions.tooltip": "同时转换的最大区域数。较高值处理速度更快，但对服务端 CPU 要求更高。",
   "option.mapsyncer.packet_size.tooltip": "网络传输时单个数据包的最大字节数。设置过大的包在弱网环境中可能被丢弃，建议保持默认值。",
   "option.mapsyncer.speed_limit.tooltip": "同步时每秒最大传输速率（KB/s）。设为 0 则不限制。限制过高可能影响游戏网络连接质量。",
-  "option.mapsyncer.update_mode.tooltip": "服务端地图缓存的增量更新策略。\n\nDISABLED - 关闭增量更新，同时禁用客户端自动同步。\nTICK - 按 tick 周期自动更新，同时客户端自动同步间隔取 tick 间隔和 60 分钟的较大值。\nSCHEDULED - 每天定时更新，同时客户端每 24 小时自动同步一次。",
-  "option.mapsyncer.interval_ticks.tooltip": "TICK 模式下的更新间隔。20 ticks = 1 秒。此值同时决定客户端自动同步的冷却周期（取间隔换算分钟数与 60 分钟的较大值）。",
+  "option.mapsyncer.update_mode.tooltip": "服务端地图缓存的增量更新策略。\n\nDISABLED - 关闭增量更新，同时禁用客户端自动同步。\nTICK - 按 tick 周期自动更新；客户端进服时同步，在线期间按相同周期自动拉取。\nSCHEDULED - 每天定时更新，同时客户端每 24 小时自动同步一次。",
+  "option.mapsyncer.interval_ticks.tooltip": "TICK 模式下的更新间隔。20 ticks = 1 秒（默认 6000 = 5 分钟，最小 2400 = 2 分钟）。同时决定客户端在线周期同步间隔。",
   "option.mapsyncer.scheduled_hour.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的小时（0-23）。",
   "option.mapsyncer.scheduled_minute.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的分钟（0-59）。"
 }
