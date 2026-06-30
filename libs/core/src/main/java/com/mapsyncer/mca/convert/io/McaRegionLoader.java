@@ -6,8 +6,10 @@ import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.McaReader;
 import com.mapsyncer.mca.RegionConverterStandalone;
 import com.mapsyncer.mca.convert.biome.BiomeFillPass;
+import com.mapsyncer.mca.convert.model.ConvertConstants;
 import com.mapsyncer.mca.convert.model.MapRegionData;
 import com.mapsyncer.mca.convert.scan.ChunkColumnScanner;
+import com.mapsyncer.nbt.Tag;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -25,17 +27,29 @@ public final class McaRegionLoader {
 
         try (McaReader reader = McaReader.open(mcaPath.toString())) {
             int worldHeightRange = worldTopY - minBuildHeight;
-            for (McaReader.ChunkData chunkData : reader.readAllChunks()) {
-                ChunkDataParser.ChunkInfo chunkInfo = ChunkDataParser.parseChunk(
-                    chunkData.chunkX(), chunkData.chunkZ(), chunkData.nbt(), worldHeightRange
-                );
+            for (int localX = 0; localX < ConvertConstants.CHUNKS_PER_REGION; localX++) {
+                for (int localZ = 0; localZ < ConvertConstants.CHUNKS_PER_REGION; localZ++) {
+                    Tag.Compound nbt;
+                    try {
+                        nbt = reader.readChunkNbt(localX, localZ);
+                    } catch (IOException e) {
+                        continue;
+                    }
+                    if (nbt == null) {
+                        continue;
+                    }
 
-                if (chunkInfo == null) {
-                    continue;
+                    ChunkDataParser.ChunkInfo chunkInfo = ChunkDataParser.parseChunk(
+                        localX, localZ, nbt, worldHeightRange
+                    );
+
+                    if (chunkInfo == null) {
+                        continue;
+                    }
+
+                    ChunkColumnScanner.scan(data, chunkInfo, minBuildHeight, worldTopY,
+                        lightMode, caveParams, worldHasSkylight, blockLookup);
                 }
-
-                ChunkColumnScanner.scan(data, chunkInfo, minBuildHeight, worldTopY,
-                    lightMode, caveParams, worldHasSkylight, blockLookup);
             }
         }
 

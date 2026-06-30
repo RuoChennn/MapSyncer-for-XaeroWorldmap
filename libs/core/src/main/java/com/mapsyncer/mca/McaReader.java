@@ -227,6 +227,27 @@ public class McaReader implements AutoCloseable {
     }
 
     /**
+     * 逐 chunk 读取并回调，不预先加载全区 NBT 到内存。
+     *
+     * @param consumer 每个成功读取的 chunk 回调
+     * @throws IOException 如果打开或读取文件失败
+     */
+    public void forEachChunk(java.util.function.Consumer<ChunkData> consumer) throws IOException {
+        for (int localX = 0; localX < CHUNKS_PER_REGION; localX++) {
+            for (int localZ = 0; localZ < CHUNKS_PER_REGION; localZ++) {
+                try {
+                    Tag.Compound nbt = readChunkNbt(localX, localZ);
+                    if (nbt != null) {
+                        consumer.accept(new ChunkData(localX, localZ, nbt));
+                    }
+                } catch (IOException e) {
+                    LOGGER.warn("读取chunk ({}, {}) 失败: {}", localX, localZ, e.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
      * 读取区域文件中所有存在的chunk
      *
      * <p>遍历32x32的所有chunk位置，读取每个存在的chunk数据</p>
@@ -234,24 +255,12 @@ public class McaReader implements AutoCloseable {
      *
      * @return 包含所有成功读取的ChunkData对象的列表
      * @throws IOException 如果打开或读取文件失败
+     * @deprecated 大 region 会占用大量内存；请使用 {@link #forEachChunk} 或 {@link McaRegionLoader} 的流式路径
      */
+    @Deprecated
     public Iterable<ChunkData> readAllChunks() throws IOException {
         java.util.List<ChunkData> chunks = new java.util.ArrayList<>();
-
-        for (int localX = 0; localX < CHUNKS_PER_REGION; localX++) {
-            for (int localZ = 0; localZ < CHUNKS_PER_REGION; localZ++) {
-                try {
-                    Tag.Compound nbt = readChunkNbt(localX, localZ);
-                    if (nbt != null) {
-                        chunks.add(new ChunkData(localX, localZ, nbt));
-                    }
-                } catch (IOException e) {
-                    // 单个chunk失败不中断整体读取
-                    LOGGER.warn("读取chunk ({}, {}) 失败: {}", localX, localZ, e.getMessage());
-                }
-            }
-        }
-
+        forEachChunk(chunks::add);
         return chunks;
     }
 
