@@ -1,19 +1,22 @@
 package com.mapsyncer.tool;
 
+import com.mapsyncer.util.HashUtils;
+import com.mapsyncer.util.PropertiesCacheIO;
+import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -21,9 +24,19 @@ import java.util.zip.ZipOutputStream;
 /**
  * Standalone CLI tool that repackages a server cache directory into a client-ready Xaero map zip.
  *
- * <p>Path mapping: {cacheDir}/{dim}/*.zip → Multiplayer_{name}/{dim}/mw$<worldId>/*.zip</p>
- * <p>World ID is auto-detected from xaeromap.txt in the world directory, or defaults to 0.</p>
- * <p>Also converts generation_cache.properties to sync_timestamps.cache.</p>
+ * <p>Server layout (flat or with mw$):</p>
+ * <pre>
+ * {cacheDir}/{dim}/*.zip
+ * {cacheDir}/{dim}/caves/{layer}/*.zip
+ * {cacheDir}/{dim}/mw${id}/*.zip   (legacy / re-imported layout)
+ * </pre>
+ *
+ * <p>Client layout:</p>
+ * <pre>
+ * Multiplayer_{server}/{dim}/mw${worldId}/*.zip
+ * Multiplayer_{server}/{dim}/mw${worldId}/caves/{layer}/*.zip
+ * Multiplayer_{server}/sync_timestamps.cache
+ * </pre>
  */
 public final class MapPackager {
 
@@ -32,16 +45,18 @@ public final class MapPackager {
     private static final String GENERATION_CACHE = "generation_cache.properties";
     private static final String SYNC_TIMESTAMPS = "sync_timestamps.cache";
     private static final String XAERO_MAP_FILE = "xaeromap.txt";
+    /** 未指定服务器地址时使用的占位名，对应 Xaero 目录 Multiplayer_Server/ */
+    static final String PLACEHOLDER_SERVER = "Server";
 
     private final Path cacheDir;
     private final Path outputFile;
-    private final String serverName;
+    private final String serverFolderName;
     private final int worldId;
 
-    private MapPackager(Path cacheDir, Path outputFile, String serverName, int worldId) {
+    private MapPackager(Path cacheDir, Path outputFile, String serverFolderName, int worldId) {
         this.cacheDir = cacheDir.toAbsolutePath().normalize();
         this.outputFile = outputFile.toAbsolutePath().normalize();
-        this.serverName = sanitizeServerName(serverName);
+        this.serverFolderName = serverFolderName;
         this.worldId = worldId;
     }
 
@@ -50,11 +65,10 @@ public final class MapPackager {
     public static void main(String[] args) {
         CliArgs cli = parseArgs(args);
         if (cli == null) {
-            // null means --help was shown or parse error; exit 0 for help, 1 for error
             System.exit(0);
         }
 
-        MapPackager packager = new MapPackager(cli.cacheDir, cli.output, cli.serverName, cli.worldId);
+        MapPackager packager = new MapPackager(cli.cacheDir, cli.output, cli.serverFolderName, cli.worldId);
         try {
             packager.execute();
             System.exit(0);
@@ -70,7 +84,7 @@ public final class MapPackager {
         LOGGER.info("MapPackager starting");
         LOGGER.info("  Cache dir: {}", cacheDir);
         LOGGER.info("  Output file: {}", outputFile);
-        LOGGER.info("  Server name: {}", serverName);
+        LOGGER.info("  Server folder: Multiplayer_{}", serverFolderName);
         LOGGER.info("  World ID: {}", worldId);
 
         validateSourceDir();
@@ -80,22 +94,28 @@ public final class MapPackager {
             Files.createDirectories(parent);
         }
 
-        String prefix = "Multiplayer_" + serverName + "/";
-        String mwDir = String.format("mw$%d", worldId);
+        String prefix = "Multiplayer_" + serverFolderName + "/";
+        String mwDirName = "mw$" + worldId;
+        Map<String, TimestampHashEntry> generationCache = loadGenerationCache();
+        List<PackagedRegion> packagedRegions = new ArrayList<>();
 
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(outputFile))) {
-            // 遍历维度目录，添加地图文件
             for (String dim : scanDimensions()) {
                 Path dimPath = cacheDir.resolve(dim);
-                String destBase = prefix + dim + "/" + mwDir + "/";
-                addDirectoryToZip(zos, dimPath, destBase, "");
+                Path sourceRoot = resolveMapSourceRoot(dimPath, worldId);
+                String destBase = prefix + dim + "/" + mwDirName + "/";
+                packageMapFiles(zos, dim, sourceRoot, destBase, "", packagedRegions, generationCache);
             }
 
-            // 转换 generation_cache.properties → sync_timestamps.cache
-            addTimestampsCache(zos, prefix);
+            if (packagedRegions.isEmpty()) {
+                throw new IllegalStateException("No valid region map files found in cache directory");
+            }
+
+            addTimestampsCache(zos, prefix, packagedRegions);
         }
 
-        LOGGER.info("Packaging complete: {} ({} bytes)", outputFile, Files.size(outputFile));
+        LOGGER.info("Packaging complete: {} regions, {} bytes -> {}",
+            packagedRegions.size(), Files.size(outputFile), outputFile);
     }
 
     // ==================== source validation ====================
@@ -106,19 +126,26 @@ public final class MapPackager {
         }
         List<String> dims = scanDimensions();
         if (dims.isEmpty()) {
-            throw new IllegalArgumentException("No dimension subdirectories found (null/, DIM-1/, etc): " + cacheDir);
+            throw new IllegalArgumentException(
+                "No dimension subdirectories with map data found (null/, DIM-1/, etc): " + cacheDir);
         }
         LOGGER.info("Detected {} dimensions: {}", dims.size(), dims);
     }
 
     // ==================== dimension scanning ====================
 
+    /**
+     * 扫描含地图数据的维度目录，排除无 zip 的空目录及非维度目录。
+     */
     private List<String> scanDimensions() {
         List<String> dims = new ArrayList<>();
         try (var stream = Files.newDirectoryStream(cacheDir, Files::isDirectory)) {
             for (Path dir : stream) {
                 String name = dir.getFileName().toString();
-                if (!name.startsWith(".")) {
+                if (name.startsWith(".") || isExcludedDirectory(name)) {
+                    continue;
+                }
+                if (hasMapContent(dir)) {
                     dims.add(name);
                 }
             }
@@ -129,26 +156,101 @@ public final class MapPackager {
         return dims;
     }
 
-    // ==================== 递归添加目录到 zip ====================
+    private static boolean isExcludedDirectory(String name) {
+        return name.equals("caves") || name.startsWith("cache");
+    }
 
-    private void addDirectoryToZip(ZipOutputStream zos, Path sourceDir, String destPrefix, String relativePath) throws IOException {
+    private static boolean hasMapContent(Path dir) {
+        try (var stream = Files.walk(dir)) {
+            return stream.anyMatch(p -> Files.isRegularFile(p) && isMapFile(p.getFileName().toString()));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 解析维度的地图源根目录。
+     * 服务端通常为扁平结构；若存在 mw$ 子目录则从中读取（避免路径重复）。
+     */
+    static Path resolveMapSourceRoot(Path dimDir, int targetWorldId) throws IOException {
+        Path preferred = dimDir.resolve("mw$" + targetWorldId);
+        if (Files.isDirectory(preferred) && hasMapContent(preferred)) {
+            return preferred;
+        }
+
+        List<Path> mwDirs = new ArrayList<>();
+        try (var stream = Files.newDirectoryStream(dimDir, Files::isDirectory)) {
+            for (Path entry : stream) {
+                String name = entry.getFileName().toString();
+                if (name.startsWith("mw$") && hasMapContent(entry)) {
+                    mwDirs.add(entry);
+                }
+            }
+        }
+
+        if (mwDirs.size() == 1) {
+            Path only = mwDirs.getFirst();
+            if (!only.equals(preferred)) {
+                LOGGER.info("Using map source {} for dimension {}", only.getFileName(), dimDir.getFileName());
+            }
+            return only;
+        }
+        if (mwDirs.size() > 1) {
+            LOGGER.warn("Multiple mw$ directories in {}, using first: {}", dimDir.getFileName(), mwDirs.getFirst().getFileName());
+            return mwDirs.getFirst();
+        }
+
+        return dimDir;
+    }
+
+    // ==================== map file packaging ====================
+
+    private void packageMapFiles(
+            ZipOutputStream zos,
+            String dim,
+            Path sourceDir,
+            String destPrefix,
+            String relativePath,
+            List<PackagedRegion> packagedRegions,
+            Map<String, TimestampHashEntry> generationCache) throws IOException {
+
         try (var stream = Files.newDirectoryStream(sourceDir)) {
             for (Path entry : stream) {
                 String name = entry.getFileName().toString();
+                if (name.startsWith(".")) {
+                    continue;
+                }
 
                 if (Files.isDirectory(entry)) {
-                    addDirectoryToZip(zos, entry, destPrefix, relativePath + name + "/");
+                    if (shouldSkipSubDirectory(name)) {
+                        continue;
+                    }
+                    packageMapFiles(zos, dim, entry, destPrefix, relativePath + name + "/",
+                        packagedRegions, generationCache);
                 } else if (isMapFile(name)) {
+                    if (!HashUtils.isValidRegionZip(entry)) {
+                        LOGGER.warn("Skipping invalid region zip: {}", entry);
+                        continue;
+                    }
+
                     String zipEntryName = destPrefix + relativePath + name;
                     ZipEntry zipEntry = new ZipEntry(zipEntryName);
                     zos.putNextEntry(zipEntry);
                     Files.copy(entry, zos);
                     zos.closeEntry();
-                    LOGGER.debug("  + {}", zipEntryName);
+
+                    String cacheKey = buildCacheKey(dim, relativePath, name);
+                    TimestampHashEntry cacheEntry = resolveCacheEntry(cacheKey, generationCache, entry);
+
+                    packagedRegions.add(new PackagedRegion(cacheKey, cacheEntry.timestampSeconds(), cacheEntry.hash()));
+                    LOGGER.debug("  + {} ({}:{})", zipEntryName, cacheEntry.timestampSeconds(), cacheEntry.hash());
                 }
-                // exclude: generation_cache.properties, mca_timestamps.cache, *.temp, hidden files
             }
         }
+    }
+
+    private static boolean shouldSkipSubDirectory(String name) {
+        return name.startsWith("cache") || name.startsWith("mw$");
     }
 
     private static boolean isMapFile(String name) {
@@ -158,42 +260,64 @@ public final class MapPackager {
             && !name.endsWith(".tmp");
     }
 
+    /**
+     * 构建与 GenerationCache / ClientTimestampCache 一致的缓存键。
+     * 例：null/0_0、null/caves/32/1_-2
+     */
+    static String buildCacheKey(String dim, String relativePath, String zipFileName) {
+        String regionCoords = zipFileName.substring(0, zipFileName.length() - 4);
+        if (relativePath.isEmpty()) {
+            return dim + "/" + regionCoords;
+        }
+        String normalized = relativePath.replace("\\", "/");
+        if (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return dim + "/" + normalized + "/" + regionCoords;
+    }
+
+    /**
+     * 优先从 generation_cache.properties 读取时间戳与 CRC32；
+     * 缓存缺失时再回退到文件修改时间与现场计算哈希。
+     */
+    private static TimestampHashEntry resolveCacheEntry(
+            String cacheKey,
+            Map<String, TimestampHashEntry> generationCache,
+            Path sourceFile) throws IOException {
+        TimestampHashEntry cached = generationCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        long timestamp = Files.getLastModifiedTime(sourceFile).toMillis() / 1000;
+        String hash = HashUtils.computeFileHash(sourceFile);
+        LOGGER.debug("No generation_cache entry for {}, using mtime + computed hash", cacheKey);
+        return new TimestampHashEntry(timestamp, hash);
+    }
+
     // ==================== generation_cache → sync_timestamps ====================
 
-    private void addTimestampsCache(ZipOutputStream zos, String prefix) throws IOException {
+    private Map<String, TimestampHashEntry> loadGenerationCache() {
         Path genCacheFile = cacheDir.resolve(GENERATION_CACHE);
         if (!Files.isRegularFile(genCacheFile)) {
-            LOGGER.warn("{} not found, skipping timestamps cache generation", GENERATION_CACHE);
-            return;
+            LOGGER.warn("{} not found, timestamps/hashes will fall back to file metadata", GENERATION_CACHE);
+            return Map.of();
         }
+        return PropertiesCacheIO.load(genCacheFile, PropertiesCacheIO::parseTimestampHash);
+    }
 
-        Properties props = new Properties();
-        try (InputStream in = Files.newInputStream(genCacheFile)) {
-            props.load(in);
-        }
-
-        // collect entries and dimensions
-        List<String[]> entries = new ArrayList<>();
+    private void addTimestampsCache(ZipOutputStream zos, String prefix, List<PackagedRegion> packagedRegions)
+            throws IOException {
+        Map<String, PackagedRegion> regionByKey = new LinkedHashMap<>();
         Set<String> dimensions = new LinkedHashSet<>();
 
-        for (String key : props.stringPropertyNames()) {
-            String value = props.getProperty(key);
-            if (value == null || value.isEmpty()) continue;
-
-            entries.add(new String[]{key, value});
-
-            int slashIdx = key.indexOf('/');
+        for (PackagedRegion region : packagedRegions) {
+            regionByKey.put(region.cacheKey(), region);
+            int slashIdx = region.cacheKey().indexOf('/');
             if (slashIdx > 0) {
-                dimensions.add(key.substring(0, slashIdx));
+                dimensions.add(region.cacheKey().substring(0, slashIdx));
             }
         }
 
-        if (entries.isEmpty()) {
-            LOGGER.warn("No entries in {}, skipping timestamps cache", GENERATION_CACHE);
-            return;
-        }
-
-        // generate in ClientTimestampCache format
         StringBuilder sb = new StringBuilder();
         sb.append("# Sync timestamps cache\n");
         sb.append("# ==================== STATE ====================\n");
@@ -202,19 +326,23 @@ public final class MapPackager {
         sb.append("_command=\n");
         sb.append("\n");
         sb.append("# ==================== TIMESTAMP CACHE ====================\n");
-        sb.append("# Format: dimension/region_x_z = timestamp_seconds:hash\n");
+        sb.append("# Format: dimension/region_x_z=timestamp_seconds:hash\n");
 
-        for (String[] entry : entries) {
-            sb.append(entry[0]).append(" = ").append(entry[1]).append("\n");
+        for (PackagedRegion region : regionByKey.values()) {
+            sb.append(region.cacheKey())
+                .append("=")
+                .append(region.timestampSeconds())
+                .append(":")
+                .append(region.hash())
+                .append("\n");
         }
 
         String zipEntryName = prefix + SYNC_TIMESTAMPS;
         ZipEntry zipEntry = new ZipEntry(zipEntryName);
         zos.putNextEntry(zipEntry);
-        byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
-        zos.write(bytes);
+        zos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         zos.closeEntry();
-        LOGGER.info("  + {} ({} entries, dimensions: {})", zipEntryName, entries.size(), dimensions);
+        LOGGER.info("  + {} ({} entries, dimensions: {})", zipEntryName, regionByKey.size(), dimensions);
     }
 
     // ==================== CLI parsing ====================
@@ -222,7 +350,8 @@ public final class MapPackager {
     private static CliArgs parseArgs(String[] args) {
         Path cacheDir = null;
         Path output = null;
-        String serverName = "Server";
+        String serverName = PLACEHOLDER_SERVER;
+        String serverAddress = null;
         Integer worldId = null;
         Path worldDir = null;
 
@@ -235,6 +364,10 @@ public final class MapPackager {
                 case "--output":
                 case "-o":
                     output = Path.of(args[++i]);
+                    break;
+                case "--server-address":
+                case "-a":
+                    serverAddress = args[++i];
                     break;
                 case "--server-name":
                 case "-s":
@@ -265,12 +398,54 @@ public final class MapPackager {
             return null;
         }
 
-        // Priority: explicit --world-id > auto-detect from --world-dir > default 0
-        if (worldId == null) {
-            worldId = worldDir != null ? readWorldId(worldDir) : 0;
-        }
+        cacheDir = cacheDir.toAbsolutePath().normalize();
+        worldId = resolveWorldId(cacheDir, worldDir, worldId);
 
-        return new CliArgs(cacheDir, output, serverName, worldId);
+        String serverFolderName = resolveServerFolderName(serverAddress, serverName);
+        return new CliArgs(cacheDir, output, serverFolderName, worldId);
+    }
+
+    /**
+     * World ID 优先级：--world-id &gt; xaeromap.txt &gt; 缓存目录 mw$ &gt; 0
+     */
+    static int resolveWorldId(Path cacheDir, Path worldDir, Integer explicitWorldId) {
+        if (explicitWorldId != null) {
+            return explicitWorldId;
+        }
+        if (worldDir != null && Files.isRegularFile(worldDir.resolve(XAERO_MAP_FILE))) {
+            return readWorldId(worldDir);
+        }
+        Integer fromCache = detectWorldIdFromCache(cacheDir);
+        if (fromCache != null) {
+            LOGGER.info("Auto-detected world ID {} from cache mw$ directory", fromCache);
+            return fromCache;
+        }
+        return 0;
+    }
+
+    static Integer detectWorldIdFromCache(Path cacheDir) {
+        if (!Files.isDirectory(cacheDir)) {
+            return null;
+        }
+        try (var stream = Files.walk(cacheDir, 3)) {
+            return stream.filter(Files::isDirectory)
+                .map(p -> p.getFileName().toString())
+                .filter(name -> name.startsWith("mw$"))
+                .map(MapPackager::parseMwWorldId)
+                .filter(id -> id != null)
+                .findFirst()
+                .orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static Integer parseMwWorldId(String mwDirName) {
+        try {
+            return Integer.parseInt(mwDirName.substring(3));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static void printHelp() {
@@ -281,30 +456,37 @@ public final class MapPackager {
         System.out.println("Options:");
         System.out.println("  -c, --cache-dir <path>    Server cache directory path (required)");
         System.out.println("  -o, --output <path>       Output zip file path (required)");
-        System.out.println("  -s, --server-name <name>  Server name, default \"Server\"");
-        System.out.println("  -w, --world-id <id>       World ID override (auto-detected from xaeromap.txt by default)");
+        System.out.println("  -a, --server-address <addr>  Server address (IP/host:port), replaces placeholder \""
+            + PLACEHOLDER_SERVER + "\" in Multiplayer folder name");
+        System.out.println("  -s, --server-name <name>     Server folder name when --server-address is omitted, default \""
+            + PLACEHOLDER_SERVER + "\"");
+        System.out.println("  -w, --world-id <id>       World ID override");
         System.out.println("  -d, --world-dir <path>    World directory to read xaeromap.txt from (auto-detect world ID)");
         System.out.println("  -h, --help                Show this help");
         System.out.println();
-        System.out.println("World ID auto-detection:");
-        System.out.println("  If --world-dir is specified, reads <dir>/xaeromap.txt for the world ID.");
-        System.out.println("  If neither --world-id nor --world-dir is given, defaults to 0.");
+        System.out.println("World ID auto-detection (in priority order):");
+        System.out.println("  1. --world-id");
+        System.out.println("  2. xaeromap.txt via --world-dir");
+        System.out.println("  3. mw$ directory in cache");
+        System.out.println("  4. default 0");
+        System.out.println();
+        System.out.println("Output includes:");
+        System.out.println("  - Region map zips under Multiplayer_<server>/<dim>/mw$<worldId>/");
+        System.out.println("  - Cave layers under .../mw$<worldId>/caves/<layer>/");
+        System.out.println("  - sync_timestamps.cache (timestamps + CRC32 from generation_cache.properties)");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  java -jar mapsyncer-packager.jar -c ./cache -o ./output.zip");
         System.out.println("  java -jar mapsyncer-packager.jar -c ./cache -d ./world -o output.zip");
+        System.out.println("  java -jar mapsyncer-packager.jar -c ./cache -a play.example.com:25565 -o output.zip");
     }
 
     // ==================== utility ====================
 
-    /**
-     * Read world ID from a Xaero server-side xaeromap.txt file.
-     * Format: "id:<int>"
-     */
     static int readWorldId(Path worldDir) {
         Path mapFile = worldDir.resolve(XAERO_MAP_FILE);
         if (!Files.isRegularFile(mapFile)) {
-            LOGGER.warn("{} not found in world directory, falling back to 0", XAERO_MAP_FILE);
+            LOGGER.warn("{} not found in world directory, falling back to cache/default", XAERO_MAP_FILE);
             return 0;
         }
         try (BufferedReader reader = Files.newBufferedReader(mapFile, StandardCharsets.UTF_8)) {
@@ -318,17 +500,48 @@ public final class MapPackager {
                 }
             }
         } catch (IOException | NumberFormatException e) {
-            LOGGER.warn("Failed to read {}: {}, falling back to 0", mapFile, e.getMessage());
+            LOGGER.warn("Failed to read {}: {}", mapFile, e.getMessage());
         }
         return 0;
     }
 
+    static String resolveServerFolderName(String serverAddress, String serverName) {
+        if (serverAddress != null && !serverAddress.isBlank()) {
+            return cleanServerAddress(serverAddress);
+        }
+        return sanitizeServerName(serverName);
+    }
+
+    static String cleanServerAddress(String rawAddress) {
+        if (rawAddress == null || rawAddress.isBlank()) {
+            return PLACEHOLDER_SERVER;
+        }
+
+        String cleaned = rawAddress.trim();
+        int portDivider = cleaned.lastIndexOf(':');
+        if (portDivider > 0 && cleaned.indexOf(':') != cleaned.lastIndexOf(':')) {
+            portDivider = cleaned.lastIndexOf("]:") + 1;
+        }
+        if (portDivider > 0) {
+            cleaned = cleaned.substring(0, portDivider);
+        }
+        cleaned = cleaned.replace("[", "").replace("]", "");
+        cleaned = cleaned.replaceAll(":", ".");
+        while (cleaned.endsWith(".")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        if (cleaned.isEmpty()) {
+            cleaned = "Empty Address";
+        }
+        return cleaned.replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
+
     private static String sanitizeServerName(String name) {
-        if (name == null || name.isBlank()) return "Server";
+        if (name == null || name.isBlank()) return PLACEHOLDER_SERVER;
         return name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
     }
 
-    // ==================== 内部类型 ====================
+    private record PackagedRegion(String cacheKey, long timestampSeconds, String hash) {}
 
-    private record CliArgs(Path cacheDir, Path output, String serverName, int worldId) {}
+    private record CliArgs(Path cacheDir, Path output, String serverFolderName, int worldId) {}
 }

@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # ==========================================
 # MapPackager - Xaero Map Packager Script
-# Usage: ./package.sh [path/to/server_map_cache]
-#        or place in server root and run
+# Usage: ./package.sh [cache_dir] [server_address]
+#        或在下方配置 SERVER_ADDRESS / OUTPUT_NAME 后直接运行
 # ==========================================
+
+# ========== 自定义配置（修改下面两行即可）==========
+SERVER_ADDRESS=""
+OUTPUT_NAME=""
+# SERVER_ADDRESS  服务器地址，如 play.example.com:25565（留空则使用占位名 Server）
+# OUTPUT_NAME       输出 zip 文件名，如 my_server_map.zip（留空则按日期自动生成）
+# ==================================================
 
 set -euo pipefail
 
@@ -27,15 +34,20 @@ if [ -z "$JAR" ]; then
     exit 1
 fi
 
-# Determine cache dir
+# Cache dir: arg1 overrides default
 if [ -n "${1:-}" ]; then
     CACHE_DIR="$1"
 elif [ -d "server_map_cache" ]; then
     CACHE_DIR="server_map_cache"
 else
     echo "[MapPackager] server_map_cache not found"
-    echo "Usage: ./package.sh [path/to/server_map_cache]"
+    echo "Usage: ./package.sh [path/to/server_map_cache] [server_address]"
     exit 1
+fi
+
+# Server address: arg2 overrides header config
+if [ -n "${2:-}" ]; then
+    SERVER_ADDRESS="$2"
 fi
 
 if [ ! -d "$CACHE_DIR" ]; then
@@ -51,14 +63,16 @@ elif [ -f "world1/xaeromap.txt" ]; then
     WORLD_DIR="world1"
 fi
 
-# Date
-DATE_PART=$(date +%Y-%m-%d)
-TIME_PART=$(date +%H%M%S)
-
-# Output always in script dir
-OUTPUT="server_map_cache_${DATE_PART}.zip"
-if [ -f "$OUTPUT" ]; then
-    OUTPUT="server_map_cache_${DATE_PART}_${TIME_PART}.zip"
+# Output file name
+if [ -n "$OUTPUT_NAME" ]; then
+    OUTPUT="$OUTPUT_NAME"
+else
+    DATE_PART=$(date +%Y-%m-%d)
+    TIME_PART=$(date +%H%M%S)
+    OUTPUT="server_map_cache_${DATE_PART}.zip"
+    if [ -f "$OUTPUT" ]; then
+        OUTPUT="server_map_cache_${DATE_PART}_${TIME_PART}.zip"
+    fi
 fi
 
 echo ""
@@ -68,13 +82,21 @@ echo "========================================"
 echo "  Cache: $CACHE_DIR"
 echo "  Output: $OUTPUT"
 [ -n "$WORLD_DIR" ] && echo "  World: $WORLD_DIR"
+if [ -n "$SERVER_ADDRESS" ]; then
+    echo "  Server: $SERVER_ADDRESS"
+else
+    echo "  Server: (placeholder Server)"
+fi
 echo "========================================"
 echo ""
 
+EXTRA_ARGS=()
+[ -n "$SERVER_ADDRESS" ] && EXTRA_ARGS=(-a "$SERVER_ADDRESS")
+
 if [ -n "$WORLD_DIR" ]; then
-    "$JAVA" -jar "$JAR" -c "$CACHE_DIR" -o "$OUTPUT" -d "$WORLD_DIR"
+    "$JAVA" -jar "$JAR" -c "$CACHE_DIR" -o "$OUTPUT" -d "$WORLD_DIR" "${EXTRA_ARGS[@]}"
 else
-    "$JAVA" -jar "$JAR" -c "$CACHE_DIR" -o "$OUTPUT"
+    "$JAVA" -jar "$JAR" -c "$CACHE_DIR" -o "$OUTPUT" "${EXTRA_ARGS[@]}"
 fi
 
 if [ -f "$OUTPUT" ]; then
