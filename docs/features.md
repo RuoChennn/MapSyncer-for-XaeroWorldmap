@@ -72,7 +72,7 @@ mc-26.1/            MC 26.1 版本
 | `/mapsyncer generate <dim> --force` | ✅ | 强制生成（清除缓存后重新生成） |
 | `/mapsyncer status` | ✅ | 查看生成进度和缓存统计（区域数量、各维度大小） |
 | `/mapsyncer incremental off` | ✅ | 关闭增量更新 |
-| `/mapsyncer incremental tick [interval]` | ✅ | Tick 模式（interval: 20-72000 ticks） |
+| `/mapsyncer incremental tick [interval]` | ✅ | Tick 模式（interval: 2400–72000 ticks，默认 6000 = 5 分钟） |
 | `/mapsyncer incremental scheduled [hour] [minute]` | ✅ | 定时模式（hour: 0-23, minute: 0-59） |
 
 ### 客户端命令
@@ -137,6 +137,46 @@ mc-26.1/            MC 26.1 版本
 
 ---
 
+## 三B、增量更新模式与客户端自动同步
+
+玩家加入时服务端发送 `ServerInstalledPayload`（含 `updateMode`、`lastGenerationTimestamp`、`incrementalUpdateIntervalTicks` 等）。客户端 `AutoSyncManager` 据此决定是否自动 `sync all`；手动 `/mapsyncer sync` 始终可用且不受冷却限制。
+
+### DISABLED
+
+| 端 | 行为 | 状态 |
+|----|------|------|
+| 服务端 | 不启动 `IncrementalUpdateHandlerLogic` | ✅ |
+| 客户端进服 | 不自动 sync | ✅ |
+| 客户端断点续传 | 进服检测 `needsResume()`，聊天栏提示续传命令 | ✅ |
+
+### TICK（周期模式）
+
+| 端 | 行为 | 状态 |
+|----|------|------|
+| 服务端 | 每 N tick 调用 `ConversionOrchestrator.performIncrementalScan()`（默认 6000 = 5min，最小 2400 = 2min） | ✅ |
+| 客户端进服 | 时间戳比对 + **冷却**（冷却 = tick 间隔分钟数）；满足则 5s 后 `sync all`，聊天栏「正在自动同步…」 | ✅ |
+| 客户端在线 | `scheduleAtFixedRate`，周期 = tick×50ms；`markPeriodicSync()` + Action Bar 周期同步文案 | ✅ |
+| 客户端完成（周期） | 有数据 / 已最新 → Action Bar；不发聊天 | ✅ |
+
+### SCHEDULED（日程表模式）
+
+| 端 | 行为 | 状态 |
+|----|------|------|
+| 服务端 | 每日 `scheduledUpdateHour:Minute`（默认 04:00，本地时区）1 分钟窗口内扫描一次；`lastScheduledUpdate` 防重复 | ✅ |
+| 客户端进服 | **仅时间戳**：`clientMax < serverLastGen` → 自动 sync；**无冷却** | ✅ |
+| 客户端在线 | 无周期计时器；服务端更新后不主动拉取 | ✅ |
+| 客户端进服提示 | 「自动同步：每天」（指服务端 schedule；触发仍看时间戳） | ✅ |
+
+### 共用
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 断点续传优先 | ✅ | `hasPendingResume()` 时进服必 sync；TICK/SCHEDULED 开启时跳过断点续传聊天提示 |
+| 服务端无缓存时间 | ✅ | `lastGenerationTimestamp <= 0` 时不触发进服自动 sync |
+| 客户端已最新 | ✅ | `clientMax >= serverLastGen` 时不触发进服自动 sync |
+
+---
+
 ## 四、地图生成系统
 
 | 功能 | 状态 | 说明 |
@@ -182,7 +222,7 @@ mc-26.1/            MC 26.1 版本
 | 配置项 | 类型 | 默认值 | 范围 | 说明 |
 |--------|------|--------|------|------|
 | `incrementalUpdateMode` | UpdateMode | DISABLED | DISABLED/TICK/SCHEDULED | 增量更新触发模式 |
-| `incrementalUpdateIntervalTicks` | int | 200 (10s) | 20-72000 | TICK 模式间隔 |
+| `incrementalUpdateIntervalTicks` | int | 6000 (5min) | 2400–72000 | TICK 模式间隔（20 ticks = 1 秒） |
 | `scheduledUpdateHour` | int | 4 | 0-23 | 定时模式小时 |
 | `scheduledUpdateMinute` | int | 0 | 0-59 | 定时模式分钟 |
 
@@ -227,7 +267,7 @@ mc-26.1/            MC 26.1 版本
 
 | Payload | 方向 | 说明 |
 |---------|------|------|
-| `ServerInstalledPayload` | 服务端→客户端 | 玩家加入时通知服务端已安装 MapSyncer，包含最后地图生成时间和自动同步间隔 |
+| `ServerInstalledPayload` | 服务端→客户端 | 玩家加入时通知：版本、最后生成时间、更新模式、TICK 间隔 tick 数 |
 | `SyncRequestPayload` | 客户端→服务端 | 发送区域元数据（路径→时间戳+哈希）用于差异比对 |
 | `SyncResponsePayload` | 服务端→客户端 | 传输区域数据批次（状态: ok/uptodate/no_cache/dim_not_available/in_progress） |
 | `ChunkMapData` | 嵌入 SyncResponse | 单区域压缩地图数据，含 caveLayer 字段 |
@@ -346,7 +386,7 @@ mc-26.1/            MC 26.1 版本
 |------|------|------|
 | 同步进度显示 | ✅ | Action Bar 动态刷新百分比 + 完成后总耗时 |
 | 断点续传提示 | ✅ | 重连后检测未完成同步，显示可点击的继续/忽略按钮 |
-| **自动同步** | ✅ | 加入服务器时自动比对服务端地图生成时间，根据服务端增量更新策略自动计算同步间隔（DISABLED→禁用, TICK→≥60min, SCHEDULED→24h），静默完成 |
+| **自动同步** | ✅ | 见 [三B、增量更新模式与客户端自动同步](#三b增量更新模式与客户端自动同步)：DISABLED 关闭；TICK 进服+在线周期；SCHEDULED 进服仅时间戳比对 |
 | 流式写入 | ✅ | 边接收边写入 Xaero 目录，每区域写入后清除 `.xwmc` 缓存并触发重载 |
 | 视距优先 | ✅ | 优先加载视距范围内区域 |
 | 过期检测 | ✅ | 10 分钟超时自动清除累积数据 |

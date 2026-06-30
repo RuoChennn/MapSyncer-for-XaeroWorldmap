@@ -74,7 +74,7 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 | `/mapsyncer generate <dim> --force` | Force rebuild (clears existing cache) |
 | `/mapsyncer status` | View generation progress and cache statistics |
 | `/mapsyncer incremental off` | Disable incremental updates |
-| `/mapsyncer incremental tick [interval]` | Enable periodic updates (20–72000 ticks) |
+| `/mapsyncer incremental tick [interval]` | Enable periodic updates (2400–72000 ticks, default 6000 = 5 min) |
 | `/mapsyncer incremental scheduled [hour] [min]` | Enable scheduled updates (default 04:00) |
 
 ---
@@ -106,7 +106,7 @@ NeoForge / Fabric config: `config/` directory (`.toml` for NeoForge, `.propertie
 | Option | Default | Description |
 |--------|---------|-------------|
 | `incrementalUpdateMode` | DISABLED | DISABLED / TICK / SCHEDULED |
-| `incrementalUpdateIntervalTicks` | 200 | TICK mode interval (20 ticks = 1 second) |
+| `incrementalUpdateIntervalTicks` | 6000 | TICK mode interval (20 ticks = 1 s; default 5 min, min 2 min) |
 | `scheduledUpdateHour` | 4 | Scheduled update hour (0–23) |
 | `scheduledUpdateMinute` | 0 | Scheduled update minute (0–59) |
 
@@ -130,6 +130,31 @@ Format: `dimensionID|scanMode|caveStart|hasSkylight|hasCeiling|minY|height|logic
 
 - **SURFACE**: Scans downward from heightmap. For Overworld and End.
 - **CAVE**: Scans downward from a fixed height. For Nether.
+
+---
+
+## Incremental Update Modes & Client Auto-Sync
+
+The server `incrementalUpdateMode` controls when the **map cache** is rescanned from MCA files. On join, the client receives `ServerInstalledPayload` and may **auto-sync** using the same hash/timestamp rules as manual `/mapsyncer sync`.
+
+### DISABLED
+
+- **Server**: No incremental scan handler.
+- **Client**: No auto-sync on join; manual sync only. Shows resume prompt if a previous sync was interrupted.
+
+### TICK
+
+- **Server**: Scans changed regions every `incrementalUpdateIntervalTicks` (default **6000 = 5 min**, min **2400 = 2 min**).
+- **Client on join**: Sync if local timestamps are older than server **and** join cooldown (minutes = tick interval) has elapsed. Chat messages for start/complete.
+- **Client while online**: Fixed-rate timer matching server tick interval; progress on **Action Bar** only (periodic sync strings).
+- **Manual sync**: No cooldown.
+
+### SCHEDULED
+
+- **Server**: Once daily at `scheduledUpdateHour:Minute` (default **04:00**, server local timezone), within a 1-minute window.
+- **Client on join**: Sync **only if** `clientMaxTimestamp < serverLastGenerationTimestamp`; **no cooldown**.
+- **Client while online**: No periodic timer; rejoin or manual sync after server updates.
+- **Manual sync**: No cooldown.
 
 ---
 

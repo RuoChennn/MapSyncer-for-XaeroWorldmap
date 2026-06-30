@@ -107,7 +107,7 @@
   "option.mapsyncer.concurrent_regions.tooltip": "Maximum number of regions converted simultaneously. Higher values process faster but demand more server CPU.",
   "option.mapsyncer.packet_size.tooltip": "Maximum bytes per network packet during sync. Excessively large packets may be dropped on unstable connections.",
   "option.mapsyncer.speed_limit.tooltip": "Maximum transfer rate (KB/s) during sync. Set to 0 for unlimited. Too high may impact game network quality.",
-  "option.mapsyncer.update_mode.tooltip": "Server-side map cache incremental update strategy.\n\nDISABLED - No incremental updates, also disables client auto-sync.\nTICK - Periodic tick-based updates. Client auto-syncs on join and on the same interval while online.\nSCHEDULED - Daily scheduled update. Client auto-syncs every 24h.",
+  "option.mapsyncer.update_mode.tooltip": "Server-side map cache incremental update strategy.\n\nDISABLED - No incremental updates, also disables client auto-sync.\nTICK - Periodic tick-based updates. Client auto-syncs on join (with cooldown) and on the same interval while online.\nSCHEDULED - Daily scheduled update. Client auto-syncs on join when local timestamps are older than the server cache.",
   "option.mapsyncer.interval_ticks.tooltip": "Update interval in TICK mode. 20 ticks = 1 second (default 6000 = 5 minutes, min 2400 = 2 minutes). Also determines the client online periodic sync interval.",
   "option.mapsyncer.scheduled_hour.tooltip": "Hour of day (0-23) for incremental updates and auto-sync in SCHEDULED mode.",
   "option.mapsyncer.scheduled_minute.tooltip": "Minute of hour (0-59) for incremental updates and auto-sync in SCHEDULED mode."

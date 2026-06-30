@@ -15,8 +15,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * 客户端自动同步管理器。
  *
- * 在收到服务端安装通知后，比对服务端最后地图生成时间与客户端最后同步时间，
- * 结合冷却间隔决定是否触发进服自动同步；TICK 模式下另启周期计时器在线拉取。
+ * 在收到服务端安装通知后，比对服务端最后地图生成时间与客户端最后同步时间决定是否进服自动同步；
+ * SCHEDULED 模式仅做时间戳比对，TICK 模式另加冷却并启在线周期计时器。
  */
 public class AutoSyncManager {
 
@@ -68,7 +68,29 @@ public class AutoSyncManager {
 
     /** 增量更新已开启，允许加入时自动同步 */
     public static boolean isJoinAutoSyncEnabled() {
+        if (serverUpdateMode == UpdateMode.SCHEDULED || serverUpdateMode == UpdateMode.TICK) {
+            return true;
+        }
         return serverAutoSyncIntervalMinutes > 0;
+    }
+
+    /**
+     * 日程表模式：客户端最后同步时间早于服务端最后生成时间则同步（无冷却）。
+     */
+    public static boolean shouldSyncScheduledOnJoin(long serverGenTime) {
+        if (serverGenTime <= 0) {
+            LOGGER.debug("Scheduled join auto-sync skipped: server has no generation data");
+            return false;
+        }
+        long clientLastSync = getClientLastSyncTimestamp();
+        if (clientLastSync >= serverGenTime) {
+            LOGGER.debug("Scheduled join auto-sync skipped: client up-to-date (client={}, server={})",
+                    clientLastSync, serverGenTime);
+            return false;
+        }
+        LOGGER.info("Scheduled join auto-sync: client behind server (client={}, server={})",
+                clientLastSync, serverGenTime);
+        return true;
     }
 
     public static boolean shouldAutoSync(long serverGenTime, int intervalMinutes) {
@@ -103,14 +125,18 @@ public class AutoSyncManager {
 
     /**
      * 加入服务器时是否应触发一次自动 sync。
+     * SCHEDULED：仅比对客户端/服务端时间戳；TICK：时间戳 + 冷却间隔。
      */
     public static boolean shouldAutoSyncOnJoin(long serverGenTime, int intervalMinutes) {
-        if (intervalMinutes <= 0) {
-            return false;
-        }
         if (hasPendingResume()) {
             LOGGER.info("Join auto-sync: resuming interrupted sync");
             return true;
+        }
+        if (serverUpdateMode == UpdateMode.SCHEDULED) {
+            return shouldSyncScheduledOnJoin(serverGenTime);
+        }
+        if (intervalMinutes <= 0) {
+            return false;
         }
         return shouldAutoSync(serverGenTime, intervalMinutes);
     }

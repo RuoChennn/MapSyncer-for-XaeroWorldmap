@@ -46,10 +46,10 @@
 | **断点续传** | 同步中断后重连自动恢复（基于哈希比对） |
 | **视距优先** | 玩家视距范围内的区域优先传输 |
 | **维度支持** | 主世界、地狱、末地及 Mod 维度（暮光森林等） |
-| **增量更新** | 服务端可配置周期性/定时自动更新地图缓存 |
+| **增量更新** | 服务端可配置 TICK 周期 / SCHEDULED 定时自动更新地图缓存 |
 | **洞穴模式** | 支持从指定高度向下扫描，输出到 caves 子目录 |
 | **多线程哈希** | 客户端 CRC32 计算支持并行，线程数可配置 |
-| **自动同步** | 加入服务器时自动检测服务端地图更新，无需手动执行指令 |
+| **自动同步** | 根据服务端增量更新模式，进服或在线自动拉取地图（见下文） |
 | **内置服务器** | 单人游戏局域网共享，复用主机 Xaero 存档 |
 | **MapPackager** | 独立 CLI 工具，将服务器缓存打包为客户端可用的 Xaero 地图包（离线分发） |
 | **Payload 分片** | 双向自动分片，>28KB 数据拆分为小包传输，接收端自动组装 |
@@ -85,7 +85,7 @@
 | `/mapsyncer generate <维度> --force` | 强制重新生成（清除缓存） |
 | `/mapsyncer status` | 查看生成进度和缓存统计 |
 | `/mapsyncer incremental off` | 禁用增量更新 |
-| `/mapsyncer incremental tick [间隔]` | 启用周期更新（20-72000 ticks） |
+| `/mapsyncer incremental tick [间隔]` | 启用周期更新（2400–72000 ticks，默认 6000 = 5 分钟） |
 | `/mapsyncer incremental scheduled [时] [分]` | 启用定时更新（默认 04:00） |
 
 ---
@@ -117,7 +117,7 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `incrementalUpdateMode` | DISABLED | DISABLED / TICK / SCHEDULED |
-| `incrementalUpdateIntervalTicks` | 200 | TICK 模式间隔（20 ticks = 1 秒） |
+| `incrementalUpdateIntervalTicks` | 6000 | TICK 模式间隔（20 ticks = 1 秒，默认 5 分钟，最小 2 分钟） |
 | `scheduledUpdateHour` | 4 | 定时更新小时（0-23） |
 | `scheduledUpdateMinute` | 0 | 定时更新分钟（0-59） |
 
@@ -141,6 +141,43 @@ dimension_configs = [
 
 - **SURFACE**：从高度图向下扫描，适用于主世界、末地，使用此模式会忽略洞穴高度
 - **CAVE**：从固定高度向下扫描，适用于地狱
+
+---
+
+## 增量更新模式与客户端自动同步
+
+服务端通过 `incrementalUpdateMode` 控制**地图缓存**何时重新扫描 MCA 并生成；客户端在收到 `ServerInstalledPayload` 后，根据同一模式决定是否**自动发起 sync**（与手动 `/mapsyncer sync` 共用同一套 hash/时间戳比对，无需传输的区域会被跳过）。
+
+### DISABLED（禁用）
+
+| 端 | 行为 |
+|----|------|
+| **服务端** | 不运行增量扫描处理器 |
+| **客户端** | 不自动 sync；可手动 `/mapsyncer sync`；若增量更新关闭且存在未完成同步，进服时提示断点续传 |
+
+### TICK（周期模式）
+
+| 端 | 行为 |
+|----|------|
+| **服务端** | 每 `incrementalUpdateIntervalTicks` tick 扫描一次有变化的 MCA 并更新缓存（默认 **6000 tick = 5 分钟**，最小 **2400 tick = 2 分钟**） |
+| **客户端 · 进服** | 比对 `ClientTimestampCache` 最大时间戳与服务端 `lastGenerationTimestamp`；若本地较旧 **且** 距上次自动 sync 已超过 tick 间隔（分钟），则延迟 5 秒后 `sync all`（聊天栏提示） |
+| **客户端 · 在线** | 启动与生成周期一致的计时器，每周期自动 `sync all`；进度与结果仅显示在 **Action Bar**（周期同步文案），不发聊天消息 |
+| **客户端 · 手动** | `/mapsyncer sync` 不受冷却限制 |
+
+### SCHEDULED（日程表模式）
+
+| 端 | 行为 |
+|----|------|
+| **服务端** | 每天在 `scheduledUpdateHour:scheduledUpdateMinute`（默认 **04:00**，服务器**本地时区**）的 1 分钟窗口内执行一次增量扫描；同一天只执行一次 |
+| **客户端 · 进服** | 仅比对时间戳：若 `clientMaxTimestamp < serverLastGenerationTimestamp` 则自动 `sync all`；**无冷却**，每次进服只要本地落后就会 sync |
+| **客户端 · 在线** | **无**在线周期计时器；服务端更新后需进服触发或手动 sync |
+| **客户端 · 手动** | 同 TICK |
+
+### 共用规则
+
+- **断点续传**：任意模式下，若存在未完成同步（`needsResume`），进服优先自动续传，且启用自动 sync 时不再弹出断点续传聊天提示。
+- **比对逻辑**：服务端 `RegionSyncPolicy` — hash 一致跳过；客户端时间戳 ≥ 服务端则保留本地探索；否则传输。
+- **状态提示**：进服时显示「自动同步：已关闭 / 每 X 分钟 / 每天」（SCHEDULED 的「每天」指服务端生成 schedule，客户端进服只看时间戳）。
 
 ---
 
