@@ -439,6 +439,9 @@ public class ServerSyncHandlerLogic {
             }
 
             long waitRemainingMs = remainingTimeMs - (System.currentTimeMillis() - waitStartTime);
+            if (waitRemainingMs <= 0) {
+                break;
+            }
             long sleepMs = Math.min(checkIntervalMs, waitRemainingMs);
 
             try {
@@ -539,10 +542,15 @@ public class ServerSyncHandlerLogic {
             requestTotalParts.remove(playerId);
 
             Map<String, ClientMeta> merged = new HashMap<>();
+            SyncRequestPayload refPart = null;
             for (SyncRequestPayload part : parts.values()) {
                 merged.putAll(part.clientMeta());
+                if (refPart == null) {
+                    refPart = part;
+                }
             }
-            payload = new SyncRequestPayload(merged);
+            payload = new SyncRequestPayload(merged, refPart.partIndex(), refPart.totalParts(),
+                    refPart.syncAll(), refPart.targetDimension());
             LOGGER.debug("SyncRequest assembled from {} parts, {} entries total", parts.size(), merged.size());
         }
 
@@ -570,10 +578,11 @@ public class ServerSyncHandlerLogic {
 
         // Client metadata (timestamp + hash) - contains already received regions for resume
         Map<String, ClientMeta> clientMeta = payload.clientMeta();
+        boolean syncAll = payload.syncAll();
+        String targetDimension = payload.targetDimension();
 
-        // 将耗时操作移到异步线程执行，避免阻塞主线程
-        Thread syncThread = new Thread(() -> processSyncAsync(server, playerId, clientMeta, startDimension, syncVersion,
-                startBlockX, startBlockZ, viewDistanceRegions, worldId),
+        Thread syncThread = new Thread(() -> processSyncAsync(server, playerId, clientMeta, syncAll, targetDimension,
+                startDimension, syncVersion, startBlockX, startBlockZ, viewDistanceRegions, worldId),
                 "mapsyncer-sync-" + playerId);
         syncThread.setDaemon(true);
         syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
@@ -606,12 +615,38 @@ public class ServerSyncHandlerLogic {
     }
 
     /**
+     * 从缓存目录发现所有含 region 数据的维度（首次 sync all 时 clientMeta 为空）。
+     */
+    private static Set<String> discoverDimensionsFromCache(Path cacheDir) {
+        Set<String> dims = new HashSet<>();
+        if (!Files.exists(cacheDir)) {
+            return dims;
+        }
+        try (Stream<Path> topLevel = Files.list(cacheDir)) {
+            topLevel.filter(Files::isDirectory).forEach(dimDir -> {
+                String xaeroDim = dimDir.getFileName().toString();
+                try (Stream<Path> stream = Files.walk(dimDir)) {
+                    if (stream.anyMatch(p -> p.toString().endsWith(".zip"))) {
+                        dims.add(xaeroDim);
+                    }
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to walk dimension {} cache", xaeroDim, e);
+                }
+            });
+        } catch (IOException e) {
+            LOGGER.warn("Failed to list cache directory", e);
+        }
+        return dims;
+    }
+
+    /**
      * 异步处理同步请求。
      * 在单独线程中执行耗时操作（遍历缓存、比对哈希、发送数据），
      * 避免阻塞服务器主线程。
      */
     private static void processSyncAsync(MinecraftServer server, UUID playerId,
-            Map<String, ClientMeta> clientMeta, ResourceKey<Level> startDimension, int syncVersion,
+            Map<String, ClientMeta> clientMeta, boolean syncAll, String targetDimension,
+            ResourceKey<Level> startDimension, int syncVersion,
             int startBlockX, int startBlockZ, int viewDistanceRegions, int worldId) {
 
         LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
@@ -635,18 +670,25 @@ public class ServerSyncHandlerLogic {
         int timestampSkipCount = 0;
 
         Set<String> requestedDimensions = new java.util.HashSet<>();
-        for (String key : clientMeta.keySet()) {
-            LOGGER.debug("Client meta key: {}", key);
-            String[] parts = key.split("[/\\\\]");
-            if (parts.length > 1) {
-                String dim = parts[0];
-                requestedDimensions.add(dim);
-                if (key.contains("_placeholder_")) {
-                    LOGGER.debug("Found placeholder for dimension {}, will sync all regions", dim);
+        if (syncAll) {
+            requestedDimensions.addAll(discoverDimensionsFromCache(cacheDir));
+            LOGGER.info("Sync-all: discovered {} dimensions from cache", requestedDimensions.size());
+        } else if (targetDimension != null && !targetDimension.isEmpty()) {
+            requestedDimensions.add(targetDimension);
+            LOGGER.debug("Single-dimension sync: {}", targetDimension);
+        } else {
+            for (String key : clientMeta.keySet()) {
+                LOGGER.debug("Client meta key: {}", key);
+                String[] keyParts = key.split("[/\\\\]");
+                if (keyParts.length > 1) {
+                    requestedDimensions.add(keyParts[0]);
+                    if (key.contains("_placeholder_")) {
+                        LOGGER.debug("Found placeholder for dimension {}, will sync all regions", keyParts[0]);
+                    }
                 }
             }
         }
-        LOGGER.debug("Client requesting dimensions (Xaero format): {}", requestedDimensions);
+        LOGGER.debug("Requested dimensions (Xaero format): {}", requestedDimensions);
 
         Set<String> skippedDimensions = new HashSet<>();
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
@@ -663,11 +705,13 @@ public class ServerSyncHandlerLogic {
                 } catch (IOException e) {
                     LOGGER.warn("Failed to check dimension {} cache directory", xaeroDim, e);
                 }
-            } else {
+            } else if (!syncAll) {
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 enqueueIfCurrent(server, playerId, syncVersion, player ->
                         player.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim)));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
+            } else {
+                LOGGER.debug("Sync-all: skipping dimension {} with no cache", xaeroDim);
             }
         }
 
@@ -761,7 +805,7 @@ public class ServerSyncHandlerLogic {
 
         if (total == 0) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
+                player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate"));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
                 finalizePlayerSync(playerId);
@@ -773,8 +817,7 @@ public class ServerSyncHandlerLogic {
 
         final int initialTotal = total;
         enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start",
-                        initialTotal, finalHashMatchCount, finalTimestampSkipCount));
+                player.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start", initialTotal));
                 NetworkManager.sendToPlayer(player,
                         new SyncProgressPayload(0, initialTotal, "Sync started"));
         });

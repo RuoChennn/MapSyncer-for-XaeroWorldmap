@@ -304,7 +304,8 @@ public class MapSyncerCommandLogic {
             tsCache.markSyncStart(dimensions, command);
         }
 
-        SyncRequestPayload[] parts = SyncRequestPayload.split(metaMap);
+        SyncRequestPayload[] parts = SyncRequestPayload.split(metaMap, syncAll,
+                syncAll ? "" : (xaeroDim != null ? xaeroDim : ""));
         for (SyncRequestPayload part : parts) {
             NetworkManager.sendToServer(part);
         }

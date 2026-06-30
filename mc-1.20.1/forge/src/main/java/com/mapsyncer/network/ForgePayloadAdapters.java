@@ -5,6 +5,7 @@ import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
+import com.mapsyncer.network.payload.SyncRequestWireCodec;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.network.FriendlyByteBuf;
 
@@ -35,40 +36,11 @@ public class ForgePayloadAdapters {
         }
 
         public static void encode(ForgeSyncRequestMessage msg, FriendlyByteBuf buf) {
-            buf.writeInt(msg.data.clientMeta().size());
-            for (var entry : msg.data.clientMeta().entrySet()) {
-                buf.writeUtf(entry.getKey());
-                buf.writeLong(entry.getValue().timestampSeconds());
-                buf.writeUtf(entry.getValue().hash());
-            }
-            buf.writeBoolean(msg.data.totalParts() > 1);
-            if (msg.data.totalParts() > 1) {
-                buf.writeInt(msg.data.partIndex());
-                buf.writeInt(msg.data.totalParts());
-            }
+            SyncRequestWireCodec.write(buf, msg.data);
         }
 
         public static ForgeSyncRequestMessage decode(FriendlyByteBuf buf) {
-            int size = buf.readInt();
-            Map<String, ClientMeta> metaMap = new HashMap<>();
-            for (int i = 0; i < size; i++) {
-                String path = buf.readUtf();
-                long timestampSeconds = buf.readLong();
-                String hash = buf.readUtf();
-                metaMap.put(path, new ClientMeta(timestampSeconds, hash));
-            }
-
-            int partIndex = 0;
-            int totalParts = 0;
-            if (buf.isReadable()) {
-                boolean isSplit = buf.readBoolean();
-                if (isSplit) {
-                    partIndex = buf.readInt();
-                    totalParts = buf.readInt();
-                }
-            }
-
-            return new ForgeSyncRequestMessage(new SyncRequestPayload(metaMap, partIndex, totalParts));
+            return new ForgeSyncRequestMessage(SyncRequestWireCodec.read(buf));
         }
     }
 

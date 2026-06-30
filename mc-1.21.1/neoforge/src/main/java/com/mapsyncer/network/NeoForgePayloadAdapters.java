@@ -6,6 +6,7 @@ import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
+import com.mapsyncer.network.payload.SyncRequestWireCodec;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -40,40 +41,11 @@ public class NeoForgePayloadAdapters {
         }
 
         public static void encode(RegistryFriendlyByteBuf buf, NeoForgeSyncRequestPayload payload) {
-            buf.writeInt(payload.data.clientMeta().size());
-            for (var entry : payload.data.clientMeta().entrySet()) {
-                buf.writeUtf(entry.getKey());
-                buf.writeLong(entry.getValue().timestampSeconds());
-                buf.writeUtf(entry.getValue().hash());
-            }
-            buf.writeBoolean(payload.data.totalParts() > 1);
-            if (payload.data.totalParts() > 1) {
-                buf.writeInt(payload.data.partIndex());
-                buf.writeInt(payload.data.totalParts());
-            }
+            SyncRequestWireCodec.write(buf, payload.data());
         }
 
         public static NeoForgeSyncRequestPayload decode(RegistryFriendlyByteBuf buf) {
-            int size = buf.readInt();
-            Map<String, ClientMeta> metaMap = new HashMap<>();
-            for (int i = 0; i < size; i++) {
-                String path = buf.readUtf();
-                long timestampSeconds = buf.readLong();
-                String hash = buf.readUtf();
-                metaMap.put(path, new ClientMeta(timestampSeconds, hash));
-            }
-
-            int partIndex = 0;
-            int totalParts = 0;
-            if (buf.isReadable()) {
-                boolean isSplit = buf.readBoolean();
-                if (isSplit) {
-                    partIndex = buf.readInt();
-                    totalParts = buf.readInt();
-                }
-            }
-
-            return new NeoForgeSyncRequestPayload(new SyncRequestPayload(metaMap, partIndex, totalParts));
+            return new NeoForgeSyncRequestPayload(SyncRequestWireCodec.read(buf));
         }
     }
 

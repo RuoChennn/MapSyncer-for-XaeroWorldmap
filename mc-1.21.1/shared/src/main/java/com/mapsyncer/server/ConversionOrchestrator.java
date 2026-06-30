@@ -16,7 +16,7 @@ import com.mapsyncer.util.DimensionTypeHelper;
 import com.mapsyncer.util.NamedThreadFactory;
 import com.mapsyncer.util.XaeroPathResolver;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -71,6 +71,12 @@ public class ConversionOrchestrator {
 
     /** 跳过的区域数量（时间戳未变化，原子操作安全） */
     private static final AtomicInteger skippedCount = new AtomicInteger(0);
+
+    /** 实际写入缓存的区域数量（不含跳过） */
+    private static final AtomicInteger convertedCountAtomic = new AtomicInteger(0);
+
+    /** 转换阶段发现无有效区块内容的区域数量 */
+    private static final AtomicInteger skippedEmptyContentCount = new AtomicInteger(0);
 
     /** 总区域数量 */
     private static volatile int totalCount = 0;
@@ -233,6 +239,8 @@ public class ConversionOrchestrator {
         }
         processedCount = 0;
         skippedCount.set(0);
+        convertedCountAtomic.set(0);
+        skippedEmptyContentCount.set(0);
         completedDimensions.clear();  // 重置已完成维度列表
 
         // Note: caller handles saveEverything on server thread before invoking this method.
@@ -254,7 +262,8 @@ public class ConversionOrchestrator {
             isRunning.set(false);
             currentStatus = "completed";
             shutdownExecutor();
-            LOGGER.info("Conversion completed: {}/{} regions, {} skipped (empty MCA)", processedCount, totalCount, totalSkippedEmpty);
+            LOGGER.info("Conversion completed: {}/{} regions converted, {} skipped (empty MCA at scan)",
+                    convertedCountAtomic.get(), totalCount, totalSkippedEmpty);
         }
         return true;
     }
@@ -274,6 +283,8 @@ public class ConversionOrchestrator {
         }
         processedCount = 0;
         skippedCount.set(0);
+        convertedCountAtomic.set(0);
+        skippedEmptyContentCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
         if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return true; }
         ServerLevel level = server.getLevel(dimKey);
@@ -310,13 +321,15 @@ public class ConversionOrchestrator {
         }
         processedCount = 0;
         skippedCount.set(0);
+        convertedCountAtomic.set(0);
+        skippedEmptyContentCount.set(0);
         ResourceKey<Level> dimKey = parseDimensionId(dimensionId, server);
         if (dimKey == null) { LOGGER.error("Unknown dimension: {}", dimensionId); isRunning.set(false); return true; }
         ServerLevel level = server.getLevel(dimKey);
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return true; }
 
         // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
-        String fullDimId = dimKey.location().toString(); // 完整维度 ID（包含 namespace）
+        String fullDimId = dimKey.identifier().toString(); // 完整维度 ID（包含 namespace）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path dimCacheDir = getCacheDir().resolve(xaeroDimName);
         clearDimensionCache(dimCacheDir);
@@ -377,7 +390,7 @@ public class ConversionOrchestrator {
         // 提前检查 MCA 文件是否存在
         Path mcaPath = checkMcaFileExists(server, dimension, regionX, regionZ);
         if (mcaPath == null) {
-            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.location().getPath());
+            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.identifier().getPath());
             isRunning.set(false);
             return SingleRegionResult.REGION_NOT_FOUND;
         }
@@ -391,8 +404,8 @@ public class ConversionOrchestrator {
         // Note: caller handles saveEverything on server thread before invoking this method.
 
         // 使用完整维度 ID 作为缓存 key（确保新格式路径正确转换）
-        String fullDimId = dimension.location().toString();
-        String dimPath = dimension.location().getPath(); // 用于配置查找
+        String fullDimId = dimension.identifier().toString();
+        String dimPath = dimension.identifier().getPath(); // 用于配置查找
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
@@ -480,8 +493,8 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded"); return; }
 
         currentDimension = dimRegions.dimension();
-        String fullDimId = dimRegions.dimension().location().toString();
-        String dimPath = dimRegions.dimension().location().getPath();
+        String fullDimId = dimRegions.dimension().identifier().toString();
+        String dimPath = dimRegions.dimension().identifier().getPath();
 
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
         ScanMode scanMode = scanConfig.scanMode();
@@ -524,6 +537,8 @@ public class ConversionOrchestrator {
         ConcurrentLinkedQueue<RegionCoords> failedRegions = new ConcurrentLinkedQueue<>();
         processedCountAtomic.set(0);
         skippedCount.set(0);
+        convertedCountAtomic.set(0);
+        skippedEmptyContentCount.set(0);
         long generationTimeSeconds = System.currentTimeMillis() / 1000;
 
         ExecutorService executor = getOrCreateExecutor();
@@ -553,10 +568,11 @@ public class ConversionOrchestrator {
             }
         }
 
-        LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA), {} failed",
-            dimPath, regions.size(), processedCount - skippedCount.get(), skippedCount.get(), dimRegions.skippedEmptyCount(), failedRegions.size());
+        LOGGER.info("Dimension {} completed: {} total, {} converted, {} skipped (unchanged), {} skipped (empty MCA at scan), {} skipped (empty content), {} failed",
+            dimPath, regions.size(), convertedCountAtomic.get(), skippedCount.get(),
+            dimRegions.skippedEmptyCount(), skippedEmptyContentCount.get(), failedRegions.size());
 
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension().location().toString());
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension().identifier().toString());
         completedDimensions.add(friendlyName);
 
         mcaCache.saveCache();
@@ -710,8 +726,10 @@ public class ConversionOrchestrator {
 
         if (!com.mapsyncer.mca.McaContentProbe.hasAnyChunk(mcaPath)) {
             EmptyRegionSupport.purgeGeneratedArtifacts(outputDir, coords.x(), coords.z(), relativePath, genCache);
+            skippedEmptyContentCount.incrementAndGet();
             if (logProgress) {
                 processedCountAtomic.incrementAndGet();
+                LOGGER.debug("Skipped region ({}, {}): no chunk data in MCA", coords.x(), coords.z());
             }
             return;
         }
@@ -726,8 +744,10 @@ public class ConversionOrchestrator {
 
         if (EmptyRegionSupport.isEmptyConverted(converted)) {
             EmptyRegionSupport.purgeGeneratedArtifacts(outputDir, coords.x(), coords.z(), relativePath, genCache);
+            skippedEmptyContentCount.incrementAndGet();
             if (logProgress) {
                 processedCountAtomic.incrementAndGet();
+                LOGGER.debug("Skipped region ({}, {}): conversion produced no map data", coords.x(), coords.z());
             }
             return;
         }
@@ -745,8 +765,9 @@ public class ConversionOrchestrator {
         }
 
         if (logProgress) {
-            int currentProcessed = processedCountAtomic.incrementAndGet();
-            LOGGER.info("{} region ({}, {}): {}/{}", logPrefix, coords.x(), coords.z(), currentProcessed, totalCount);
+            int convertedSoFar = convertedCountAtomic.incrementAndGet();
+            processedCountAtomic.incrementAndGet();
+            LOGGER.info("{} region ({}, {}): {}/{}", logPrefix, coords.x(), coords.z(), convertedSoFar, totalCount);
         }
     }
 
@@ -796,12 +817,12 @@ public class ConversionOrchestrator {
                 return Level.END;
         }
 
-        // 尝试解析为 ResourceLocation 并查找维度
+        // 尝试解析为 Identifier 并查找维度
         try {
-            ResourceLocation location = ResourceLocation.parse(id);
+            Identifier location = Identifier.parse(id);
             // 遍历所有已加载的维度查找匹配
             for (ServerLevel level : server.getAllLevels()) {
-                ResourceLocation dimLocation = level.dimension().location();
+                Identifier dimLocation = level.dimension().identifier();
                 if (dimLocation.equals(location) ||
                     dimLocation.getPath().equals(id) ||
                     dimLocation.toString().equals(id)) {
@@ -843,8 +864,8 @@ public class ConversionOrchestrator {
                 continue;
             }
 
-            String fullDimId = dimRegions.dimension().location().toString();
-            String dimPath = dimRegions.dimension().location().getPath();
+            String fullDimId = dimRegions.dimension().identifier().toString();
+            String dimPath = dimRegions.dimension().identifier().getPath();
 
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             ScanMode scanMode = scanConfig.scanMode();
@@ -993,7 +1014,7 @@ public class ConversionOrchestrator {
      *
      * @return 实际更新数量
      */
-    public static int getUpdatedCount() { return processedCount - skippedCount.get(); }
+    public static int getUpdatedCount() { return convertedCountAtomic.get(); }
 
     /**
      * 获取跳过的区域数量（时间戳未变化）

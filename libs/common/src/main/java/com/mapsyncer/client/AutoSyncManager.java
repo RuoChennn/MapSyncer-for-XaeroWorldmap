@@ -32,6 +32,9 @@ public class AutoSyncManager {
     private static volatile ScheduledFuture<?> pendingTask;
     private static volatile boolean active = false;
 
+    /** 未收到 ServerInstalled 前为 -1 */
+    private static volatile int serverAutoSyncIntervalMinutes = -1;
+
     /**
      * 根据 autoSyncIntervalMinutes 获取状态消息翻译键和参数。
      * 0=禁用, <1440=每X分钟, ≥1440=每天。
@@ -51,6 +54,23 @@ public class AutoSyncManager {
      * @param intervalMinutes 自动同步冷却间隔（分钟，0 表示禁用）
      * @return true 表示满足自动同步条件
      */
+    public static void configureFromServer(int intervalMinutes) {
+        serverAutoSyncIntervalMinutes = intervalMinutes;
+    }
+
+    public static void resetServerPolicy() {
+        serverAutoSyncIntervalMinutes = -1;
+    }
+
+    public static boolean isServerPolicyKnown() {
+        return serverAutoSyncIntervalMinutes >= 0;
+    }
+
+    /** 增量更新已开启，允许加入时自动同步 */
+    public static boolean isJoinAutoSyncEnabled() {
+        return serverAutoSyncIntervalMinutes > 0;
+    }
+
     public static boolean shouldAutoSync(long serverGenTime, int intervalMinutes) {
         if (intervalMinutes <= 0) {
             LOGGER.debug("Auto-sync disabled (interval={})", intervalMinutes);
@@ -79,6 +99,35 @@ public class AutoSyncManager {
         LOGGER.info("Auto-sync conditions met: serverGen={}, clientSync={}, interval={}m",
             serverGenTime, clientLastSync, intervalMinutes);
         return true;
+    }
+
+    /**
+     * 加入服务器时是否应触发一次自动 sync。
+     * 增量更新关闭时不触发；开启时若有未完成同步或服务端地图较新则触发。
+     */
+    public static boolean shouldAutoSyncOnJoin(long serverGenTime, int intervalMinutes) {
+        if (intervalMinutes <= 0) {
+            return false;
+        }
+        if (hasPendingResume()) {
+            LOGGER.info("Join auto-sync: resuming interrupted sync");
+            return true;
+        }
+        return shouldAutoSync(serverGenTime, intervalMinutes);
+    }
+
+    public static boolean hasPendingResume() {
+        try {
+            Path baseDir = ClientTimestampCache.getLastBaseDir();
+            if (baseDir == null) {
+                return false;
+            }
+            ClientTimestampCache cache = ClientTimestampCache.getInstance(baseDir);
+            return cache != null && cache.cacheFileExists() && cache.needsResume();
+        } catch (Exception e) {
+            LOGGER.debug("Failed to check pending resume: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -125,6 +174,7 @@ public class AutoSyncManager {
 
     public static void shutdown() {
         cancel();
+        resetServerPolicy();
         EXECUTOR.shutdownNow();
     }
 

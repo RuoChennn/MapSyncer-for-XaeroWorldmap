@@ -80,6 +80,7 @@ public final class XaeroReflectionHelper {
     private static Method getLeafMapRegionMethod;
     private static Method requestLoadMethod;
     private static Method cancelRefreshMethod;
+    private static Method isRefreshingMethod;
     private static Method setHasHadTerrainMethod;
     private static Method setRegionDetectionCompleteMethod;
     private static Method getMapWorldMethod;
@@ -145,6 +146,11 @@ public final class XaeroReflectionHelper {
             getLeafMapRegionMethod = mapProcessorClass.getMethod("getLeafMapRegion", int.class, int.class, int.class, boolean.class);
             requestLoadMethod = mapSaveLoadClass.getMethod("requestLoad", mapRegionClass, String.class, boolean.class);
             cancelRefreshMethod = mapRegionClass.getMethod("cancelRefresh", mapProcessorClass);
+            try {
+                isRefreshingMethod = mapRegionClass.getMethod("isRefreshing");
+            } catch (NoSuchMethodException ignored) {
+                isRefreshingMethod = null;
+            }
             setHasHadTerrainMethod = mapRegionClass.getMethod("setHasHadTerrain");
             setRegionDetectionCompleteMethod = mapSaveLoadClass.getMethod("setRegionDetectionComplete", boolean.class);
             getMapWorldMethod = mapProcessorClass.getMethod("getMapWorld");
@@ -703,6 +709,23 @@ public final class XaeroReflectionHelper {
         } catch (Exception e) {
             LOGGER.warn("Failed to get loadState", e);
             return -1;
+        }
+    }
+
+    /**
+     * 区域是否正在刷新（纹理/GPU 上传中）。
+     *
+     * @return true 表示仍在刷新；方法不可用时返回 false
+     */
+    public static boolean isRefreshing(Object mapRegion) {
+        if (!initialized || isRefreshingMethod == null || mapRegion == null) {
+            return false;
+        }
+        try {
+            return (boolean) isRefreshingMethod.invoke(mapRegion);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get isRefreshing", e);
+            return false;
         }
     }
 

@@ -32,6 +32,7 @@ public final class ClientLifecycleBridge {
         XaeroMapDataHandler.clearRegionTracking();
         ClientHashManager.shutdown();
         ClientSyncWriteQueue.shutdown();
+        RegionPipelineTracker.endSession();
         ClientTimestampCache.resetInstance();
         LOGGER.info("Client disconnected, all resources cleaned up");
     }

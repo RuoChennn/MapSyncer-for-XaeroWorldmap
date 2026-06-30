@@ -62,8 +62,8 @@
 
   "mapsyncer.server.no_cache": "No map cache available. Run /mapsyncer generate first.",
   "mapsyncer.server.dim_not_available": "Dimension '%s' map data not available. Run /mapsyncer generate %s first.",
-  "mapsyncer.server.map_uptodate": "Map is up-to-date, nothing to download (%d matched, %d kept local exploration or updates)",
-  "mapsyncer.server.sync_start": "Downloading %d regions (%d already matched, %d kept local map)",
+  "mapsyncer.server.map_uptodate": "Map is up-to-date, nothing to download",
+  "mapsyncer.server.sync_start": "Downloading %d regions",
   "mapsyncer.server.sync_complete": "Map sync complete: sent %d updated regions",
   "mapsyncer.server.sync_partial": "Map sync partially complete: sent %d regions, %d read failures (of %d planned)",
 

@@ -198,6 +198,7 @@ public class MapPacketHandler {
      */
     public static void clearSyncData() {
         session.invalidate();
+        SyncProgressTracker.cancelTracking();
         clearReceivedChunks();
         loadedRegions.clear();
         partBuffer.clear();
@@ -246,10 +247,13 @@ public class MapPacketHandler {
             ctx.enqueueWork(() -> {
                 serverInstalled = true;
                 serverVersion = payload.version();
-                LOGGER.info("Server has MapSyncer installed, version: {}", serverVersion);
+                int intervalMinutes = payload.autoSyncIntervalMinutes();
+                AutoSyncManager.configureFromServer(intervalMinutes);
+                LOGGER.info("Server has MapSyncer installed, version: {}, joinAutoSync={}",
+                        serverVersion, intervalMinutes > 0);
 
                 // 显示自动同步状态
-                Object[] statusKey = AutoSyncManager.getStatusKey(payload.autoSyncIntervalMinutes());
+                Object[] statusKey = AutoSyncManager.getStatusKey(intervalMinutes);
                 String key = (String) statusKey[0];
                 if (statusKey.length > 1) {
                     Minecraft.getInstance().player.displayClientMessage(
@@ -259,8 +263,8 @@ public class MapPacketHandler {
                         ChatUtils.prefix().append(ChatUtils.desc(key)), false);
                 }
 
-                if (AutoSyncManager.shouldAutoSync(
-                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes())) {
+                if (AutoSyncManager.shouldAutoSyncOnJoin(
+                        payload.lastGenerationTimestamp(), intervalMinutes)) {
                     AutoSyncManager.schedule(() -> {
                         Minecraft.getInstance().execute(() -> {
                             if (Minecraft.getInstance().player != null
@@ -301,6 +305,7 @@ public class MapPacketHandler {
     public static void resetServerStatus() {
         serverInstalled = false;
         serverVersion = "";
+        AutoSyncManager.resetServerPolicy();
     }
 
     /**
@@ -349,6 +354,7 @@ public class MapPacketHandler {
                 serverInstalled = true;
                 LOGGER.info("Server confirmed (SyncResponse received), MapSyncer detected");
             }
+            SyncProgressTracker.onServerResponded();
 
             // Hard fail — 中止同步
             if (serverOutcome == SyncOutcome.HARD_FAIL) {
@@ -391,6 +397,7 @@ public class MapPacketHandler {
             // 首次收到数据时初始化反射缓存（含 DRAINING 阶段收到新 sync 的情况）
             if (session.phase() == SyncPhase.IDLE || session.phase() == SyncPhase.DRAINING_RELOAD) {
                 session.beginReceiving();
+                RegionPipelineTracker.beginSession();
                 LOGGER.info("Starting sync (streaming mode)");
                 if (!initializeReflectionCache()) {
                     session.markReflectionFailed();
@@ -439,6 +446,11 @@ public class MapPacketHandler {
                 final int gen = generationAtEnqueue;
                 final ClientTimestampCache batchTsCache = tsCache;
 
+                RegionPipelineTracker.onPacketReceived(
+                        assembled.regionX, assembled.regionZ, assembled.caveLayer, assembled.data.length);
+                RegionPipelineTracker.onWriteSubmitted(
+                        assembled.regionX, assembled.regionZ, assembled.caveLayer);
+
                 pendingWriteApplyCallbacks.incrementAndGet();
                 ClientSyncWriteQueue.submit(assembled, serverDir, serverWorldId, tsCache, writeResult -> {
                     mc.execute(() -> {
@@ -450,6 +462,8 @@ public class MapPacketHandler {
                             if (writeResult == null) {
                                 LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
                                         assembled.regionX, assembled.regionZ, assembled.data.length);
+                                RegionPipelineTracker.onWriteComplete(
+                                        assembled.regionX, assembled.regionZ, assembled.caveLayer, false);
                                 if (batchTsCache != null) {
                                     batchTsCache.remove(
                                             XaeroMapDataHandler.buildRelativePathForCache(assembled));
@@ -461,15 +475,24 @@ public class MapPacketHandler {
                                     if (inViewDistance) {
                                         triggerSingleRegionLoad(coord, assembled.caveLayer, true);
                                     } else {
+                                        RegionPipelineTracker.onDeferredLoadQueued(
+                                                coord.x(), coord.z(), assembled.caveLayer);
                                         pendingRegionLoads.add(new PendingRegionLoad(
                                                 coord.x(), coord.z(), assembled.caveLayer));
                                     }
                                     LOGGER.debug("区域 ({}, {}) layer={} inView={} 已写入并触发加载",
                                             coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
                                 } else if (shouldProcess) {
+                                    RegionPipelineTracker.onWriteOnlyComplete(
+                                            assembled.regionX, assembled.regionZ, assembled.caveLayer);
                                     LOGGER.debug("区域 ({}, {}) 已写入磁盘，反射不可用跳过运行时重载",
                                             coord.x(), coord.z());
+                                } else {
+                                    RegionPipelineTracker.onWriteOnlyComplete(
+                                            assembled.regionX, assembled.regionZ, assembled.caveLayer);
                                 }
+                                RegionPipelineTracker.onWriteComplete(
+                                        assembled.regionX, assembled.regionZ, assembled.caveLayer, true);
                             }
 
                             if (batchPending.decrementAndGet() == 0 && batchTsCache != null
@@ -543,11 +566,13 @@ public class MapPacketHandler {
             notifySyncOutcome(finalOutcome);
         } else {
             LOGGER.info("Sync complete with no data received");
+            SyncProgressTracker.finishUptodate();
             if (tsCache != null) {
                 tsCache.markSyncComplete();
             }
         }
 
+        RegionPipelineTracker.markSyncPipelineComplete();
         clearSyncStateAfterComplete();
         scheduleDeferredReloadCleanup();
     }
@@ -704,50 +729,44 @@ public class MapPacketHandler {
      * 立即加载单个区域。
      */
     private static void triggerSingleRegionLoad(XaeroMapDataHandler.RegionCoord coord, int caveLayer, boolean inViewDistance) {
-        if (!XaeroReflectionHelper.isInitialized()) {
-            LOGGER.warn("反射缓存未初始化，无法加载区域 ({}, {}) layer={}", coord.x(), coord.z(), caveLayer);
-            return;
-        }
-
-        // 避免重复加载
-        if (loadedRegions.contains(coord)) {
-            LOGGER.debug("区域 ({}, {}) layer={} 已加载，跳过", coord.x(), coord.z(), caveLayer);
-            return;
-        }
-
+        RegionPipelineTracker.onReflectionLoadStart(coord.x(), coord.z(), caveLayer);
+        boolean success = false;
         try {
-            // 获取或创建 MapRegion
+            if (!XaeroReflectionHelper.isInitialized()) {
+                LOGGER.warn("反射缓存未初始化，无法加载区域 ({}, {}) layer={}", coord.x(), coord.z(), caveLayer);
+                return;
+            }
+
+            if (loadedRegions.contains(coord)) {
+                LOGGER.debug("区域 ({}, {}) layer={} 已加载，跳过", coord.x(), coord.z(), caveLayer);
+                success = true;
+                return;
+            }
+
             Object mapRegion = XaeroReflectionHelper.getLeafMapRegion(caveLayer, coord.x(), coord.z(), true);
             if (mapRegion == null) {
                 LOGGER.warn("无法创建 MapRegion ({}, {}) layer={}", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
-            // 调试：检查 region 的属性是否正确
             String regionWorldId = XaeroReflectionHelper.getWorldId(mapRegion);
             String regionDimId = XaeroReflectionHelper.getDimId(mapRegion);
             String regionMwId = XaeroReflectionHelper.getMwId(mapRegion);
             LOGGER.info("Region ({}, {}) 属性: worldId={}, dimId={}, mwId={}, lastMwDir={}",
                 coord.x(), coord.z(), regionWorldId, regionDimId, regionMwId, lastMwDir);
 
-            // 准备区域加载（关键步骤）
-            boolean prepareSuccess = XaeroReflectionHelper.prepareRegionLoad(mapRegion);
-            if (!prepareSuccess) {
+            if (!XaeroReflectionHelper.prepareRegionLoad(mapRegion)) {
                 LOGGER.warn("区域 ({}, {}) layer={} 准备加载失败，跳过此区域", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
-            // 设置 loadState = LOAD_STATE_CLEARED（需要加载）
-            boolean setStateSuccess = XaeroReflectionHelper.setLoadState(mapRegion, XaeroReflectionHelper.LOAD_STATE_CLEARED);
-            if (!setStateSuccess) {
+            if (!XaeroReflectionHelper.setLoadState(mapRegion, XaeroReflectionHelper.LOAD_STATE_CLEARED)) {
                 LOGGER.warn("区域 ({}, {}) layer={} 设置 loadState 失败，跳过此区域", coord.x(), coord.z(), caveLayer);
                 return;
             }
 
-            // 请求加载
             String reason = inViewDistance ? "sync view" : "sync outside";
-            boolean loadSuccess = XaeroReflectionHelper.requestLoad(mapRegion, reason, true);
-            if (!loadSuccess) {
+            if (!XaeroReflectionHelper.requestLoad(mapRegion, reason, true)) {
                 LOGGER.warn("区域 ({}, {}) layer={} 请求加载失败", coord.x(), coord.z(), caveLayer);
                 return;
             }
@@ -759,9 +778,11 @@ public class MapPacketHandler {
             }
 
             loadedRegions.add(coord);
-
+            success = true;
         } catch (Exception e) {
             LOGGER.error("立即加载区域 ({}, {}) layer={} 失败: {}", coord.x(), coord.z(), caveLayer, e.getMessage(), e);
+        } finally {
+            RegionPipelineTracker.onReflectionLoadDone(coord.x(), coord.z(), caveLayer, success);
         }
     }
 
@@ -770,6 +791,8 @@ public class MapPacketHandler {
      * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
      */
     public static void drainPendingLoadQueue() {
+        SyncProgressTracker.onClientTick();
+        RegionPipelineTracker.onClientTick();
         int loadsPerTick;
         try {
             loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();

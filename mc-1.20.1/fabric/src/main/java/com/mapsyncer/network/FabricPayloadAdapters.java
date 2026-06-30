@@ -6,6 +6,7 @@ import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
+import com.mapsyncer.network.payload.SyncRequestWireCodec;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -36,40 +37,11 @@ public class FabricPayloadAdapters {
     // ===== 同步请求 =====
 
     public static void writeSyncRequest(FriendlyByteBuf buf, SyncRequestPayload payload) {
-        buf.writeInt(payload.clientMeta().size());
-        for (var entry : payload.clientMeta().entrySet()) {
-            buf.writeUtf(entry.getKey());
-            buf.writeLong(entry.getValue().timestampSeconds());
-            buf.writeUtf(entry.getValue().hash());
-        }
-        buf.writeBoolean(payload.totalParts() > 1);
-        if (payload.totalParts() > 1) {
-            buf.writeInt(payload.partIndex());
-            buf.writeInt(payload.totalParts());
-        }
+        SyncRequestWireCodec.write(buf, payload);
     }
 
     public static SyncRequestPayload readSyncRequest(FriendlyByteBuf buf) {
-        int size = buf.readInt();
-        Map<String, ClientMeta> metaMap = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            String path = buf.readUtf();
-            long timestampSeconds = buf.readLong();
-            String hash = buf.readUtf();
-            metaMap.put(path, new ClientMeta(timestampSeconds, hash));
-        }
-
-        int partIndex = 0;
-        int totalParts = 0;
-        if (buf.readableBytes() > 0) {
-            boolean isSplit = buf.readBoolean();
-            if (isSplit) {
-                partIndex = buf.readInt();
-                totalParts = buf.readInt();
-            }
-        }
-
-        return new SyncRequestPayload(metaMap, partIndex, totalParts);
+        return SyncRequestWireCodec.read(buf);
     }
 
     // ===== 同步响应 =====
