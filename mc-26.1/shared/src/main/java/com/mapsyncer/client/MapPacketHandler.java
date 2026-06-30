@@ -5,6 +5,9 @@ import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
+import com.mapsyncer.client.ClientSyncSession;
+import com.mapsyncer.sync.SyncOutcome;
+import com.mapsyncer.sync.SyncPhase;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
@@ -29,22 +32,15 @@ public class MapPacketHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapPacketHandler.class);
 
-    /** 同步是否正在进行中，用于协调区块更新的禁用 */
-    private static volatile boolean syncInProgress = false;
-
-    /** 同步会话 generation，断线或清状态时递增以作废已入队的 handler */
-    private static volatile int syncGeneration = 0;
-
-    /** 反射初始化是否失败（文件仍会写入，但无法触发重载） */
-    private static volatile boolean reflectionInitFailed = false;
+    private static final ClientSyncSession session = ClientSyncSession.get();
 
     /**
      * 检查同步是否正在进行中。
      *
-     * @return true 表示同步正在进行
+     * @return true 表示同步正在进行（含视距外重载排空）
      */
     public static boolean isSyncInProgress() {
-        return syncInProgress || awaitingPendingReloadDrain || !pendingRegionLoads.isEmpty();
+        return session.isSessionActive() || !pendingRegionLoads.isEmpty();
     }
 
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
@@ -55,12 +51,6 @@ public class MapPacketHandler {
 
     /** 最后写入的 mw 目录，用于缓存清除 */
     private static volatile Path lastMwDir = null;
-
-    /** 同步开始时间，用于检测陈旧的同步（防止内存泄漏） */
-    private static volatile long syncStartTime = 0;
-
-    /** 陈旧同步超时时间（10分钟） */
-    private static final long STALE_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
 
     /** 同步完成防抖时长（Forge 网络层可能重复递送相同数据包） */
     private static final long SYNC_COMPLETE_DEBOUNCE_MS = 500;
@@ -85,9 +75,6 @@ public class MapPacketHandler {
 
     /** 视距外 region 加载队列 — 限速排放，防止 Xaero MapProcessor 队列溢出 OOM */
     private static final ConcurrentLinkedQueue<PendingRegionLoad> pendingRegionLoads = new ConcurrentLinkedQueue<>();
-
-    /** 同步完成后等待 tick 队列排空，再释放反射缓存 */
-    private static volatile boolean awaitingPendingReloadDrain = false;
 
     private record PendingRegionLoad(int regionX, int regionZ, int caveLayer) {}
 
@@ -188,26 +175,19 @@ public class MapPacketHandler {
      * 检查当前同步是否陈旧（运行时间过长）。
      */
     public static boolean isSyncStale() {
-        if (!syncInProgress || syncStartTime == 0) {
-            return false;
-        }
-        return System.currentTimeMillis() - syncStartTime > STALE_SYNC_TIMEOUT_MS;
+        return session.isStale();
     }
 
     /**
      * 清除所有累积的同步数据，防止内存泄漏。
      */
     public static void clearSyncData() {
-        syncGeneration++;
-        syncInProgress = false;
-        reflectionInitFailed = false;
-        awaitingPendingReloadDrain = false;
-        lastMwDir = null;
-        syncStartTime = 0;
+        session.invalidate();
         clearReceivedChunks();
         loadedRegions.clear();
         partBuffer.clear();
         pendingRegionLoads.clear();
+        lastMwDir = null;
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
@@ -225,14 +205,7 @@ public class MapPacketHandler {
      * 清理所有同步状态、反射缓存、哈希计算线程池和时间戳缓存。
      */
     public static void onDisconnect() {
-        AutoSyncManager.cancel();
-        resetServerStatus();
-        clearSyncData();
-        XaeroReflectionHelper.clearCache();
-        XaeroMapDataHandler.clearRegionTracking();
-        ClientHashManager.shutdown();
-        ClientTimestampCache.resetInstance();
-        LOGGER.info("Client disconnected, all resources cleaned up");
+        ClientLifecycleBridge.onClientDisconnect();
     }
 
     /**
@@ -290,7 +263,6 @@ public class MapPacketHandler {
                     clearSyncData();
                     LOGGER.warn("Cleared stale sync data before starting new sync");
                 }
-                syncStartTime = System.currentTimeMillis();
                 updatedRegionCoords.clear();
             });
         });
@@ -315,9 +287,9 @@ public class MapPacketHandler {
      * 处理服务端返回的同步响应数据包。
      */
     private static void handleSyncResponse(SyncResponsePayload payload, PayloadContext context) {
-        final int generationAtEnqueue = syncGeneration;
+        final int generationAtEnqueue = session.generation();
         context.enqueueWork(() -> {
-            if (generationAtEnqueue != syncGeneration) {
+            if (!session.isCurrent(generationAtEnqueue)) {
                 LOGGER.debug("Ignoring stale sync response after disconnect/clear");
                 return;
             }
@@ -325,11 +297,13 @@ public class MapPacketHandler {
             String status = payload.status();
             List<ChunkMapData> chunks = payload.chunks();
             int serverWorldId = payload.worldId();
+            SyncOutcome serverOutcome = SyncOutcome.fromServerStatus(status);
 
             LOGGER.debug("Received sync response: status={}, chunks={}, isComplete={}", status, chunks.size(), payload.isComplete());
 
+            boolean receiving = session.phase() == SyncPhase.RECEIVING;
             // Forge 网络层可能重复递送数据包，完成同步后 500ms 内的新 "ok" 包直接忽略
-            if ("ok".equals(status) && !payload.isComplete() && !syncInProgress) {
+            if (("ok".equals(status) || "partial".equals(status)) && !payload.isComplete() && !receiving) {
                 long elapsed = System.currentTimeMillis() - lastSyncCompleteTs;
                 if (elapsed < SYNC_COMPLETE_DEBOUNCE_MS) {
                     LOGGER.debug("Debouncing duplicate sync packet ({}ms after complete)", elapsed);
@@ -337,7 +311,7 @@ public class MapPacketHandler {
                 }
             }
             // 完成包去重：500ms 内的重复完成包忽略
-            if (payload.isComplete() && !syncInProgress) {
+            if (payload.isComplete() && session.phase() == SyncPhase.IDLE) {
                 long elapsed = System.currentTimeMillis() - lastSyncCompleteTs;
                 if (elapsed < SYNC_COMPLETE_DEBOUNCE_MS) {
                     LOGGER.debug("Debouncing duplicate completion packet ({}ms after complete)", elapsed);
@@ -356,9 +330,10 @@ public class MapPacketHandler {
                 LOGGER.info("Server confirmed (SyncResponse received), MapSyncer detected");
             }
 
-            // 根据状态决定处理方式
-            if ("no_cache".equals(status) || "dim_not_available".equals(status)) {
-                LOGGER.info("Server returned error status: {}, no sync needed", status);
+            // Hard fail — 中止同步
+            if (serverOutcome == SyncOutcome.HARD_FAIL) {
+                LOGGER.info("Server returned error status: {}, aborting sync", status);
+                session.setOutcome(SyncOutcome.HARD_FAIL);
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.cancelTracking();
@@ -368,8 +343,10 @@ public class MapPacketHandler {
                 return;
             }
 
-            if ("uptodate".equals(status)) {
+            // Silent skip — 地图已是最新
+            if (serverOutcome == SyncOutcome.SILENT_SKIP) {
                 LOGGER.info("Map is up-to-date, no sync needed");
+                session.setOutcome(SyncOutcome.SILENT_SKIP);
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.cancelTracking();
@@ -379,8 +356,9 @@ public class MapPacketHandler {
                 return;
             }
 
-            // status == "ok"，有数据需要同步
+            // ok / partial — 有数据需要同步
             if (isSyncStale()) {
+                session.setOutcome(SyncOutcome.HARD_FAIL);
                 clearSyncData();
                 clearReflectionCache();
                 LOGGER.warn("Sync was stale, cleared accumulated data");
@@ -391,12 +369,11 @@ public class MapPacketHandler {
             }
 
             // 首次收到数据时初始化反射缓存
-            if (!syncInProgress) {
-                syncInProgress = true;
-                syncStartTime = System.currentTimeMillis();
+            if (session.phase() == SyncPhase.IDLE) {
+                session.beginReceiving();
                 LOGGER.info("Starting sync (streaming mode)");
                 if (!initializeReflectionCache()) {
-                    reflectionInitFailed = true;
+                    session.markReflectionFailed();
                     if (Minecraft.getInstance().player != null) {
                         Minecraft.getInstance().player.sendSystemMessage(
                                 ChatUtils.error("mapsyncer.sync.reflection_failed"));
@@ -441,7 +418,7 @@ public class MapPacketHandler {
                     XaeroMapIntegrator.getViewDistanceRegions(assembled.caveLayer);
                 boolean inViewDistance = viewRegionsForLayer.contains(coord);
 
-                if (shouldProcess) {
+                if (shouldProcess && !session.reflectionFailed()) {
                     clearSingleRegionCache(coord);
                     if (inViewDistance) {
                         triggerSingleRegionLoad(coord, assembled.caveLayer, true);
@@ -450,6 +427,8 @@ public class MapPacketHandler {
                     }
                     LOGGER.debug("区域 ({}, {}) layer={} inView={} 已清除缓存并触发加载",
                         coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
+                } else if (shouldProcess) {
+                    LOGGER.debug("区域 ({}, {}) 已写入磁盘，反射不可用跳过运行时重载", coord.x(), coord.z());
                 }
 
                 // 更新时间戳缓存（使用磁盘文件哈希，与下次同步请求一致）
@@ -472,6 +451,11 @@ public class MapPacketHandler {
 
                 lastSyncCompleteTs = System.currentTimeMillis();
 
+                SyncOutcome finalOutcome = serverOutcome == SyncOutcome.PARTIAL_SUCCESS || session.reflectionFailed()
+                        ? SyncOutcome.PARTIAL_SUCCESS
+                        : SyncOutcome.SUCCESS;
+                session.setOutcome(finalOutcome);
+
                 if (!updatedRegionCoords.isEmpty()) {
                     XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
                     SyncProgressTracker.completeWithCount(totalReceived);
@@ -484,16 +468,11 @@ public class MapPacketHandler {
                         }
                     }
 
-                    resumeChunkUpdatesIfIdle();
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
                     }
-                    if (reflectionInitFailed && Minecraft.getInstance().player != null) {
-                        Minecraft.getInstance().player.sendSystemMessage(
-                                ChatUtils.error("mapsyncer.sync.reflection_failed"));
-                    }
+                    notifySyncOutcome(finalOutcome);
                 } else {
-                    resumeChunkUpdatesIfIdle();
                     LOGGER.info("Sync complete with no data received");
                     if (tsCache != null) {
                         tsCache.markSyncComplete();
@@ -504,6 +483,21 @@ public class MapPacketHandler {
                 scheduleDeferredReloadCleanup();
             }
         });
+    }
+
+    private static void notifySyncOutcome(SyncOutcome outcome) {
+        if (Minecraft.getInstance().player == null) {
+            return;
+        }
+        if (outcome == SyncOutcome.PARTIAL_SUCCESS) {
+            if (session.reflectionFailed()) {
+                Minecraft.getInstance().player.sendSystemMessage(
+                        ChatUtils.error("mapsyncer.sync.reflection_failed"));
+            } else {
+                Minecraft.getInstance().player.sendSystemMessage(
+                        ChatUtils.error("mapsyncer.sync.partial"));
+            }
+        }
     }
 
     /**
@@ -530,15 +524,13 @@ public class MapPacketHandler {
     }
 
     /**
-     * 同步完成后恢复区块更新状态（视距外队列排空后再解除 syncInProgress）。
+     * 视距外队列排空后再将会话置为 IDLE（isSyncInProgress 在此之前保持 true）。
      */
     private static void resumeChunkUpdatesIfIdle() {
-        if (awaitingPendingReloadDrain || !pendingRegionLoads.isEmpty()) {
+        if (session.phase() == SyncPhase.DRAINING_RELOAD || !pendingRegionLoads.isEmpty()) {
             return;
         }
-        syncInProgress = false;
-        syncStartTime = 0;
-        reflectionInitFailed = false;
+        session.completeSession();
         LOGGER.info("Sync complete");
     }
 
@@ -550,7 +542,6 @@ public class MapPacketHandler {
         loadedRegions.clear();
         partBuffer.clear();
         lastMwDir = null;
-        syncStartTime = 0;
     }
 
     /**
@@ -569,36 +560,32 @@ public class MapPacketHandler {
         if (loadsPerTick == 0 || pendingRegionLoads.isEmpty()) {
             pendingRegionLoads.clear();
             clearReflectionCache();
-            awaitingPendingReloadDrain = false;
             resumeChunkUpdatesIfIdle();
             return;
         }
-        awaitingPendingReloadDrain = true;
+        session.beginDrainingReload();
         drainPendingLoadQueue();
         finishDeferredReloadCleanupIfDone();
     }
 
     private static void finishDeferredReloadCleanupIfDone() {
-        if (!awaitingPendingReloadDrain || !pendingRegionLoads.isEmpty()) {
+        if (session.phase() != SyncPhase.DRAINING_RELOAD || !pendingRegionLoads.isEmpty()) {
             return;
         }
-        awaitingPendingReloadDrain = false;
         clearReflectionCache();
         resumeChunkUpdatesIfIdle();
         LOGGER.debug("视距外 region 重载队列已排空，反射缓存已释放");
     }
 
     /**
-     * 清理同步状态（非反射缓存）。
+     * 清理同步缓冲（非反射缓存、非会话 generation）。
      */
     private static void clearSyncState() {
         updatedRegionCoords.clear();
         loadedRegions.clear();
         partBuffer.clear();
         pendingRegionLoads.clear();
-        awaitingPendingReloadDrain = false;
         lastMwDir = null;
-        syncStartTime = 0;
     }
 
     /**

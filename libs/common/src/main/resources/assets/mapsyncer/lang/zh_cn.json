@@ -6,6 +6,7 @@
   "mapsyncer.sync.progress": "进度: %d/%d (%d%%)",
   "mapsyncer.sync.cancelled": "同步已取消",
   "mapsyncer.sync.timeout": "同步超时，请重试",
+  "mapsyncer.sync.partial": "地图同步部分完成，部分区域可能未成功应用",
   "mapsyncer.sync.incomplete": "同步不完整：仅收到 %d/%d 个区域，请重新执行同步",
   "mapsyncer.sync.server_not_installed": "服务端没有安装 MapSyncer",
   "mapsyncer.sync.unloading_regions": "卸载 %d 个视野范围内区域准备更新",

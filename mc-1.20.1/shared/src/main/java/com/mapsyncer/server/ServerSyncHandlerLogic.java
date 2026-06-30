@@ -204,8 +204,7 @@ public class ServerSyncHandlerLogic {
     /** 全局递增版本号，用于标记每次同步请求 */
     private static final AtomicInteger globalSyncVersion = new AtomicInteger(0);
 
-    /** 每个玩家当前的同步版本号，server.execute() 任务通过版本号判断是否过期 */
-    private static final Map<UUID, Integer> playerSyncVersions = new ConcurrentHashMap<>();
+    /** 每个玩家当前的同步版本号由 {@link ServerSyncSession} 管理 */
 
     /** SyncRequestPayload 分片组装缓冲区：playerId → { partIndex → payload } */
     private static final ConcurrentHashMap<UUID, Map<Integer, SyncRequestPayload>> requestPartBuffer = new ConcurrentHashMap<>();
@@ -260,7 +259,7 @@ public class ServerSyncHandlerLogic {
         // 清理分片组装缓冲区，防止内存泄漏
         requestPartBuffer.remove(playerId);
         requestTotalParts.remove(playerId);
-        playerSyncVersions.remove(playerId);
+        ServerSyncSession.finalizeSession(playerId);
 
         // 立即中断同步线程
         Thread syncThread = syncThreads.remove(playerId);
@@ -274,7 +273,7 @@ public class ServerSyncHandlerLogic {
         if (syncThreads.get(playerId) != Thread.currentThread()) {
             return false;
         }
-        if (playerSyncVersions.getOrDefault(playerId, 0) != syncVersion) {
+        if (!ServerSyncSession.isCurrent(playerId, syncVersion)) {
             return false;
         }
         return syncingPlayers.contains(playerId);
@@ -287,7 +286,7 @@ public class ServerSyncHandlerLogic {
             ResourceKey<Level> startDimension, int syncVersion) {
         try {
             return server.submit(() -> {
-                if (playerSyncVersions.getOrDefault(playerId, 0) != syncVersion) {
+                if (!ServerSyncSession.isCurrent(playerId, syncVersion)) {
                     return false;
                 }
                 if (!syncingPlayers.contains(playerId)) {
@@ -469,13 +468,13 @@ public class ServerSyncHandlerLogic {
 
     /**
      * 清除玩家的所有同步状态（同步完成或中断时调用）。
-     *
-     * @param playerId 玩家UUID
+     * 版本号由 {@link ServerSyncSession#finalizeSession(UUID)} 移除。
      */
-    private static void cleanupSyncState(UUID playerId) {
+    private static void finalizePlayerSync(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
-        playerSyncVersions.remove(playerId);
+        ServerSyncSession.finalizeSession(playerId);
+
         requestPartBuffer.remove(playerId);
         requestTotalParts.remove(playerId);
 
@@ -550,16 +549,10 @@ public class ServerSyncHandlerLogic {
         // 递增版本号，用于标记此次请求（旧请求的 server.execute() 任务会通过版本号自过滤）
         int syncVersion = globalSyncVersion.incrementAndGet();
 
-        // 如果玩家已经在同步中，先中断旧的同步线程（保留新版本号）
-        Thread oldThread = syncThreads.get(playerId);
-        if (oldThread != null && oldThread.isAlive()) {
-            LOGGER.debug("Player {} requested new sync while syncing, interrupting old sync (v{})", playerId, syncVersion);
-            oldThread.interrupt();
-            syncThreads.remove(playerId);
-            clearSpeedLimitState(playerId);
-        }
+        // 如果玩家已经在同步中，先中断旧的同步线程（保留即将 assign 的新 version）
+        ServerSyncSession.interruptOldSyncThread(playerId, syncThreads, () -> clearSpeedLimitState(playerId));
 
-        playerSyncVersions.put(playerId, syncVersion);
+        ServerSyncSession.assignVersion(playerId, syncVersion);
 
         ResourceKey<Level> startDimension = serverPlayer.level().dimension();
         MinecraftServer server = serverPlayer.serverLevel().getServer();
@@ -593,7 +586,7 @@ public class ServerSyncHandlerLogic {
      */
     private static void enqueueIfCurrent(MinecraftServer server, UUID playerId, int version, Consumer<ServerPlayer> task) {
         server.execute(() -> {
-            if (playerSyncVersions.getOrDefault(playerId, 0) != version) {
+            if (!ServerSyncSession.isCurrent(playerId, version)) {
                 return;
             }
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
@@ -633,7 +626,7 @@ public class ServerSyncHandlerLogic {
                 player.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
-                cleanupSyncState(playerId);
+                finalizePlayerSync(playerId);
             });
             return;
         }
@@ -683,7 +676,7 @@ public class ServerSyncHandlerLogic {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
-                cleanupSyncState(playerId);
+                finalizePlayerSync(playerId);
             });
             return;
         }
@@ -774,7 +767,7 @@ public class ServerSyncHandlerLogic {
                 player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
-                cleanupSyncState(playerId);
+                finalizePlayerSync(playerId);
             });
             return;
         }
@@ -797,7 +790,7 @@ public class ServerSyncHandlerLogic {
         for (RegionSyncInfo info : regionsToSync) {
             if (!isPlayerStillValid(server, playerId, startDimension, syncVersion)) {
                 LOGGER.info("Player {} disconnected during sync", playerId);
-                cleanupSyncState(playerId);
+                finalizePlayerSync(playerId);
                 return;
             }
 
@@ -813,7 +806,7 @@ public class ServerSyncHandlerLogic {
                 if (batchBytes + part.data.length > batchThreshold && !batch.isEmpty()) {
                     if (!applySpeedLimit(batchBytes, server, playerId, startDimension, syncVersion)) {
                         LOGGER.info("Player {} disconnected during speed limit, aborting sync", playerId);
-                        cleanupSyncState(playerId);
+                        finalizePlayerSync(playerId);
                         return;
                     }
 
@@ -834,18 +827,19 @@ public class ServerSyncHandlerLogic {
 
         if (!isPlayerStillValid(server, playerId, startDimension, syncVersion)) {
             LOGGER.info("Player {} disconnected before final batch", playerId);
-            cleanupSyncState(playerId);
+            finalizePlayerSync(playerId);
             return;
         }
 
         final int finalSentCount = sentRegionCount + batchRegionCount;
         final int finalFailedCount = failedReadCount;
         final int finalTotal = total;
+        final String completeStatus = finalFailedCount > 0 ? "partial" : "ok";
 
         if (!batch.isEmpty()) {
             if (!applySpeedLimit(batchBytes, server, playerId, startDimension, syncVersion)) {
                 LOGGER.info("Player {} disconnected during final speed limit, aborting sync", playerId);
-                cleanupSyncState(playerId);
+                finalizePlayerSync(playerId);
                 return;
             }
 
@@ -854,11 +848,11 @@ public class ServerSyncHandlerLogic {
                 final List<ChunkMapData> finalBatch = new ArrayList<>(batch);
                 enqueueIfCurrent(server, playerId, syncVersion, player -> {
                     NetworkManager.sendToPlayer(player,
-                            new SyncResponsePayload(finalBatch, true, worldId, "ok"));
+                            new SyncResponsePayload(finalBatch, true, worldId, completeStatus));
                     NetworkManager.sendToPlayer(player,
                             new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                     sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
-                    cleanupSyncState(playerId);
+                    finalizePlayerSync(playerId);
                 });
             } else {
                 List<ChunkMapData> currentChunk = new ArrayList<>();
@@ -888,11 +882,11 @@ public class ServerSyncHandlerLogic {
                     final List<ChunkMapData> lastChunk = new ArrayList<>(currentChunk);
                     enqueueIfCurrent(server, playerId, syncVersion, player -> {
                         NetworkManager.sendToPlayer(player,
-                                new SyncResponsePayload(lastChunk, true, worldId, "ok"));
+                                new SyncResponsePayload(lastChunk, true, worldId, completeStatus));
                         NetworkManager.sendToPlayer(player,
                                 new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                         sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
-                        cleanupSyncState(playerId);
+                        finalizePlayerSync(playerId);
                     });
                 }
             }
@@ -901,7 +895,7 @@ public class ServerSyncHandlerLogic {
                 NetworkManager.sendToPlayer(player,
                         new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                 sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
-                cleanupSyncState(playerId);
+                finalizePlayerSync(playerId);
             });
         }
 
@@ -976,7 +970,7 @@ public class ServerSyncHandlerLogic {
         }
         syncingPlayers.clear();
         playerSyncDimensions.clear();
-        playerSyncVersions.clear();
+        ServerSyncSession.clearAllVersions();
         syncThreads.clear();
         speedLimitBytesSent.clear();
         speedLimitCycleStart.clear();
@@ -1005,7 +999,7 @@ public class ServerSyncHandlerLogic {
         // 清理离线玩家的状态
         for (UUID playerId : toRemove) {
             LOGGER.debug("Cleaning up stale state for offline player {}", playerId);
-            cleanupSyncState(playerId);
+            finalizePlayerSync(playerId);
         }
 
         // 清理已结束但未移除的线程引用（防止内存泄漏）
@@ -1038,7 +1032,7 @@ public class ServerSyncHandlerLogic {
             syncThreads.remove(playerId);
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
-            playerSyncVersions.remove(playerId);
+            ServerSyncSession.finalizeSession(playerId);
             clearSpeedLimitState(playerId);
         }
 

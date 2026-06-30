@@ -1,14 +1,10 @@
 package com.mapsyncer.server;
 
-import com.mapsyncer.client.ClientHashManager;
-import com.mapsyncer.client.MapPacketHandler;
-import com.mapsyncer.client.XaeroMapDataHandler;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
-import com.mapsyncer.util.BlockColorMapper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
@@ -61,28 +57,7 @@ public class PlayerJoinHandlerLogic {
      * 清理所有单例缓存实例，防止专用服务器重启时的内存泄漏。
      */
     public static void onServerStopped() {
-        LOGGER.info("Server stopped, cleaning up singleton cache instances");
-
-        // Shutdown conversion thread pool first
-        ConversionOrchestrator.shutdownExecutor();
-
-        // Reset singleton instances to release memory
-        GenerationCache.resetInstance();
-        McaTimestampCache.resetInstance();
-        IncrementalUpdateHandler.resetInstance();
-
-        // Clear client-side static caches (for dedicated server restart scenario)
-        MapPacketHandler.clearReceivedChunks();
-        XaeroMapDataHandler.clearRegionTracking();
-        BlockColorMapper.clearCache();
-        BlockPropertyResolver.clearCache();
-        PlatformManager.getPlatform().clearBlockPropertiesCache();
-        ClientHashManager.shutdown();
-
-        // Clear sync tracking data
-        ServerSyncHandlerLogic.cleanup();
-
-        LOGGER.info("Singleton cache cleanup completed");
+        ServerLifecycleBridge.onServerStopped();
     }
 
     /**
