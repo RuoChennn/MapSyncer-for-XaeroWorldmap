@@ -901,6 +901,8 @@ public class ConversionOrchestrator {
         GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
         int totalUpdated = 0;
         long generationTimeSeconds = System.currentTimeMillis() / 1000;
+        ConcurrentLinkedQueue<RegionCoords> failedRegions = new ConcurrentLinkedQueue<>();
+        ExecutorService executor = getOrCreateExecutor();
 
         for (IncrementalScanSnapshot snapshot : snapshots) {
             String dimPath = snapshot.dimPath();
@@ -929,33 +931,13 @@ public class ConversionOrchestrator {
                 continue;
             }
 
-            for (RegionCoords coords : needsUpdate) {
-                Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
-                if (!Files.exists(mcaPath)) continue;
-
-                ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                    mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
-
-                if (converted != null) {
-                    try {
-                        XaeroWriter.RegionWriteResult writeResult = XaeroWriter.writeRegionFile(outputDir, converted);
-                        mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-
-                        String relativePath;
-                        if (caveLayer == Integer.MAX_VALUE) {
-                            relativePath = xaeroDimName + "/" + coords.x() + "_" + coords.z();
-                        } else {
-                            relativePath = xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
-                        }
-                        genCache.update(relativePath, generationTimeSeconds, writeResult.crc32Hash());
-
-                        totalUpdated++;
-                        LOGGER.debug("Incrementally updated region ({}, {}) in {} (layer={})", coords.x(), coords.z(), dimPath, caveLayer == Integer.MAX_VALUE ? "surface" : caveLayer);
-                    } catch (IOException e) {
-                        LOGGER.error("Failed to write region file during incremental update", e);
-                    }
-                }
-            }
+            int failuresBefore = failedRegions.size();
+            List<java.util.concurrent.Future<?>> futures = submitConversionTasks(
+                executor, needsUpdate, needsUpdate, regionDir, outputDir, xaeroDimName, dimPath,
+                dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                generationTimeSeconds, failedRegions, false);
+            waitForCompletion(futures, "Incremental update");
+            totalUpdated += needsUpdate.size() - (failedRegions.size() - failuresBefore);
         }
 
         if (totalUpdated > 0) {
