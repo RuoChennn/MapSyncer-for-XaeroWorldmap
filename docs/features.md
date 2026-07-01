@@ -183,7 +183,7 @@ mc-26.1/            MC 26.1 版本
 |------|------|------|
 | 全维度生成 | ✅ | 自动扫描所有已存在区块的维度 |
 | Mod 维度支持 | ✅ | 支持 ResourceLocation 格式（暮光森林测试通过） |
-| 洞穴模式 | ✅ | CAVE 模式从固定高度向下扫描 |
+| 洞穴模式 | ✅ | layerPlan 配置地表/洞穴层（SURFACE、ALL、显式 Y），单次 MCA 解析可输出多层 |
 | 增量更新 | ✅ | TICK 周期模式 + SCHEDULED 定时模式 |
 | 强制保存机制 | ✅ | 读取前调用 `server.saveEverything()` 确保数据一致性，兼容 C2ME |
 | 并发转换 | ✅ | 可配置线程池（默认 4 线程，最大 16），线程使用 MIN_PRIORITY 降低对服务端 tick 的 CPU 争用 |
@@ -230,16 +230,27 @@ mc-26.1/            MC 26.1 版本
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `default_scan_mode` | ScanMode | SURFACE | 未配置维度的默认扫描模式 |
-| `default_cave_start` | int | 63 | CAVE 模式默认起始高度 |
-| `dimension_configs` | List | 3 个原版预设 | 每维度扫描配置 |
+| `default_scan_mode` | ScanMode | SURFACE | 未配置维度的默认模式（SURFACE=仅地表；CAVE=单层洞穴） |
+| `default_cave_start` | int | 63 | `default_scan_mode=CAVE` 时未配置维度的 caveStart Y |
+| `dimension_configs` | List | 3 个原版预设 | 每维度 layerPlan + 维度类型信息 |
 
-维度配置格式: `"dimension|scan_mode|cave_start|dim_type_info"`，其中 `dim_type_info` 为 `"hasSkylight|hasCeiling|minY|height|logicalHeight"`
+维度配置格式: `"dimension|layerPlan|dim_type_info"`，其中 `dim_type_info` 为 `"hasSkylight|hasCeiling|minY|height|logicalHeight"`
+
+**layerPlan**（逗号分隔）:
+
+| 值 | 说明 |
+|----|------|
+| `SURFACE` | 仅地表（有顶盖维度为逻辑顶以上） |
+| `ALL` | 维度高度范围内全部洞穴层 |
+| `63` / `63,127` | 仅显式洞穴层 |
+| `SURFACE,63` / `SURFACE,ALL` / `ALL,63` | 组合；ALL 与显式 Y 按层号去重 |
 
 默认预设:
-- 主世界: SURFACE, hasSkylight=true, hasCeiling=false, minY=-64, height=384
-- 地狱: CAVE, hasSkylight=false, hasCeiling=true, minY=0, height=256
-- 末地: SURFACE, hasSkylight=false, hasCeiling=false, minY=0, height=256
+- 主世界: `SURFACE`, hasSkylight=true, hasCeiling=false, minY=-64, height=384
+- 地狱: `SURFACE,63`, hasSkylight=false, hasCeiling=true, minY=0, height=256, logicalHeight=128
+- 末地: `SURFACE`, hasSkylight=false, hasCeiling=false, minY=0, height=256
+
+旧格式 `"dimension|scan_mode|cave_start|dim_type_info"` 仍可读取（如 `CAVE|63`、`SURFACE|63`），会合并为 layerPlan。
 
 ### 缓存常量 (`CacheConfig`)
 
@@ -324,7 +335,7 @@ mc-26.1/            MC 26.1 版本
 | NBT 解析 | ✅ | 全标签类型（0-12），嵌套结构，含大小限制防恶意数据 |
 | 方块状态解析 | ✅ | 调色板、属性、位数组 |
 | 生物群系解析 | ✅ | 4x4x4 voxel 格式 |
-| 表面扫描 | ✅ | SURFACE/CAVE 模式，支持 WORLD_SURFACE 高度图优先 |
+| 表面扫描 | ✅ | layerPlan 驱动地表/洞穴多层 pass，支持 WORLD_SURFACE 高度图优先 |
 | Xaero 格式输出 | ✅ | 版本 6.8，TileChunk/Tile 结构 |
 | MCA/MCR 兼容 | ✅ | 正则匹配 `r.<x>.<z>.mca/mcr` |
 

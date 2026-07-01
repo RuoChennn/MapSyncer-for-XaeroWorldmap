@@ -47,7 +47,7 @@
 | **视距优先** | 玩家视距范围内的区域优先传输 |
 | **维度支持** | 主世界、地狱、末地及 Mod 维度（暮光森林等） |
 | **增量更新** | 服务端可配置 TICK 周期 / SCHEDULED 定时自动更新地图缓存 |
-| **洞穴模式** | 支持从指定高度向下扫描，输出到 caves 子目录 |
+| **洞穴模式** | 通过 layerPlan 配置地表/洞穴层（SURFACE、ALL、显式 Y），输出到 caves 子目录 |
 | **多线程哈希** | 客户端 CRC32 计算支持并行，线程数可配置 |
 | **自动同步** | 根据服务端增量更新模式，进服或在线自动拉取地图（见下文） |
 | **内置服务器** | 单人游戏局域网共享，复用主机 Xaero 存档 |
@@ -130,22 +130,36 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `default_scan_mode` | SURFACE | 未配置维度的默认扫描模式 |
-| `default_cave_start` | 63 | CAVE 模式的起始高度 |
+| `default_scan_mode` | SURFACE | 未配置维度的默认模式（SURFACE → 仅地表；CAVE → 单层洞穴，见 `default_cave_start`） |
+| `default_cave_start` | 63 | `default_scan_mode=CAVE` 时未配置维度的洞穴起始 Y |
 
-**维度配置格式**：
+**维度配置格式**（新格式，推荐）：
+
 ```toml
 dimension_configs = [
-    "minecraft:overworld|SURFACE|63|true|false|-64|384|384",
-    "minecraft:the_nether|CAVE|63|false|true|0|256|256",
-    "minecraft:the_end|SURFACE|63|false|false|0|256|256"
+    "minecraft:overworld|SURFACE|true|false|-64|384|384",
+    "minecraft:the_nether|SURFACE,63|false|true|0|256|128",
+    "minecraft:the_end|SURFACE|false|false|0|256|256"
 ]
 ```
 
-格式：`维度ID|扫描模式|洞穴起始高度|有天空光|有顶棚|minY|高度|逻辑高度`
+格式：`维度ID|layerPlan|有天空光|有顶棚|minY|高度|逻辑高度`
 
-- **SURFACE**：从高度图向下扫描，适用于主世界、末地，使用此模式会忽略洞穴高度
-- **CAVE**：从固定高度向下扫描，适用于地狱
+**layerPlan**（逗号分隔，可组合）：
+
+| 值 | 说明 |
+|----|------|
+| `SURFACE` | 仅地表。无顶盖维度为全列扫描；有顶盖维度（地狱）为逻辑顶以上（Y≥128） |
+| `ALL` | 生成维度高度范围内的全部洞穴层 |
+| `63` / `63,127` | 仅指定洞穴层（caveStart Y 坐标），不含地表 |
+| `SURFACE,63` | 地表 + 洞穴层 63 |
+| `SURFACE,ALL` / `ALL,63` | 组合；`ALL` 与显式 Y 按层号自动去重 |
+
+- 仅写 `SURFACE` 时**不会**自动生成洞穴层；需要洞穴须显式写 Y 或 `ALL`
+- 地狱默认 `SURFACE,63`：逻辑顶以上地表 + 洞穴层 63
+- 旧格式 `维度|SURFACE|63|…` / `维度|CAVE|63|…` 仍可读取，会自动合并为 layerPlan
+
+**dim_type_info** 字段：`hasSkylight|hasCeiling|minY|height|logicalHeight`。地狱 `logicalHeight=128` 表示逻辑顶在 Y127，其以上为地表区。
 
 ---
 

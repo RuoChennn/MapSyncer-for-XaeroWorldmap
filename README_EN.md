@@ -43,7 +43,7 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 | **View-Distance Priority** | Regions within player's view distance are prioritized |
 | **Dimension Support** | Overworld, Nether, End, and mod dimensions (e.g. Twilight Forest) |
 | **Incremental Update** | Server-side periodic/scheduled map cache regeneration |
-| **Cave Mode** | Scans downward from a configurable height, outputs to caves subdirectory |
+| **Cave Mode** | Layer plan config (SURFACE, ALL, explicit Y) for surface/cave layers; outputs to caves subdirectory |
 | **Multi-Threaded Hash** | Configurable parallel CRC32 computation on the client |
 | **Auto Sync** | Automatically checks for newer server maps on join, no manual command needed |
 
@@ -119,22 +119,36 @@ NeoForge / Fabric config: `config/` directory (`.toml` for NeoForge, `.propertie
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `default_scan_mode` | SURFACE | Default scan mode for unconfigured dimensions |
-| `default_cave_start` | 63 | Starting height for CAVE mode |
+| `default_scan_mode` | SURFACE | Default for unconfigured dimensions (SURFACE = surface only; CAVE = single cave layer via `default_cave_start`) |
+| `default_cave_start` | 63 | Cave start Y when `default_scan_mode=CAVE` |
 
-**Dimension config format**:
+**Dimension config format** (new, recommended):
+
 ```toml
 dimension_configs = [
-    "minecraft:overworld|SURFACE|63|true|false|-64|384|384",
-    "minecraft:the_nether|CAVE|63|false|true|0|256|256",
-    "minecraft:the_end|SURFACE|63|false|false|0|256|256"
+    "minecraft:overworld|SURFACE|true|false|-64|384|384",
+    "minecraft:the_nether|SURFACE,63|false|true|0|256|128",
+    "minecraft:the_end|SURFACE|false|false|0|256|256"
 ]
 ```
 
-Format: `dimensionID|scanMode|caveStart|hasSkylight|hasCeiling|minY|height|logicalHeight`
+Format: `dimensionID|layerPlan|hasSkylight|hasCeiling|minY|height|logicalHeight`
 
-- **SURFACE**: Scans downward from heightmap. For Overworld and End.
-- **CAVE**: Scans downward from a fixed height. For Nether.
+**layerPlan** (comma-separated, combinable):
+
+| Value | Description |
+|-------|-------------|
+| `SURFACE` | Surface only. Full column for open dimensions; above logical top (Y≥128) for ceiling dimensions (Nether) |
+| `ALL` | All cave layers across the dimension height range |
+| `63` / `63,127` | Explicit cave layer(s) only (caveStart Y), no surface |
+| `SURFACE,63` | Surface + cave layer at Y=63 |
+| `SURFACE,ALL` / `ALL,63` | Combined; `ALL` deduplicates with explicit Y by layer index |
+
+- `SURFACE` alone does **not** auto-generate cave layers; use explicit Y or `ALL` for caves
+- Nether default `SURFACE,63`: surface above logical top + cave layer 63
+- Legacy `dimension|SURFACE|63|…` / `dimension|CAVE|63|…` is still parsed into layerPlan
+
+**dim_type_info**: `hasSkylight|hasCeiling|minY|height|logicalHeight`. Nether `logicalHeight=128` means logical top at Y127; above that is the surface zone.
 
 ---
 
