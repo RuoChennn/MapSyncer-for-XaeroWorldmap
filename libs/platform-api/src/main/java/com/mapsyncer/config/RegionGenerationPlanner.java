@@ -60,7 +60,7 @@ public final class RegionGenerationPlanner {
             return;
         }
         ScanVerticalBounds bounds = info.hasUpperZone()
-            ? ScanVerticalBounds.aboveY(info.logicalTopY() + 1, info.maxY())
+            ? ScanVerticalBounds.aboveY(info.logicalTopY(), info.maxY())
             : ScanVerticalBounds.fullColumn(info.minY(), info.maxY());
         passes.add(new RegionScanPass(
             Integer.MAX_VALUE,

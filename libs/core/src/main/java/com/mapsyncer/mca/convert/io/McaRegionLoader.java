@@ -28,7 +28,7 @@ public final class McaRegionLoader {
                                       RegionConverterStandalone.CaveModeParams caveParams,
                                       boolean worldHasSkylight,
                                       BlockPropertyLookup blockLookup) throws IOException {
-        MapRegionData data = new MapRegionData(minBuildHeight, lightMode);
+        MapRegionData data = new MapRegionData(minBuildHeight, lightMode, caveParams);
 
         try (McaReader reader = McaReader.open(mcaPath.toString())) {
             int worldHeightRange = worldTopY - minBuildHeight;
@@ -62,7 +62,7 @@ public final class McaRegionLoader {
 
         List<PassMapData> results = new ArrayList<>(passes.size());
         for (RegionScanPass pass : passes) {
-            results.add(new PassMapData(pass, new MapRegionData(minBuildHeight, pass.lightMode())));
+            results.add(new PassMapData(pass, new MapRegionData(minBuildHeight, pass.lightMode(), pass.caveParams())));
         }
 
         try (McaReader reader = McaReader.open(mcaPath.toString())) {

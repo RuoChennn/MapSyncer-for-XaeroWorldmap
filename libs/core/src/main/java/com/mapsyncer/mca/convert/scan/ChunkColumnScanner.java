@@ -90,7 +90,7 @@ public final class ChunkColumnScanner {
                         scanBottomY = bounds.clampBottomY(minBuildHeight,
                             Math.max(caveStart - caveDepth, minBuildHeight));
                     } else {
-                        startY = bounds.clampStartY(
+                        startY = bounds.resolveSurfaceStartY(
                             ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY));
                         scanBottomY = bounds.clampBottomY(minBuildHeight, minBuildHeight);
                     }
@@ -102,12 +102,13 @@ public final class ChunkColumnScanner {
                     if (isCaveMode && sectionTopY > startY) {
                         continue;
                     }
-                    if (sectionBottomY < scanBottomY) {
+                    // 整段在扫描底以下才跳过（用 sectionTopY，不能用 sectionBottomY）
+                    if (sectionTopY < scanBottomY) {
                         continue;
                     }
 
                     int effectiveStartY = computeEffectiveStartY(sectionIndex, startY, worldTopY,
-                        isCaveMode, heightMapValue, chunkBottomY, sectionTopY);
+                        isCaveMode, heightMapValue, chunkBottomY, sectionTopY, bounds);
 
                     if (!isCaveMode && effectiveStartY < sectionBottomY) {
                         continue;
@@ -126,12 +127,12 @@ public final class ChunkColumnScanner {
 
     private static int computeEffectiveStartY(int sectionIndex, int startY, int worldTopY,
                                                boolean isCaveMode, int heightMapValue, int chunkBottomY,
-                                               int sectionTopY) {
+                                               int sectionTopY, ScanVerticalBounds bounds) {
         int effectiveStartY = startY;
         if (sectionIndex > 0) {
             effectiveStartY = Math.min(startY + 1, worldTopY - 1);
         }
-        if (!isCaveMode && heightMapValue < chunkBottomY) {
+        if (!isCaveMode && !bounds.ignoresHeightmap() && heightMapValue < chunkBottomY) {
             effectiveStartY = sectionTopY;
         }
         if (isCaveMode) {

@@ -2,6 +2,7 @@ package com.mapsyncer.mca.convert.io;
 
 import com.mapsyncer.mca.BlockPropertyLookup;
 import com.mapsyncer.mca.ChunkSectionParser.BlockState;
+import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.convert.io.XaeroBlockStateNbtWriter.PaletteKey;
 import com.mapsyncer.mca.convert.model.MapRegionData;
 import com.mapsyncer.mca.convert.model.OverlayEntry;
@@ -59,7 +60,13 @@ public final class XaeroBinaryWriter {
                                     int rz = baseZ + bz;
 
                                     if (!data.hasData[rx][rz]) {
-                                        writeEmptyPixel(dos, minBuildHeight, blockPalette);
+                                        if (data.lightMode == LightMode.CAVE) {
+                                            writeCaveEmptyPixel(dos, data, rx, rz, minBuildHeight,
+                                                blockPalette, biomePalette);
+                                        } else {
+                                            writeEmptyPixel(dos, data, rx, rz, minBuildHeight,
+                                                blockPalette, biomePalette);
+                                        }
                                         continue;
                                     }
 
@@ -68,8 +75,8 @@ public final class XaeroBinaryWriter {
                             }
 
                             dos.writeByte(1);
-                            dos.writeInt(Integer.MAX_VALUE);
-                            dos.writeByte(0);
+                            dos.writeInt(data.caveParams.caveStart());
+                            dos.writeByte(data.caveParams.caveDepth() & 0xFF);
                         }
                     }
                 }
@@ -78,22 +85,76 @@ public final class XaeroBinaryWriter {
         return baos.toByteArray();
     }
 
-    private static void writeEmptyPixel(DataOutputStream dos, int minBuildHeight,
-                                         Map<PaletteKey, Integer> blockPalette) throws IOException {
+    private static void writeCaveEmptyPixel(DataOutputStream dos, MapRegionData data, int rx, int rz,
+                                            int minBuildHeight,
+                                            Map<PaletteKey, Integer> blockPalette,
+                                            Map<String, Integer> biomePalette) throws IOException {
         BlockState air = XaeroBlockStateNbtWriter.AIR;
         PaletteKey paletteKey = PaletteKey.from(air);
         int emptyHeight = minBuildHeight;
+        String biomeName = data.biomeNames[rx][rz];
+        if (biomeName == null || biomeName.equals(DEFAULT_BIOME)) {
+            biomeName = null;
+        }
+        int emptyParams = 1;
+        emptyParams |= encodeHeightToParams(emptyHeight);
+        if (biomeName != null) {
+            emptyParams |= 0x100000;
+        }
+        if (!blockPalette.containsKey(paletteKey)) {
+            emptyParams |= 0x200000;
+        }
+        if (biomeName != null && !biomePalette.containsKey(biomeName)) {
+            emptyParams |= 0x400000;
+        }
+        dos.writeInt(emptyParams);
+        writeBlockStateRef(dos, air, blockPalette);
+        writeBiomeRef(dos, biomeName, biomePalette);
+    }
+
+    private static void writeEmptyPixel(DataOutputStream dos, MapRegionData data, int rx, int rz,
+                                         int minBuildHeight,
+                                         Map<PaletteKey, Integer> blockPalette,
+                                         Map<String, Integer> biomePalette) throws IOException {
+        BlockState air = XaeroBlockStateNbtWriter.AIR;
+        PaletteKey paletteKey = PaletteKey.from(air);
+        int emptyHeight = data.heightMap[rx][rz];
+        String biomeName = data.biomeNames[rx][rz];
+        if (biomeName == null || biomeName.equals(DEFAULT_BIOME)) {
+            biomeName = null;
+        }
         int emptyParams = 0;
 
         emptyParams |= 1;
+        emptyParams |= 15 << 8;
         emptyParams |= encodeHeightToParams(emptyHeight);
+        if (biomeName != null) {
+            emptyParams |= 0x100000;
+        }
 
         if (!blockPalette.containsKey(paletteKey)) {
             emptyParams |= 0x200000;
         }
+        if (biomeName != null && !biomePalette.containsKey(biomeName)) {
+            emptyParams |= 0x400000;
+        }
 
         dos.writeInt(emptyParams);
         writeBlockStateRef(dos, air, blockPalette);
+        writeBiomeRef(dos, biomeName, biomePalette);
+    }
+
+    private static void writeBiomeRef(DataOutputStream dos, String biomeName,
+                                      Map<String, Integer> biomePalette) throws IOException {
+        if (biomeName == null) {
+            return;
+        }
+        if (biomePalette.containsKey(biomeName)) {
+            dos.writeInt(biomePalette.get(biomeName));
+        } else {
+            dos.writeUTF(biomeName);
+            biomePalette.put(biomeName, biomePalette.size());
+        }
     }
 
     private static void writePixel(DataOutputStream dos, MapRegionData data, int rx, int rz,
@@ -160,14 +221,7 @@ public final class XaeroBinaryWriter {
             }
         }
 
-        if (biomeName != null) {
-            if (biomePalette.containsKey(biomeName)) {
-                dos.writeInt(biomePalette.get(biomeName));
-            } else {
-                dos.writeUTF(biomeName);
-                biomePalette.put(biomeName, biomePalette.size());
-            }
-        }
+        writeBiomeRef(dos, biomeName, biomePalette);
     }
 
     private static void writeBlockStateRef(DataOutputStream dos, BlockState blockState,

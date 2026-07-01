@@ -14,7 +14,6 @@ import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -420,11 +419,8 @@ public class MapPacketHandler {
                 }
             }
 
-            // 获取当前视距范围
-            Minecraft mc = Minecraft.getInstance();
-            boolean isCaveDimension = mc.level != null && mc.level.dimension() == Level.NETHER;
-
             // 流式处理：异步写盘，主线程仅做 Xaero 反射重载
+            Minecraft mc = Minecraft.getInstance();
             cleanStaleParts();
             AtomicInteger batchPending = new AtomicInteger();
             AtomicInteger submittedCount = new AtomicInteger();
@@ -445,9 +441,10 @@ public class MapPacketHandler {
                     assembled.regionX, assembled.regionZ, assembled.caveLayer);
                 updatedRegionCoords.add(coord);
 
-                boolean shouldProcess = isCaveDimension
-                    ? (assembled.caveLayer != Integer.MAX_VALUE)
-                    : (assembled.caveLayer == Integer.MAX_VALUE);
+                boolean syncingCaveDimension = DimensionPathMapping.getInstance().isNether(assembled.dimension);
+                boolean shouldProcess = syncingCaveDimension
+                    ? !assembled.isSurfaceLayer()
+                    : assembled.isSurfaceLayer();
 
                 Set<XaeroMapDataHandler.RegionCoord> viewRegionsForLayer =
                     XaeroMapIntegrator.getViewDistanceRegions(assembled.caveLayer);

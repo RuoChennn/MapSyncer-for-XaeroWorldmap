@@ -25,4 +25,19 @@ public record ScanVerticalBounds(int floorY, int ceilingY) {
     public int clampBottomY(int minBuildHeight, int scanBottomY) {
         return Math.max(scanBottomY, Math.max(minBuildHeight, floorY));
     }
+
+    /**
+     * 地表模式起点：有 {@code floorY} 限制时忽略高度图，从 {@code ceilingY} 向下扫
+     * （地狱逻辑顶以上地表；高度图指向下层可玩区，不能用于上层扫描起点）。
+     */
+    public int resolveSurfaceStartY(int heightmapStartY) {
+        if (floorY > Integer.MIN_VALUE) {
+            return ceilingY;
+        }
+        return clampStartY(heightmapStartY);
+    }
+
+    public boolean ignoresHeightmap() {
+        return floorY > Integer.MIN_VALUE;
+    }
 }

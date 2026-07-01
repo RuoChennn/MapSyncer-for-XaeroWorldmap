@@ -251,24 +251,33 @@ public final class XaeroMapDataHandler {
 
     /**
      * 清除单个 region 的 Xaero 运行时缓存文件（.xwmc），可在 IO 线程调用。
+     *
+     * <p>地表层：{@code cache[_*]/{x}_{z}.xwmc}；洞穴层：{@code cache[_*]/caves/{layer}/{x}_{z}.xwmc}。</p>
      */
     public static void clearRegionCacheFiles(Path mwDir, RegionCoord coord) {
         if (mwDir == null) {
             return;
         }
 
-        String cacheFileName = coord.x() + "_" + coord.z() + ".xwmc";
+        String baseName = coord.x() + "_" + coord.z();
         for (Path cacheDir : findCacheDirectories(mwDir)) {
-            Path cacheFile = cacheDir.resolve(cacheFileName);
-            if (Files.exists(cacheFile)) {
-                try {
-                    Files.deleteIfExists(cacheFile);
-                    LOGGER.debug("Cleared region cache: {}", cacheFile);
-                } catch (IOException e) {
-                    LOGGER.warn("Failed to clear region cache: {}", cacheFile, e);
-                }
-                return;
-            }
+            Path cacheRoot = coord.isSurfaceLayer()
+                ? cacheDir
+                : cacheDir.resolve("caves").resolve(String.valueOf(coord.caveLayer()));
+            deleteRegionCacheFile(cacheRoot.resolve(baseName + ".xwmc"));
+            deleteRegionCacheFile(cacheRoot.resolve(baseName + ".xwmc.outdated"));
+        }
+    }
+
+    private static void deleteRegionCacheFile(Path cacheFile) {
+        if (!Files.exists(cacheFile)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(cacheFile);
+            LOGGER.debug("Cleared region cache: {}", cacheFile);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to clear region cache: {}", cacheFile, e);
         }
     }
 
