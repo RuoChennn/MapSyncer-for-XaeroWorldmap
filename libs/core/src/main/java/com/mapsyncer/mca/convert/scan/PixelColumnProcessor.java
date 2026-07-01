@@ -50,9 +50,15 @@ public final class PixelColumnProcessor {
 
         if (singlePalette) {
             if (singleState.isAir()) {
+                if (isCaveMode) {
+                    ctx.onAir(pos);
+                }
                 return false;
             }
-            if (isCaveMode && !ctx.underair[pos]) {
+            if (isCaveMode && ColumnScanContext.hasFluid(singleState, blockLookup)) {
+                ctx.onFluid(pos, true);
+            }
+            if (!ctx.canProcessCaveBlock(pos, isCaveMode)) {
                 return false;
             }
         }
@@ -81,13 +87,19 @@ public final class PixelColumnProcessor {
                 ? singleState
                 : ChunkSectionParser.getBlockStateAt(section, lx, ly, lz);
 
-            if (!singlePalette) {
-                if (state.isAir()) {
-                    continue;
+            if (state.isAir()) {
+                if (isCaveMode) {
+                    ctx.onAir(pos);
                 }
-                if (isCaveMode && !ctx.underair[pos]) {
-                    continue;
-                }
+                continue;
+            }
+
+            if (isCaveMode && ColumnScanContext.hasFluid(state, blockLookup)) {
+                ctx.onFluid(pos, true);
+            }
+
+            if (!ctx.canProcessCaveBlock(pos, isCaveMode)) {
+                continue;
             }
 
             String blockName = state.name();
