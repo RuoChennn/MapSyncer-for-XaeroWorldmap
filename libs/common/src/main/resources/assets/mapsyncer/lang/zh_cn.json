@@ -95,6 +95,7 @@
   "mapsyncer.autosync.status.disabled": "自动同步：已关闭",
   "mapsyncer.autosync.status.minutes": "自动同步：每 %d 分钟",
   "mapsyncer.autosync.status.daily": "自动同步：每天",
+  "mapsyncer.autosync.status.client_disabled": "自动同步：已被客户端禁用",
   "mapsyncer.autosync.client.enabled": "客户端自动同步：已开启",
   "mapsyncer.autosync.client.disabled": "客户端自动同步：已关闭",
 

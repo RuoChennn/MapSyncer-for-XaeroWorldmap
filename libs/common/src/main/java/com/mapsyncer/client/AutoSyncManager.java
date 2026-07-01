@@ -42,10 +42,17 @@ public class AutoSyncManager {
     private static volatile int serverIntervalTicks = 0;
 
     /**
-     * 根据 autoSyncIntervalMinutes 获取状态消息翻译键和参数。
-     * 0=禁用, <1440=每X分钟, ≥1440=每天。
+     * 进服时显示的自动同步状态（翻译键 + 可选参数）。
+     * 客户端关闭 autoSyncEnabled 时显示客户端禁用提示，否则展示服务端策略。
      */
     public static Object[] getStatusKey(int intervalMinutes) {
+        try {
+            if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
+                return new Object[]{"mapsyncer.autosync.status.client_disabled"};
+            }
+        } catch (IllegalStateException ignored) {
+            // 配置未初始化时回退为服务端状态
+        }
         if (intervalMinutes <= 0) return new Object[]{"mapsyncer.autosync.status.disabled"};
         if (intervalMinutes < 1440) return new Object[]{"mapsyncer.autosync.status.minutes", intervalMinutes};
         return new Object[]{"mapsyncer.autosync.status.daily"};

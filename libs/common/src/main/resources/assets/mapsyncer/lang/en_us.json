@@ -95,6 +95,7 @@
   "mapsyncer.autosync.status.disabled": "Auto-sync: Disabled",
   "mapsyncer.autosync.status.minutes": "Auto-sync: Every %d min",
   "mapsyncer.autosync.status.daily": "Auto-sync: Daily",
+  "mapsyncer.autosync.status.client_disabled": "Auto-sync: Disabled on client",
   "mapsyncer.autosync.client.enabled": "Client auto-sync: Enabled",
   "mapsyncer.autosync.client.disabled": "Client auto-sync: Disabled",
 
