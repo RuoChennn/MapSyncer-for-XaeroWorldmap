@@ -5,9 +5,12 @@ import com.mapsyncer.mca.convert.model.ConvertConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.mapsyncer.mca.convert.scan.RegionScanPass;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * 独立的区域转换器 - 不依赖 Minecraft 库
@@ -37,6 +40,9 @@ public class RegionConverterStandalone {
     public static final int MINOR_VERSION = ConvertConstants.MINOR_VERSION;
 
     public record ConvertedRegion(int regionX, int regionZ, byte[] xaeroData) {}
+
+    /** 多 pass 转换结果，含 caveLayer（地表层为 Integer.MAX_VALUE） */
+    public record LayerConvertedRegion(int regionX, int regionZ, int caveLayer, byte[] xaeroData) {}
 
     public record CaveModeParams(int caveStart, int caveDepth) {
         public static final CaveModeParams NONE = new CaveModeParams(Integer.MAX_VALUE, 0);
@@ -88,6 +94,23 @@ public class RegionConverterStandalone {
         } catch (IOException e) {
             LOGGER.warn("Failed to convert region ({}, {})", regionX, regionZ, e);
             return null;
+        }
+    }
+
+    public static List<LayerConvertedRegion> convertRegionMulti(
+            Path mcaPath, int regionX, int regionZ,
+            DimensionTypeInfo dimTypeInfo,
+            List<RegionScanPass> passes,
+            BlockPropertyLookup blockLookup) {
+        if (!Files.exists(mcaPath)) {
+            return List.of();
+        }
+        try {
+            return RegionConversionPipeline.convertMulti(
+                mcaPath, regionX, regionZ, dimTypeInfo, passes, blockLookup);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to convert region ({}, {}) multi-pass", regionX, regionZ, e);
+            return List.of();
         }
     }
 }

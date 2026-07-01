@@ -47,6 +47,16 @@ public record DimensionTypeInfo(
         return minY + height;
     }
 
+    /** 逻辑高度顶部的世界 Y 坐标（含） */
+    public int logicalTopY() {
+        return minY + logicalHeight - 1;
+    }
+
+    /** 是否存在逻辑顶以上的物理高度区（如地狱 Y128+） */
+    public boolean hasUpperZone() {
+        return hasCeiling && logicalHeight < height;
+    }
+
     /**
      * 创建默认的主世界维度类型信息
      *
@@ -66,7 +76,7 @@ public record DimensionTypeInfo(
      * @return 地狱的维度类型信息实例
      */
     public static DimensionTypeInfo nether() {
-        return new DimensionTypeInfo(false, true, 0, 256, 256);
+        return new DimensionTypeInfo(false, true, 0, 256, 128);
     }
 
     /**

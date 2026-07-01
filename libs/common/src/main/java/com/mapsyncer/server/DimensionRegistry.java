@@ -181,7 +181,7 @@ public class DimensionRegistry {
         StringBuilder sb = new StringBuilder();
         sb.append(config.dimension());
         sb.append("|").append(config.scanMode().name());
-        sb.append("|").append(config.caveStart());
+        sb.append("|").append(config.caveSpec().toConfigString());
 
         // 添加维度类型信息
         if (config.dimTypeInfo() != null) {

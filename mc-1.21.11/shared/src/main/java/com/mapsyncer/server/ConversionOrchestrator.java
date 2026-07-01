@@ -1,14 +1,15 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.config.ConversionOutputPaths;
 import com.mapsyncer.config.DimensionScanConfig;
-import com.mapsyncer.config.ScanMode;
+import com.mapsyncer.config.RegionGenerationPlanner;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.config.TimeoutConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
-import com.mapsyncer.mca.LightMode;
 import com.mapsyncer.mca.RegionConverterStandalone;
-import com.mapsyncer.mca.RegionConverterStandalone.CaveModeParams;
 import com.mapsyncer.mca.RegionConverterStandalone.ConvertedRegion;
+import com.mapsyncer.mca.RegionConverterStandalone.LayerConvertedRegion;
+import com.mapsyncer.mca.convert.scan.RegionScanPass;
 import com.mapsyncer.server.RegionScanner.DimensionRegions;
 import com.mapsyncer.server.RegionScanner.RegionCoords;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -246,7 +247,7 @@ public class ConversionOrchestrator {
         // Note: caller handles saveEverything on server thread before invoking this method.
 
         List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
-        totalCount = allRegions.stream().mapToInt(d -> d.regions().size()).sum();
+        totalCount = countTotalWork(server, allRegions);
         int totalSkippedEmpty = allRegions.stream().mapToInt(DimensionRegions::skippedEmptyCount).sum();
         if (totalCount == 0) {
             LOGGER.info("No regions found to convert");
@@ -409,13 +410,9 @@ public class ConversionOrchestrator {
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
-        ScanMode scanMode = scanConfig.scanMode();
-        int caveLayer = scanConfig.getCaveLayer();
 
-        // 使用 Xaero 格式的维度目录名（使用完整维度 ID，确保新格式路径正确转换）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
-        // 获取 MCA 文件存放目录（1.21+ 自动检测路径）
         Path regionDir = RegionScanner.getRegionDir(level);
 
         if (regionDir == null) {
@@ -424,48 +421,41 @@ public class ConversionOrchestrator {
             return SingleRegionResult.CONVERSION_FAILED;
         }
 
-        // 计算输出目录（包含 caves/<layer> 子目录）
-        Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
-        Path outputDir;
-        if (caveLayer == Integer.MAX_VALUE) {
-            outputDir = baseOutputDir;
-        } else {
-            outputDir = baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
-        }
-
-        // 从运行时获取准确的维度类型信息
         DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
-        LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
-            dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
-            dimTypeInfo.minY(), dimTypeInfo.height());
+        List<RegionScanPass> passes = RegionGenerationPlanner.plan(scanConfig, dimTypeInfo);
+        Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
 
-        // 根据配置选择光照模式和洞穴参数
-        LightMode lightMode;
-        CaveModeParams caveParams;
-        if (scanMode == ScanMode.CAVE) {
-            lightMode = LightMode.CAVE;
-            int caveDepth = scanConfig.getCaveDepth(dimTypeInfo.minY());
-            caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
-            LOGGER.info("Single region generation: using CAVE mode with caveStart={}, caveLayer={}",
-                scanConfig.caveStart(), caveLayer);
-        } else {
-            lightMode = LightMode.SURFACE;
-            caveParams = CaveModeParams.NONE;
-            LOGGER.info("Single region generation: using SURFACE mode");
-        }
+        LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, logicalTop={}, passes={}",
+            dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
+            dimTypeInfo.minY(), dimTypeInfo.logicalTopY(), passes.size());
 
         SingleRegionResult result = SingleRegionResult.SUCCESS;
         try {
-            Files.createDirectories(outputDir);
-            ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-                mcaPath, regionX, regionZ, dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
-            if (converted != null) {
-                XaeroWriter.writeRegionFile(outputDir, converted);
-                processedCount = 1;
-                LOGGER.info("Converted single region: ({}, {})", regionX, regionZ);
-            } else {
-                LOGGER.warn("Could not convert region ({}, {}): conversion failed", regionX, regionZ);
+            for (RegionScanPass pass : passes) {
+                Files.createDirectories(ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer()));
+            }
+            totalCount = passes.size();
+            List<LayerConvertedRegion> converted = RegionConverterStandalone.convertRegionMulti(
+                mcaPath, regionX, regionZ, dimTypeInfo, passes, BlockPropertyResolver.INSTANCE);
+            int written = 0;
+            for (int i = 0; i < passes.size(); i++) {
+                RegionScanPass pass = passes.get(i);
+                LayerConvertedRegion layer = i < converted.size() ? converted.get(i) : null;
+                ConvertedRegion single = layer == null ? null
+                    : new ConvertedRegion(layer.regionX(), layer.regionZ(), layer.xaeroData());
+                if (EmptyRegionSupport.isEmptyConverted(single)) {
+                    continue;
+                }
+                Path outputDir = ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer());
+                XaeroWriter.writeRegionFile(outputDir, single);
+                written++;
+            }
+            processedCount = written;
+            if (written == 0) {
+                LOGGER.warn("Could not convert region ({}, {}): all passes empty", regionX, regionZ);
                 result = SingleRegionResult.CONVERSION_FAILED;
+            } else {
+                LOGGER.info("Converted single region ({}, {}) with {} passes", regionX, regionZ, written);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to write region file", e);
@@ -497,17 +487,10 @@ public class ConversionOrchestrator {
         String dimPath = dimRegions.dimension().identifier().getPath();
 
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
-        ScanMode scanMode = scanConfig.scanMode();
-        int caveLayer = scanConfig.getCaveLayer();
 
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path regionDir = RegionScanner.getRegionDir(level);
-        Path outputDir = getOutputDir(getCacheDir().resolve(xaeroDimName), caveLayer);
-
-        try { Files.createDirectories(outputDir); } catch (IOException e) {
-            LOGGER.error("Failed to create output directory: {}", outputDir, e);
-            return;
-        }
+        Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
 
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", xaeroDimName);
@@ -515,14 +498,20 @@ public class ConversionOrchestrator {
         }
 
         DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
-        LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, height={}",
-            dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
-            dimTypeInfo.minY(), dimTypeInfo.height());
+        List<RegionScanPass> passes = RegionGenerationPlanner.plan(scanConfig, dimTypeInfo);
 
-        LightMode lightMode = scanMode == ScanMode.CAVE ? LightMode.CAVE : LightMode.SURFACE;
-        CaveModeParams caveParams = scanMode == ScanMode.CAVE
-            ? new CaveModeParams(scanConfig.caveStart(), scanConfig.getCaveDepth(dimTypeInfo.minY()))
-            : CaveModeParams.NONE;
+        try {
+            for (RegionScanPass pass : passes) {
+                Files.createDirectories(ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer()));
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to create output directories under: {}", baseOutputDir, e);
+            return;
+        }
+
+        LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, logicalTop={}, passes={}",
+            dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
+            dimTypeInfo.minY(), dimTypeInfo.logicalTopY(), passes.size());
 
         McaTimestampCache mcaCache = getTimestampCache();
         GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
@@ -532,7 +521,9 @@ public class ConversionOrchestrator {
                 : mcaCache.scanAndUpdate(dimPath, regionDir));
         List<RegionCoords> regions = dimRegions.regions();
 
-        LOGGER.info("Dimension {}: {} total regions, {} need update (force={})", dimPath, regions.size(), needsUpdate.size(), force);
+        totalCount = regions.size() * passes.size();
+        LOGGER.info("Dimension {}: {} total regions, {} need update, {} passes/region (force={})",
+            dimPath, regions.size(), needsUpdate.size(), passes.size(), force);
 
         ConcurrentLinkedQueue<RegionCoords> failedRegions = new ConcurrentLinkedQueue<>();
         processedCountAtomic.set(0);
@@ -543,18 +534,16 @@ public class ConversionOrchestrator {
 
         ExecutorService executor = getOrCreateExecutor();
 
-        // 第一轮：并发转换时间戳变化的区域
         List<java.util.concurrent.Future<?>> futures = submitConversionTasks(
-            executor, needsUpdate, regions, regionDir, outputDir, xaeroDimName, dimPath,
-            dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+            executor, needsUpdate, regions, regionDir, baseOutputDir, xaeroDimName, dimPath,
+            dimTypeInfo, passes, mcaCache, genCache,
             generationTimeSeconds, failedRegions, true);
         waitForCompletion(futures, "Region conversion");
 
-        // 第二轮：处理新增区域（非 force 模式）
         if (!force) {
             futures = submitNewRegionTasks(
-                executor, regions, new HashSet<>(needsUpdate), regionDir, outputDir, xaeroDimName, dimPath,
-                dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                executor, regions, new HashSet<>(needsUpdate), regionDir, baseOutputDir, xaeroDimName, dimPath,
+                dimTypeInfo, passes, mcaCache, genCache,
                 generationTimeSeconds, failedRegions);
             waitForCompletion(futures, "New region conversion");
         }
@@ -587,11 +576,23 @@ public class ConversionOrchestrator {
      * @return 输出目录路径
      */
     private static Path getOutputDir(Path baseOutputDir, int caveLayer) {
-        if (caveLayer == Integer.MAX_VALUE) {
-            return baseOutputDir;
-        } else {
-            return baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
+        return ConversionOutputPaths.outputDir(baseOutputDir, caveLayer);
+    }
+
+    private static int countTotalWork(MinecraftServer server, List<DimensionRegions> allRegions) {
+        int total = 0;
+        for (DimensionRegions dimRegions : allRegions) {
+            ServerLevel level = server.getLevel(dimRegions.dimension());
+            if (level == null) {
+                continue;
+            }
+            String dimPath = dimRegions.dimension().identifier().getPath();
+            DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
+            DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
+            int passCount = RegionGenerationPlanner.countPasses(scanConfig, dimTypeInfo);
+            total += dimRegions.regions().size() * passCount;
         }
+        return total;
     }
 
     /**
@@ -617,8 +618,8 @@ public class ConversionOrchestrator {
      */
     private static List<java.util.concurrent.Future<?>> submitConversionTasks(
             ExecutorService executor, List<RegionCoords> coordsToProcess, List<RegionCoords> allRegions,
-            Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
-            DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
+            Path regionDir, Path baseOutputDir, String xaeroDimName, String dimPath,
+            DimensionTypeInfo dimTypeInfo, List<RegionScanPass> passes,
             McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
             ConcurrentLinkedQueue<RegionCoords> failedRegions, boolean logProgress) {
 
@@ -629,8 +630,8 @@ public class ConversionOrchestrator {
             if (!validRegions.contains(coords)) continue;
 
             java.util.concurrent.Future<?> future = executor.submit(() ->
-                convertSingleRegion(coords, regionDir, outputDir, xaeroDimName, dimPath,
-                    dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                convertRegionMultiPasses(coords, regionDir, baseOutputDir, xaeroDimName, dimPath,
+                    dimTypeInfo, passes, mcaCache, genCache,
                     generationTimeSeconds, failedRegions, logProgress, "Converted")
             );
             futures.add(future);
@@ -663,8 +664,8 @@ public class ConversionOrchestrator {
      */
     private static List<java.util.concurrent.Future<?>> submitNewRegionTasks(
             ExecutorService executor, List<RegionCoords> allRegions, Set<RegionCoords> processedRegions,
-            Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
-            DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
+            Path regionDir, Path baseOutputDir, String xaeroDimName, String dimPath,
+            DimensionTypeInfo dimTypeInfo, List<RegionScanPass> passes,
             McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
             ConcurrentLinkedQueue<RegionCoords> failedRegions) {
 
@@ -673,16 +674,24 @@ public class ConversionOrchestrator {
         for (RegionCoords coords : allRegions) {
             if (processedRegions.contains(coords)) continue;
 
-            if (XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
-                processedCountAtomic.incrementAndGet();
+            boolean allExist = true;
+            for (RegionScanPass pass : passes) {
+                Path outputDir = ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer());
+                if (!XaeroWriter.regionFileExists(outputDir, coords.x(), coords.z())) {
+                    allExist = false;
+                    break;
+                }
+            }
+            if (allExist) {
+                processedCountAtomic.addAndGet(passes.size());
                 skippedCount.incrementAndGet();
-                LOGGER.debug("Skipped region ({}, {}): unchanged (timestamp match)", coords.x(), coords.z());
+                LOGGER.debug("Skipped region ({}, {}): all pass outputs exist", coords.x(), coords.z());
                 continue;
             }
 
             java.util.concurrent.Future<?> future = executor.submit(() ->
-                convertSingleRegion(coords, regionDir, outputDir, xaeroDimName, dimPath,
-                    dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                convertRegionMultiPasses(coords, regionDir, baseOutputDir, xaeroDimName, dimPath,
+                    dimTypeInfo, passes, mcaCache, genCache,
                     generationTimeSeconds, failedRegions, true, "Generated new")
             );
             futures.add(future);
@@ -712,62 +721,82 @@ public class ConversionOrchestrator {
      * @param logProgress 是否记录进度日志
      * @param logPrefix 日志前缀
      */
-    private static void convertSingleRegion(
-            RegionCoords coords, Path regionDir, Path outputDir, String xaeroDimName, String dimPath,
-            DimensionTypeInfo dimTypeInfo, LightMode lightMode, CaveModeParams caveParams, int caveLayer,
+    private static void convertRegionMultiPasses(
+            RegionCoords coords, Path regionDir, Path baseOutputDir, String xaeroDimName, String dimPath,
+            DimensionTypeInfo dimTypeInfo, List<RegionScanPass> passes,
             McaTimestampCache mcaCache, GenerationCache genCache, long generationTimeSeconds,
             ConcurrentLinkedQueue<RegionCoords> failedRegions, boolean logProgress, String logPrefix) {
 
         Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
 
-        String relativePath = caveLayer == Integer.MAX_VALUE
-            ? xaeroDimName + "/" + coords.x() + "_" + coords.z()
-            : xaeroDimName + "/caves/" + caveLayer + "/" + coords.x() + "_" + coords.z();
-
         if (!com.mapsyncer.mca.McaContentProbe.hasAnyChunk(mcaPath)) {
-            EmptyRegionSupport.purgeGeneratedArtifacts(outputDir, coords.x(), coords.z(), relativePath, genCache);
+            for (RegionScanPass pass : passes) {
+                Path outputDir = ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer());
+                String relativePath = ConversionOutputPaths.relativePath(
+                    xaeroDimName, pass.caveLayer(), coords.x(), coords.z());
+                EmptyRegionSupport.purgeGeneratedArtifacts(
+                    outputDir, coords.x(), coords.z(), relativePath, genCache);
+            }
             skippedEmptyContentCount.incrementAndGet();
             if (logProgress) {
-                processedCountAtomic.incrementAndGet();
-                LOGGER.debug("Skipped region ({}, {}): no chunk data in MCA", coords.x(), coords.z());
+                processedCountAtomic.addAndGet(passes.size());
             }
             return;
         }
 
-        ConvertedRegion converted = RegionConverterStandalone.convertRegion(
-            mcaPath, coords.x(), coords.z(), dimTypeInfo, lightMode, caveParams, BlockPropertyResolver.INSTANCE);
+        List<LayerConvertedRegion> converted = RegionConverterStandalone.convertRegionMulti(
+            mcaPath, coords.x(), coords.z(), dimTypeInfo, passes, BlockPropertyResolver.INSTANCE);
 
-        if (converted == null) {
+        if (converted.isEmpty()) {
             failedRegions.add(coords);
             return;
         }
 
-        if (EmptyRegionSupport.isEmptyConverted(converted)) {
-            EmptyRegionSupport.purgeGeneratedArtifacts(outputDir, coords.x(), coords.z(), relativePath, genCache);
-            skippedEmptyContentCount.incrementAndGet();
-            if (logProgress) {
-                processedCountAtomic.incrementAndGet();
-                LOGGER.debug("Skipped region ({}, {}): conversion produced no map data", coords.x(), coords.z());
+        boolean anyWritten = false;
+        boolean anyFailed = false;
+        for (int i = 0; i < passes.size(); i++) {
+            RegionScanPass pass = passes.get(i);
+            LayerConvertedRegion layer = i < converted.size() ? converted.get(i) : null;
+            Path outputDir = ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer());
+            String relativePath = ConversionOutputPaths.relativePath(
+                xaeroDimName, pass.caveLayer(), coords.x(), coords.z());
+
+            ConvertedRegion single = layer == null ? null
+                : new ConvertedRegion(layer.regionX(), layer.regionZ(), layer.xaeroData());
+
+            if (EmptyRegionSupport.isEmptyConverted(single)) {
+                EmptyRegionSupport.purgeGeneratedArtifacts(
+                    outputDir, coords.x(), coords.z(), relativePath, genCache);
+                if (logProgress) {
+                    processedCountAtomic.incrementAndGet();
+                }
+                continue;
             }
-            return;
+
+            try {
+                XaeroWriter.RegionWriteResult writeResult = XaeroWriter.writeRegionFile(outputDir, single);
+                genCache.update(relativePath, generationTimeSeconds, writeResult.crc32Hash());
+                anyWritten = true;
+                if (logProgress) {
+                    int convertedSoFar = convertedCountAtomic.incrementAndGet();
+                    processedCountAtomic.incrementAndGet();
+                    String layerLabel = pass.isSurfaceLayer() ? "surface" : String.valueOf(pass.caveLayer());
+                    LOGGER.info("{} region ({}, {}) layer={}: {}/{}",
+                        logPrefix, coords.x(), coords.z(), layerLabel, convertedSoFar, totalCount);
+                }
+            } catch (IOException e) {
+                LOGGER.error("Failed to write region file for layer {}", pass.caveLayer(), e);
+                anyFailed = true;
+            }
         }
 
-        try {
-            XaeroWriter.RegionWriteResult writeResult = XaeroWriter.writeRegionFile(outputDir, converted);
+        if (anyWritten) {
             mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
-
-            genCache.update(relativePath, generationTimeSeconds, writeResult.crc32Hash());
-
-        } catch (IOException e) {
-            LOGGER.error("Failed to write region file", e);
-            failedRegions.add(coords);
-            return;
         }
-
-        if (logProgress) {
-            int convertedSoFar = convertedCountAtomic.incrementAndGet();
-            processedCountAtomic.incrementAndGet();
-            LOGGER.info("{} region ({}, {}): {}/{}", logPrefix, coords.x(), coords.z(), convertedSoFar, totalCount);
+        if (anyFailed) {
+            failedRegions.add(coords);
+        } else if (!anyWritten) {
+            skippedEmptyContentCount.incrementAndGet();
         }
     }
 
@@ -844,11 +873,9 @@ public class ConversionOrchestrator {
             String dimPath,
             String xaeroDimName,
             Path regionDir,
-            Path outputDir,
+            Path baseOutputDir,
             DimensionTypeInfo dimTypeInfo,
-            LightMode lightMode,
-            CaveModeParams caveParams,
-            int caveLayer
+            List<RegionScanPass> passes
     ) {}
 
     /**
@@ -868,8 +895,6 @@ public class ConversionOrchestrator {
             String dimPath = dimRegions.dimension().identifier().getPath();
 
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
-            ScanMode scanMode = scanConfig.scanMode();
-            int caveLayer = scanConfig.getCaveLayer();
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
 
             Path regionDir = RegionScanner.getRegionDir(level);
@@ -878,25 +903,11 @@ public class ConversionOrchestrator {
             }
 
             Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
-            Path outputDir = caveLayer == Integer.MAX_VALUE
-                    ? baseOutputDir
-                    : baseOutputDir.resolve("caves").resolve(String.valueOf(caveLayer));
-
             DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
-
-            LightMode lightMode;
-            CaveModeParams caveParams;
-            if (scanMode == ScanMode.CAVE) {
-                lightMode = LightMode.CAVE;
-                int caveDepth = scanConfig.getCaveDepth(dimTypeInfo.minY());
-                caveParams = new CaveModeParams(scanConfig.caveStart(), caveDepth);
-            } else {
-                lightMode = LightMode.SURFACE;
-                caveParams = CaveModeParams.NONE;
-            }
+            List<RegionScanPass> passes = RegionGenerationPlanner.plan(scanConfig, dimTypeInfo);
 
             snapshots.add(new IncrementalScanSnapshot(
-                    dimPath, xaeroDimName, regionDir, outputDir, dimTypeInfo, lightMode, caveParams, caveLayer));
+                    dimPath, xaeroDimName, regionDir, baseOutputDir, dimTypeInfo, passes));
         }
 
         return snapshots;
@@ -938,6 +949,7 @@ public class ConversionOrchestrator {
         McaTimestampCache mcaCache = getTimestampCache();
         GenerationCache genCache = GenerationCache.getInstance(getCacheDir());
         int totalUpdated = 0;
+        totalCount = 0;
         long generationTimeSeconds = System.currentTimeMillis() / 1000;
         ConcurrentLinkedQueue<RegionCoords> failedRegions = new ConcurrentLinkedQueue<>();
         ExecutorService executor = getOrCreateExecutor();
@@ -945,12 +957,10 @@ public class ConversionOrchestrator {
         for (IncrementalScanSnapshot snapshot : snapshots) {
             String dimPath = snapshot.dimPath();
             Path regionDir = snapshot.regionDir();
-            Path outputDir = snapshot.outputDir();
+            Path baseOutputDir = snapshot.baseOutputDir();
             String xaeroDimName = snapshot.xaeroDimName();
-            int caveLayer = snapshot.caveLayer();
+            List<RegionScanPass> passes = snapshot.passes();
             DimensionTypeInfo dimTypeInfo = snapshot.dimTypeInfo();
-            LightMode lightMode = snapshot.lightMode();
-            CaveModeParams caveParams = snapshot.caveParams();
 
             java.util.List<RegionCoords> needsUpdate = mcaCache.scanAndUpdate(dimPath, regionDir);
 
@@ -959,20 +969,23 @@ public class ConversionOrchestrator {
                 continue;
             }
 
-            LOGGER.info("Dimension {}: {} regions need incremental update (mode={}, hasSkylight={})",
-                dimPath, needsUpdate.size(), lightMode, dimTypeInfo.hasSkylight());
+            LOGGER.info("Dimension {}: {} regions need incremental update (passes={})",
+                dimPath, needsUpdate.size(), passes.size());
 
             try {
-                Files.createDirectories(outputDir);
+                for (RegionScanPass pass : passes) {
+                    Files.createDirectories(ConversionOutputPaths.outputDir(baseOutputDir, pass.caveLayer()));
+                }
             } catch (IOException e) {
-                LOGGER.error("Failed to create output directory: {}", outputDir, e);
+                LOGGER.error("Failed to create output directories: {}", baseOutputDir, e);
                 continue;
             }
 
+            totalCount += needsUpdate.size() * passes.size();
             int failuresBefore = failedRegions.size();
             List<java.util.concurrent.Future<?>> futures = submitConversionTasks(
-                executor, needsUpdate, needsUpdate, regionDir, outputDir, xaeroDimName, dimPath,
-                dimTypeInfo, lightMode, caveParams, caveLayer, mcaCache, genCache,
+                executor, needsUpdate, needsUpdate, regionDir, baseOutputDir, xaeroDimName, dimPath,
+                dimTypeInfo, passes, mcaCache, genCache,
                 generationTimeSeconds, failedRegions, false);
             waitForCompletion(futures, "Incremental update");
             totalUpdated += needsUpdate.size() - (failedRegions.size() - failuresBefore);

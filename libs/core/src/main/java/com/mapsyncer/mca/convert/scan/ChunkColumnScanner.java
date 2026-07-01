@@ -21,6 +21,19 @@ public final class ChunkColumnScanner {
                             RegionConverterStandalone.CaveModeParams caveParams,
                             boolean worldHasSkylight,
                             BlockPropertyLookup blockLookup) {
+        scan(data, chunk, minBuildHeight, worldTopY, lightMode, caveParams, worldHasSkylight,
+            blockLookup, ScanVerticalBounds.unbounded());
+    }
+
+    public static void scan(MapRegionData data,
+                            ChunkDataParser.ChunkInfo chunk,
+                            int minBuildHeight,
+                            int worldTopY,
+                            LightMode lightMode,
+                            RegionConverterStandalone.CaveModeParams caveParams,
+                            boolean worldHasSkylight,
+                            BlockPropertyLookup blockLookup,
+                            ScanVerticalBounds bounds) {
         int chunkX = chunk.chunkX();
         int chunkZ = chunk.chunkZ();
 
@@ -73,11 +86,17 @@ public final class ChunkColumnScanner {
                     int scanBottomY;
                     int startY;
                     if (isCaveMode) {
-                        startY = caveStart;
-                        scanBottomY = Math.max(caveStart - caveDepth, minBuildHeight);
+                        startY = bounds.clampStartY(caveStart);
+                        scanBottomY = bounds.clampBottomY(minBuildHeight,
+                            Math.max(caveStart - caveDepth, minBuildHeight));
                     } else {
-                        startY = ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY);
-                        scanBottomY = minBuildHeight;
+                        startY = bounds.clampStartY(
+                            ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY));
+                        scanBottomY = bounds.clampBottomY(minBuildHeight, minBuildHeight);
+                    }
+
+                    if (startY < scanBottomY) {
+                        continue;
                     }
 
                     if (isCaveMode && sectionTopY > startY) {
