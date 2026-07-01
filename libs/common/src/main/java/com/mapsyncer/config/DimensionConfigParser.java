@@ -11,17 +11,15 @@ import java.util.List;
 /**
  * 维度配置解析工具类。
  *
- * 将 parseConfigString / getConfigForDimension / getDefaultDimensionConfigStrings
- * 等重复逻辑从各平台 ModConfig 中提取到此处，消除 10 份拷贝。
+ * <p>新格式：{@code dimension|layerPlan|dim_type_info}（layerPlan 为 SURFACE / Y 坐标 / 组合）</p>
+ * <p>旧格式：{@code dimension|scanMode|caveField|dim_type_info} 仍可读，合并为 {@link LayerPlan}</p>
  */
 public final class DimensionConfigParser {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DimensionConfigParser.class);
 
-    /** 默认洞穴起始高度（单层模式） */
-    public static final int DEFAULT_CAVE_START = CaveSpec.DEFAULT_CAVE_START;
+    public static final int DEFAULT_CAVE_START = LayerPlan.DEFAULT_CAVE_START;
 
-    /** 单键缓存：避免重复解析相同的配置列表 */
     private static volatile String cachedKey;
     private static volatile List<DimensionScanConfig> cachedResult;
 
@@ -29,16 +27,12 @@ public final class DimensionConfigParser {
 
     public static List<String> getDefaultDimensionConfigStrings() {
         List<String> defaults = new ArrayList<>(3);
-        defaults.add("minecraft:overworld|SURFACE|63|true|false|-64|384|384");
-        defaults.add("minecraft:the_nether|CAVE|SPLIT|false|true|0|256|128");
-        defaults.add("minecraft:the_end|SURFACE|63|false|false|0|256|256");
+        defaults.add("minecraft:overworld|SURFACE|true|false|-64|384|384");
+        defaults.add("minecraft:the_nether|SURFACE,63|false|true|0|256|128");
+        defaults.add("minecraft:the_end|SURFACE|false|false|0|256|256");
         return defaults;
     }
 
-    /**
-     * 解析维度配置列表，带单键缓存。
-     * 配置在服务端运行期间通常不变，缓存命中时 O(1) 返回。
-     */
     public static List<DimensionScanConfig> parseDimensionConfigs(List<? extends String> dimensionConfigs) {
         String key = String.join("\0", dimensionConfigs);
         if (key.equals(cachedKey)) {
@@ -60,28 +54,39 @@ public final class DimensionConfigParser {
             return null;
         }
 
-        String[] parts = configStr.split("\\|");
+        String[] parts = configStr.split("\\|", -1);
         if (parts.length < 1) {
             return null;
         }
 
         String dimension = parts[0];
-        CaveSpec caveSpec = CaveSpec.single(DEFAULT_CAVE_START);
+        LayerPlan layerPlan = LayerPlan.empty();
         DimensionTypeInfo dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimension);
 
-        boolean isNewFormat = parts.length > 1 &&
-            (parts[1].equalsIgnoreCase("SURFACE") || parts[1].equalsIgnoreCase("CAVE"));
-
-        int scanModeIndex = isNewFormat ? 1 : 2;
-        int caveSpecIndex = isNewFormat ? 2 : 3;
-        int dimTypeStartIndex = isNewFormat ? 3 : 4;
-
-        String modeStr = parts.length > scanModeIndex ? parts[scanModeIndex] : "SURFACE";
-
-        if (parts.length > caveSpecIndex) {
-            caveSpec = CaveSpec.parse(parts[caveSpecIndex]);
+        int dimTypeStartIndex;
+        if (parts.length > 2 && isLegacyScanModeToken(parts[1]) && !looksLikeDimTypeField(parts[2])) {
+            ScanMode legacyMode;
+            try {
+                legacyMode = ScanMode.valueOf(parts[1].trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                LOGGER.warn("Invalid legacy scan_mode '{}' in [{}], treating as layer plan",
+                    parts[1], configStr);
+                layerPlan = LayerPlan.parse(parts[1]);
+                dimTypeStartIndex = 2;
+                return finishParse(dimension, layerPlan, dimTypeInfo, parts, dimTypeStartIndex, configStr);
+            }
+            layerPlan = LayerPlan.fromLegacy(legacyMode, parts.length > 2 ? parts[2] : "");
+            dimTypeStartIndex = 3;
+        } else {
+            layerPlan = parts.length > 1 ? LayerPlan.parse(parts[1]) : LayerPlan.empty();
+            dimTypeStartIndex = 2;
         }
 
+        return finishParse(dimension, layerPlan, dimTypeInfo, parts, dimTypeStartIndex, configStr);
+    }
+
+    private static DimensionScanConfig finishParse(String dimension, LayerPlan layerPlan,
+            DimensionTypeInfo dimTypeInfo, String[] parts, int dimTypeStartIndex, String configStr) {
         if (parts.length >= dimTypeStartIndex + 5) {
             try {
                 boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex].trim());
@@ -91,27 +96,27 @@ public final class DimensionConfigParser {
                 int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4].trim());
                 dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
             } catch (NumberFormatException e) {
-                LOGGER.warn("Invalid dim_type_info in dimension config [{}], using runtime type info", configStr);
+                LOGGER.warn("Invalid dim_type_info in dimension config [{}], using inferred type", configStr);
             }
         }
-
-        ScanMode mode;
-        try {
-            mode = ScanMode.valueOf(modeStr.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            LOGGER.warn("Invalid scan_mode '{}' in dimension config [{}], falling back to SURFACE",
-                modeStr, configStr);
-            mode = ScanMode.SURFACE;
-        }
-
-        return new DimensionScanConfig(dimension, mode, caveSpec, dimTypeInfo);
+        return new DimensionScanConfig(dimension, layerPlan, dimTypeInfo);
     }
 
-    /**
-     * 获取特定维度的扫描配置。
-     */
+    private static boolean isLegacyScanModeToken(String s) {
+        return "SURFACE".equalsIgnoreCase(s.trim()) || "CAVE".equalsIgnoreCase(s.trim());
+    }
+
+    private static boolean looksLikeDimTypeField(String s) {
+        String t = s.trim();
+        return "true".equalsIgnoreCase(t) || "false".equalsIgnoreCase(t);
+    }
+
     public static DimensionScanConfig getConfigForDimension(String dimensionPath,
             List<? extends String> dimensionConfigs, ScanMode defaultMode, int defaultCave) {
+        LayerPlan defaultPlan = defaultMode == ScanMode.SURFACE
+            ? LayerPlan.surfaceOnly()
+            : LayerPlan.caves(defaultCave);
+
         List<DimensionScanConfig> parsed = parseDimensionConfigs(dimensionConfigs);
 
         String normalizedPath = dimensionPath.replace("minecraft:", "").toLowerCase();
@@ -129,18 +134,18 @@ public final class DimensionConfigParser {
         if (isVanilla) {
             switch (normalizedPath) {
                 case "the_nether":
-                    return new DimensionScanConfig("minecraft:the_nether", ScanMode.CAVE,
-                        CaveSpec.splitOnly(), DimensionTypeInfo.nether());
+                    return new DimensionScanConfig("minecraft:the_nether",
+                        LayerPlan.mixed(DEFAULT_CAVE_START), DimensionTypeInfo.nether());
                 case "overworld":
-                    return new DimensionScanConfig("minecraft:overworld", ScanMode.SURFACE,
-                        CaveSpec.single(defaultCave), DimensionTypeInfo.overworld());
+                    return new DimensionScanConfig("minecraft:overworld",
+                        LayerPlan.surfaceOnly(), DimensionTypeInfo.overworld());
                 default:
-                    return new DimensionScanConfig("minecraft:the_end", ScanMode.SURFACE,
-                        CaveSpec.single(defaultCave), DimensionTypeInfo.theEnd());
+                    return new DimensionScanConfig("minecraft:the_end",
+                        LayerPlan.surfaceOnly(), DimensionTypeInfo.theEnd());
             }
         }
 
-        return new DimensionScanConfig(dimensionPath, defaultMode, CaveSpec.single(defaultCave),
+        return new DimensionScanConfig(dimensionPath, defaultPlan,
             DimensionTypeInfo.fromDimensionId(dimensionPath));
     }
 }

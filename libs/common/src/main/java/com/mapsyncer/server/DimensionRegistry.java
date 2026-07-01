@@ -1,7 +1,7 @@
 package com.mapsyncer.server;
 
 import com.mapsyncer.config.DimensionScanConfig;
-import com.mapsyncer.config.ScanMode;
+import com.mapsyncer.config.LayerPlan;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.DimensionApiHelper;
@@ -111,15 +111,14 @@ public class DimensionRegistry {
             // 使用默认地表模式和动态维度类型信息创建配置
             DimensionScanConfig finalConfig = new DimensionScanConfig(
                     dimId,
-                    ScanMode.SURFACE,
-                    63,
+                    LayerPlan.surfaceOnly(),
                     dimTypeInfo
             );
 
             String configStr = configToString(finalConfig);
             updatedConfigs.add(configStr);
-            LOGGER.info("Added dimension config: {} (scan_mode={}, hasSkylight={})",
-                    dimId, finalConfig.scanMode(), dimTypeInfo.hasSkylight());
+            LOGGER.info("Added dimension config: {} (layerPlan={}, hasSkylight={})",
+                    dimId, finalConfig.layerPlan().toConfigString(), dimTypeInfo.hasSkylight());
         }
 
         // 更新配置值
@@ -171,7 +170,7 @@ public class DimensionRegistry {
     /**
      * 将DimensionScanConfig转换为字符串格式（用于配置文件）
      *
-     * 格式：dimension|scan_mode|cave_start|dim_type_info
+     * 格式：dimension|layerPlan|dim_type_info
      * dim_type_info格式：hasSkylight|hasCeiling|minY|height|logicalHeight
      *
      * @param config 维度扫描配置
@@ -180,8 +179,7 @@ public class DimensionRegistry {
     private static String configToString(DimensionScanConfig config) {
         StringBuilder sb = new StringBuilder();
         sb.append(config.dimension());
-        sb.append("|").append(config.scanMode().name());
-        sb.append("|").append(config.caveSpec().toConfigString());
+        sb.append("|").append(config.layerPlan().toConfigString());
 
         // 添加维度类型信息
         if (config.dimTypeInfo() != null) {

@@ -3,34 +3,41 @@ package com.mapsyncer.config;
 import com.mapsyncer.mca.DimensionTypeInfo;
 
 /**
- * 维度扫描配置记录
+ * 维度扫描配置记录。
  *
- * <p>存储单个维度的扫描参数。cave 字段通过 {@link CaveSpec} 支持多层与逻辑顶拆分。</p>
+ * <p>层生成由 {@link LayerPlan} 与运行时 {@link DimensionTypeInfo} 共同决定，
+ * 不再区分独立的 SURFACE/CAVE 扫描模式字段。</p>
  */
 public record DimensionScanConfig(
     String dimension,
-    ScanMode scanMode,
-    CaveSpec caveSpec,
+    LayerPlan layerPlan,
     DimensionTypeInfo dimTypeInfo
 ) {
-    public DimensionScanConfig(String dimension, ScanMode scanMode, int caveStart) {
-        this(dimension, scanMode, CaveSpec.single(caveStart), null);
+    public DimensionScanConfig(String dimension, LayerPlan layerPlan) {
+        this(dimension, layerPlan, null);
     }
 
-    public DimensionScanConfig(String dimension, ScanMode scanMode, int caveStart, DimensionTypeInfo dimTypeInfo) {
-        this(dimension, scanMode, CaveSpec.single(caveStart), dimTypeInfo);
+    /** 保留供日志等兼容；新配置请使用 {@link #layerPlan()} */
+    @Deprecated
+    public ScanMode scanMode() {
+        if (layerPlan.includeSurface() && !layerPlan.includeAllCaves() && layerPlan.caveStarts().isEmpty()) {
+            return ScanMode.SURFACE;
+        }
+        if (!layerPlan.includeSurface() && (layerPlan.includeAllCaves() || !layerPlan.caveStarts().isEmpty())) {
+            return ScanMode.CAVE;
+        }
+        return layerPlan.includeSurface() ? ScanMode.SURFACE : ScanMode.CAVE;
     }
 
-    /** 兼容旧 API：首个显式 caveStart 或默认值 */
     public int caveStart() {
-        return caveSpec.primaryStart();
+        return layerPlan.primaryCaveStart();
     }
 
     /**
      * 单 pass 场景下的洞穴层号；多 pass 时请使用 {@link RegionGenerationPlanner}。
      */
     public int getCaveLayer() {
-        if (scanMode == ScanMode.SURFACE && !caveSpec.splitByLogical()) {
+        if (layerPlan.includeSurface() && !layerPlan.includeAllCaves() && layerPlan.caveStarts().isEmpty()) {
             return Integer.MAX_VALUE;
         }
         int start = caveStart();
@@ -41,7 +48,7 @@ public record DimensionScanConfig(
     }
 
     public int getCaveDepth(int minBuildHeight) {
-        if (scanMode == ScanMode.SURFACE) {
+        if (layerPlan.includeSurface() && !layerPlan.includeAllCaves() && layerPlan.caveStarts().isEmpty()) {
             return 0;
         }
         int start = caveStart();
