@@ -53,17 +53,26 @@ public record DimensionScanConfig(
         return caveStart >> 4;
     }
 
+    /** Xaero 分层洞穴单层扫描深度（tile footer 中的 caveDepth，对应 16 格厚 section） */
+    private static final int XAERO_CAVE_LAYER_DEPTH = 15;
+
     /**
-     * 获取洞穴深度（覆盖到世界底部）
+     * 获取洞穴扫描深度
      *
-     * @param minBuildHeight 世界最低建筑高度
+     * <p>分层洞穴与 Xaero 一致：从 {@code caveStart} 向下扫描 {@link #XAERO_CAVE_LAYER_DEPTH} 格。
+     * 全洞穴模式（{@code caveStart == Integer.MIN_VALUE}）仍扫至世界底部。</p>
+     *
+     * @param minBuildHeight 世界最低建筑高度（仅全洞穴模式使用）
      * @return 洞穴深度值
      */
     public int getCaveDepth(int minBuildHeight) {
         if (scanMode == ScanMode.SURFACE) {
             return 0;
         }
-        return Math.max(30, caveStart - minBuildHeight);
+        if (caveStart == Integer.MIN_VALUE) {
+            return Math.max(30, caveStart - minBuildHeight);
+        }
+        return XAERO_CAVE_LAYER_DEPTH;
     }
 
     /**
