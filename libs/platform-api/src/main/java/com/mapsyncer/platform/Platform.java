@@ -138,14 +138,14 @@ public interface Platform {
      *
      * <p>用于限速同步期间视距外 region 加载到 Xaero MapProcessor：</p>
      * <ul>
-     *   <li>-1 = 不限制（立即加载所有 region）</li>
+     *   <li>-1 = 不限制（同步完成时一次排空队列）</li>
      *   <li>0 = 仅加载视距内 region</li>
-     *   <li>1-5 = 每 tick 加载 N 个视距外 region</li>
+     *   <li>1-100 = 每 N 个客户端 tick 向 Xaero 传入 1 个视距外 region</li>
      * </ul>
      *
-     * @return 每 tick 加载数
+     * @return 加载间隔（tick 数）
      */
-    int getMapRegionLoadsPerTick();
+    int getMapRegionLoadIntervalTicks();
 
     /**
      * 客户端是否启用自动同步（进服/在线周期）。

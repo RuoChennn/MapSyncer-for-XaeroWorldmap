@@ -656,13 +656,13 @@ public class MapPacketHandler {
      * 会丢掉刚写入队列的视距外 region。</p>
      */
     private static void scheduleDeferredReloadCleanup() {
-        int loadsPerTick;
+        int intervalTicks;
         try {
-            loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
+            intervalTicks = PlatformManager.getPlatform().getMapRegionLoadIntervalTicks();
         } catch (IllegalStateException e) {
-            loadsPerTick = 1;
+            intervalTicks = 1;
         }
-        if (loadsPerTick == 0 || pendingRegionLoads.isEmpty()) {
+        if (RegionLoadThrottle.isViewOnly(intervalTicks) || pendingRegionLoads.isEmpty()) {
             pendingRegionLoads.clear();
             clearReflectionCache();
             resumeChunkUpdatesIfIdle();
@@ -691,6 +691,7 @@ public class MapPacketHandler {
         partBuffer.clear();
         pendingRegionLoads.clear();
         lastMwDir = null;
+        RegionLoadThrottle.reset();
     }
 
     /**
@@ -798,36 +799,43 @@ public class MapPacketHandler {
     }
 
     /**
-     * 从待加载队列中排放最多 LOADS_PER_TICK 个视距外 region 到 Xaero MapProcessor。
+     * 按配置的 tick 间隔向 Xaero MapProcessor 传入视距外 region（每 N tick 1 个）。
      * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
      */
     public static void drainPendingLoadQueue() {
         SyncProgressTracker.onClientTick();
         RegionPipelineTracker.onClientTick();
-        int loadsPerTick;
+        int intervalTicks;
         try {
-            loadsPerTick = PlatformManager.getPlatform().getMapRegionLoadsPerTick();
+            intervalTicks = PlatformManager.getPlatform().getMapRegionLoadIntervalTicks();
         } catch (IllegalStateException e) {
-            // 平台或客户端配置尚未初始化（启动早期），跳过
             return;
         }
-        if (loadsPerTick == 0) return;
+        if (RegionLoadThrottle.isViewOnly(intervalTicks)) {
+            return;
+        }
+        if (pendingRegionLoads.isEmpty()) {
+            return;
+        }
 
-        if (loadsPerTick == -1) {
-            // 不限制：一次排空全部
+        if (RegionLoadThrottle.isUnlimited(intervalTicks)) {
             PendingRegionLoad pending;
             while ((pending = pendingRegionLoads.poll()) != null) {
                 XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                     pending.regionX(), pending.regionZ(), pending.caveLayer());
                 triggerSingleRegionLoad(coord, pending.caveLayer(), false);
             }
+            RegionLoadThrottle.reset();
             finishDeferredReloadCleanupIfDone();
             return;
         }
 
-        for (int i = 0; i < loadsPerTick; i++) {
-            PendingRegionLoad pending = pendingRegionLoads.poll();
-            if (pending == null) break;
+        if (!RegionLoadThrottle.shouldDrainOne(intervalTicks)) {
+            return;
+        }
+
+        PendingRegionLoad pending = pendingRegionLoads.poll();
+        if (pending != null) {
             XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                 pending.regionX(), pending.regionZ(), pending.caveLayer());
             triggerSingleRegionLoad(coord, pending.caveLayer(), false);

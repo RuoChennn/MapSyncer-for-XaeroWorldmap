@@ -110,7 +110,7 @@ public class ModConfig {
          */
         public final IntValue hashThreads;
 
-        public final IntValue mapRegionLoadsPerTick;
+        public final IntValue mapRegionLoadIntervalTicks;
 
         public final BooleanValue autoSyncEnabled;
 
@@ -151,12 +151,12 @@ public class ModConfig {
                              "范围：1 - " + maxThreads)
                     .defineInRange("hashThreads", defaultThreads, 1, maxThreads);
 
-            mapRegionLoadsPerTick = builder
-                    .comment("Map regions loaded per client tick during sync. Limits Xaero MapProcessor queue size to prevent OOM.",
-                             "同步期间每客户端 tick 加载的地图区域数。限制 Xaero MapProcessor 队列大小以防止内存溢出。",
-                             "  -1 = Unlimited, 0 = View-distance only, 1-5 = Load N per tick (default 1)",
-                             "  -1 = 不限制, 0 = 仅加载视距内, 1-5 = 每 tick 加载 N 个（默认 1）")
-                    .defineInRange("mapRegionLoadsPerTick", 1, -1, 5);
+            mapRegionLoadIntervalTicks = builder
+                    .comment("Tick interval between loading each out-of-view region into Xaero (1 = every tick).",
+                             "视距外 region 传入 Xaero 的客户端 tick 间隔（1 = 每 tick 一个）。",
+                             "  -1 = Unlimited (drain all at once), 0 = View-distance only, 1-100 = one region every N ticks",
+                             "  -1 = 不限制, 0 = 仅视距内, 1-100 = 每 N tick 加载 1 个（默认 1）")
+                    .defineInRange("mapRegionLoadIntervalTicks", 1, -1, 100);
 
             autoSyncEnabled = builder
                     .comment("Enable automatic sync on join and periodic TICK sync",
@@ -172,8 +172,8 @@ public class ModConfig {
             return hashThreads.get();
         }
 
-        public int getMapRegionLoadsPerTick() {
-            return mapRegionLoadsPerTick.get();
+        public int getMapRegionLoadIntervalTicks() {
+            return mapRegionLoadIntervalTicks.get();
         }
 
         public boolean isAutoSyncEnabled() {

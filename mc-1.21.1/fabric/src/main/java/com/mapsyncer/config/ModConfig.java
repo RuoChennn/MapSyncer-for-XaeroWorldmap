@@ -142,7 +142,7 @@ public class ModConfig {
         private volatile int hashThreads;
 
         /** 每 tick 加载的地图区域数（-1=不限制, 0=仅视距内, 1-5=限速） */
-        private volatile int mapRegionLoadsPerTick = 1;
+        private volatile int mapRegionLoadIntervalTicks = 1;
 
         /** 客户端自动同步（进服/在线周期） */
         private volatile boolean autoSyncEnabled = true;
@@ -185,13 +185,17 @@ public class ModConfig {
                 // 确保线程数在有效范围内
                 hashThreads = Math.max(1, Math.min(maxThreads, loadedThreads));
 
-                int loadedLoadsPerTick = Integer.parseInt(props.getProperty("mapRegionLoadsPerTick", "1"));
-                mapRegionLoadsPerTick = Math.max(-1, Math.min(5, loadedLoadsPerTick));
+                String intervalProp = props.getProperty("mapRegionLoadIntervalTicks");
+                if (intervalProp == null) {
+                    intervalProp = props.getProperty("mapRegionLoadsPerTick", "1");
+                }
+                int loadedInterval = Integer.parseInt(intervalProp);
+                mapRegionLoadIntervalTicks = Math.max(-1, Math.min(100, loadedInterval));
 
                 autoSyncEnabled = Boolean.parseBoolean(
                         props.getProperty("autoSyncEnabled", "true"));
 
-                LOGGER.info("Loaded client config from: {} (hashThreads={}, mapRegionLoadsPerTick={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadsPerTick, autoSyncEnabled);
+                LOGGER.info("Loaded client config from: {} (hashThreads={}, mapRegionLoadIntervalTicks={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadIntervalTicks, autoSyncEnabled);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load client config, using defaults: {}", e.getMessage());
             }
@@ -244,7 +248,8 @@ public class ModConfig {
                 sb.append("# 1-5 = Load N per tick (default: 1)\n");
                 sb.append("# 1-5 = 每 tick 加载 N 个（默认：1）\n");
                 sb.append("#\n");
-                sb.append("mapRegionLoadsPerTick=" + mapRegionLoadsPerTick + "\n");
+                sb.append("#  -1 = unlimited, 0 = view only, 1-100 = one region every N ticks\n");
+                sb.append("mapRegionLoadIntervalTicks=" + mapRegionLoadIntervalTicks + "\n");
                 sb.append("#\n");
                 sb.append("# Enable automatic sync on join and periodic TICK sync\n");
                 sb.append("# 启用进服自动同步与 TICK 在线周期同步\n");
@@ -254,7 +259,7 @@ public class ModConfig {
 
                 Files.writeString(configFile, sb.toString());
 
-                LOGGER.info("Saved client config to: {} (hashThreads={}, mapRegionLoadsPerTick={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadsPerTick, autoSyncEnabled);
+                LOGGER.info("Saved client config to: {} (hashThreads={}, mapRegionLoadIntervalTicks={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadIntervalTicks, autoSyncEnabled);
             } catch (Exception e) {
                 LOGGER.error("Failed to save client config: {}", e.getMessage());
             }
@@ -269,8 +274,8 @@ public class ModConfig {
             return hashThreads;
         }
 
-        public int getMapRegionLoadsPerTick() {
-            return mapRegionLoadsPerTick;
+        public int getMapRegionLoadIntervalTicks() {
+            return mapRegionLoadIntervalTicks;
         }
 
         /**

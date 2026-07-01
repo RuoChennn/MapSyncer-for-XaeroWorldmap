@@ -177,8 +177,8 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
-    public int getMapRegionLoadsPerTick() {
-        return ModConfig.CLIENT().getMapRegionLoadsPerTick();
+    public int getMapRegionLoadIntervalTicks() {
+        return ModConfig.CLIENT().getMapRegionLoadIntervalTicks();
     }
 
     @Override
