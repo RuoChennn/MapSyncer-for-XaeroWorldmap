@@ -1,4 +1,4 @@
-package com.mapsyncer.config;
+﻿package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.UpdateMode;
@@ -59,10 +59,10 @@ public class ModConfig {
      * 获取原版维度的默认配置（系统预设）
      *
      * <p>使用字符串格式避免 NightConfig 序列化问题</p>
-     * <p>格式："dimension|scan_mode|cave_start|dim_type_info"</p>
-     * <p>dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
+     * <p>格式：{@code dimension|layerPlan|dim_type_info}（layerPlan 为 SURFACE / ALL / Y 坐标或其组合）</p>
+     * <p>dim_type_info：{@code hasSkylight|hasCeiling|minY|height|logicalHeight}</p>
      *
-     * <p>例如："minecraft:the_nether|CAVE|63|false|true|0|256|256"</p>
+     * <p>例如：{@code minecraft:the_nether|SURFACE,63|false|true|0|256|128}</p>
      *
      * @return 默认维度配置字符串列表
      */
@@ -164,8 +164,8 @@ public class ModConfig {
                     .defineInRange("mapRegionLoadIntervalTicks", 1, -1, 100);
 
             autoSyncEnabled = builder
-                    .comment("Enable automatic sync on join and periodic TICK sync",
-                             "启用进服自动同步与 TICK 在线周期同步",
+                    .comment("Enable join auto-sync when server uses TICK or SCHEDULED; online periodic sync when TICK",
+                             "服务端 TICK/SCHEDULED 模式下启用进服自动同步；TICK 模式另启在线周期同步",
                              "Manual /mapsyncer sync is always available",
                              "手动 /mapsyncer sync 始终可用")
                     .define("autoSyncEnabled", true);
@@ -360,24 +360,29 @@ public class ModConfig {
             builder.comment("Dimension scan settings / 维度扫描设置");
 
             defaultScanMode = builder
-                    .comment("Default scan mode for dimensions not in the dimension_configs list",
-                             "未在维度配置列表中的维度的默认扫描模式")
+                    .comment("Default layer plan fallback for dimensions not in dimension_configs",
+                             "SURFACE = surface only; CAVE = single cave layer at default_cave_start",
+                             "未在 dimension_configs 中的维度的默认层计划（SURFACE=仅地表，CAVE=单层洞穴）")
                     .defineEnum("default_scan_mode", ScanMode.SURFACE);
 
             defaultCaveStart = builder
-                    .comment("Default cave start height for CAVE mode (ignored for SURFACE mode)",
-                             "CAVE 模式的洞穴起始高度（SURFACE 模式忽略此项）")
+                    .comment("Cave start Y when default_scan_mode=CAVE (maps to layerPlan caves(Y))",
+                             "default_scan_mode=CAVE 时的 caveStart Y（对应 caves(Y) 层计划）")
                     .defineInRange("default_cave_start", 63, -512, 512);
 
             dimensionConfigs = builder
-                    .comment("Per-dimension scan configuration list (string format)",
-                             "Format: \"dimension|scan_mode|cave_start|dim_type_info\"",
-                             "dim_type_info format: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
-                             "Example: \"minecraft:the_nether|CAVE|63|false|true|0|256|256\"",
-                             "维度扫描配置列表（字符串格式）",
-                             "格式：\"dimension|scan_mode|cave_start|dim_type_info\"",
-                             "dim_type_info 格式：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
-                             "例如：\"minecraft:the_nether|CAVE|63|false|true|0|256|256\"")
+                    .comment("Per-dimension scan configuration list",
+                             "Format: \"dimension|layerPlan|dim_type_info\"",
+                             "layerPlan: SURFACE, ALL, explicit Y (e.g. 63), or combos (e.g. SURFACE,63)",
+                             "dim_type_info: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
+                             "Example: \"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"",
+                             "Legacy \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" still accepted",
+                             "维度扫描配置列表",
+                             "格式：\"dimension|layerPlan|dim_type_info\"",
+                             "layerPlan：SURFACE、ALL、显式 Y（如 63）或组合（如 SURFACE,63）",
+                             "dim_type_info：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
+                             "示例：\"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"",
+                             "旧格式 \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" 仍可读取")
                     .defineList("dimension_configs", getDefaultDimensionConfigStrings(),
                         obj -> obj instanceof String);
 
@@ -388,7 +393,7 @@ public class ModConfig {
          * 解析维度配置列表
          *
          * <p>将字符串格式的配置转换为 DimensionScanConfig 对象列表</p>
-         * <p>字符串格式："dimension|scan_mode|cave_start|dim_type_info"</p>
+         * <p>字符串格式："dimension|layerPlan|dim_type_info"</p>
          *
          * @return DimensionScanConfig 对象列表
          */
@@ -399,9 +404,9 @@ public class ModConfig {
         /**
          * 解析单个配置字符串
          *
-         * <p>新格式："dimension|scan_mode|cave_start|dim_type_info"</p>
-         * <p>旧格式（向后兼容）："dimension|region_folder|scan_mode|cave_start|dim_type_info"</p>
-         * <p>dim_type_info 格式："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
+         * <p>格式："dimension|layerPlan|dim_type_info"</p>
+         * <p>旧格式："dimension|scan_mode|cave_start|dim_type_info" 仍可读取并合并为 layerPlan</p>
+         * <p>dim_type_info："hasSkylight|hasCeiling|minY|height|logicalHeight"</p>
          *
          * @param configStr 配置字符串
          * @return DimensionScanConfig 对象，如果无效则返回 null

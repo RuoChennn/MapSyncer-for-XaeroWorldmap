@@ -183,7 +183,8 @@ mc-26.1/            MC 26.1 版本
 |------|------|------|
 | 全维度生成 | ✅ | 自动扫描所有已存在区块的维度 |
 | Mod 维度支持 | ✅ | 支持 ResourceLocation 格式（暮光森林测试通过） |
-| 洞穴模式 | ✅ | layerPlan 配置地表/洞穴层（SURFACE、ALL、显式 Y），单次 MCA 解析可输出多层 |
+| 洞穴模式 | ✅ | layerPlan 驱动地表/洞穴多层（SURFACE、ALL、显式 Y）；单次 MCA 解析多 pass；地狱默认 `SURFACE,63`（基岩顶层 + Y=63 洞穴层） |
+| 地狱上层地表 | ✅ | 有顶盖维度 `SURFACE` 扫描逻辑顶以上（Y≥128），忽略指向下层的高度图 |
 | 增量更新 | ✅ | TICK 周期模式 + SCHEDULED 定时模式 |
 | 强制保存机制 | ✅ | 读取前调用 `server.saveEverything()` 确保数据一致性，兼容 C2ME |
 | 并发转换 | ✅ | 可配置线程池（默认 4 线程，最大 16），线程使用 MIN_PRIORITY 降低对服务端 tick 的 CPU 争用 |
@@ -202,9 +203,13 @@ mc-26.1/            MC 26.1 版本
 
 ### 客户端配置
 
+**配置文件位置**：Fabric → `config/mapsyncer-client.properties`；Forge/NeoForge → `config/mapsyncer-client.toml` 的 `[client]` 段。
+
 | 配置项 | 类型 | 默认值 | 范围 | 说明 |
 |--------|------|--------|------|------|
 | `hashThreads` | int | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
+| `mapRegionLoadIntervalTicks` | int | 1 | -1~100 | 视距外 region 传入 Xaero 的 tick 间隔：-1=一次排空，0=仅视距内，N=每 N tick 加载 1 个（Fabric 加载时兼容旧键 `mapRegionLoadsPerTick`） |
+| `autoSyncEnabled` | boolean | true | — | 进服自动同步（TICK/SCHEDULED）；TICK 模式另启在线周期同步；关闭后仍可手动 `/mapsyncer sync` |
 
 ### 服务端配置
 
@@ -230,7 +235,7 @@ mc-26.1/            MC 26.1 版本
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `default_scan_mode` | ScanMode | SURFACE | 未配置维度的默认模式（SURFACE=仅地表；CAVE=单层洞穴） |
+| `default_scan_mode` | ScanMode | SURFACE | 未配置维度的默认层计划回退（SURFACE=仅地表；CAVE=单层洞穴） |
 | `default_cave_start` | int | 63 | `default_scan_mode=CAVE` 时未配置维度的 caveStart Y |
 | `dimension_configs` | List | 3 个原版预设 | 每维度 layerPlan + 维度类型信息 |
 
@@ -249,6 +254,8 @@ mc-26.1/            MC 26.1 版本
 - 主世界: `SURFACE`, hasSkylight=true, hasCeiling=false, minY=-64, height=384
 - 地狱: `SURFACE,63`, hasSkylight=false, hasCeiling=true, minY=0, height=256, logicalHeight=128
 - 末地: `SURFACE`, hasSkylight=false, hasCeiling=false, minY=0, height=256
+
+**洞穴层号**：`caveStart >> 4`（Y=63 → 层 3 → `caves/3/`）
 
 旧格式 `"dimension|scan_mode|cave_start|dim_type_info"` 仍可读取（如 `CAVE|63`、`SURFACE|63`），会合并为 layerPlan。
 
@@ -335,7 +342,8 @@ mc-26.1/            MC 26.1 版本
 | NBT 解析 | ✅ | 全标签类型（0-12），嵌套结构，含大小限制防恶意数据 |
 | 方块状态解析 | ✅ | 调色板、属性、位数组 |
 | 生物群系解析 | ✅ | 4x4x4 voxel 格式 |
-| 表面扫描 | ✅ | layerPlan 驱动地表/洞穴多层 pass，支持 WORLD_SURFACE 高度图优先 |
+| 表面扫描 | ✅ | layerPlan 驱动多 pass（地表/洞穴）；有顶盖维度 SURFACE 扫逻辑顶以上；WORLD_SURFACE 高度图优先 |
+| Xaero 洞穴格式 | ✅ | 洞穴空像素写 air（非 tile 级 -1）；tile footer 含 caveStart/caveDepth；洞穴群系按 cave Y 采样 |
 | Xaero 格式输出 | ✅ | 版本 6.8，TileChunk/Tile 结构 |
 | MCA/MCR 兼容 | ✅ | 正则匹配 `r.<x>.<z>.mca/mcr` |
 
@@ -398,7 +406,9 @@ mc-26.1/            MC 26.1 版本
 | 同步进度显示 | ✅ | Action Bar 动态刷新百分比 + 完成后总耗时 |
 | 断点续传提示 | ✅ | 重连后检测未完成同步，显示可点击的继续/忽略按钮 |
 | **自动同步** | ✅ | 见 [三B、增量更新模式与客户端自动同步](#三b增量更新模式与客户端自动同步)：DISABLED 关闭；TICK 进服+在线周期；SCHEDULED 进服仅时间戳比对 |
-| 流式写入 | ✅ | 边接收边写入 Xaero 目录，每区域写入后清除 `.xwmc` 缓存并触发重载 |
+| 流式写入 | ✅ | 边接收边写入 Xaero 目录，每区域写入后清除对应层 `.xwmc` 缓存并触发重载 |
+| 洞穴层同步 | ✅ | 按同步目标维度（非玩家当前维度）决定加载地表层或洞穴层；地狱 sync 时洞穴层也会重载 |
+| 洞穴缓存清理 | ✅ | 同步时清除 `cache*/caves/<layer>/{x}_{z}.xwmc`（及 `.outdated`） |
 | 视距优先 | ✅ | 优先加载视距范围内区域 |
 | 过期检测 | ✅ | 10 分钟超时自动清除累积数据 |
 | 多线程哈希 | ✅ | ForkJoinPool 并行计算 CRC32，线程数可配置 |

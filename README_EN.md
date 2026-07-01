@@ -43,7 +43,7 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 | **View-Distance Priority** | Regions within player's view distance are prioritized |
 | **Dimension Support** | Overworld, Nether, End, and mod dimensions (e.g. Twilight Forest) |
 | **Incremental Update** | Server-side periodic/scheduled map cache regeneration |
-| **Cave Mode** | Layer plan config (SURFACE, ALL, explicit Y) for surface/cave layers; outputs to caves subdirectory |
+| **Cave Mode** | Layer plan (SURFACE, ALL, explicit Y); single MCA parse can emit multiple layers to `caves/<layer>/` |
 | **Multi-Threaded Hash** | Configurable parallel CRC32 computation on the client |
 | **Auto Sync** | Automatically checks for newer server maps on join, no manual command needed |
 
@@ -88,7 +88,8 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 | Option | Default | Range | Description |
 |--------|--------|-------|-------------|
 | `hashThreads` | CPU cores/2 | 1–cores | Number of threads for CRC32 computation |
-| `autoSyncEnabled` | true | - | Client auto-sync (join + TICK periodic); manual `/mapsyncer sync` always works |
+| `mapRegionLoadIntervalTicks` | 1 | -1–100 | Tick interval for out-of-view regions into Xaero: -1=drain all, 0=view only, N=one region every N ticks |
+| `autoSyncEnabled` | true | - | Join auto-sync (TICK/SCHEDULED); TICK also enables online periodic sync; manual `/mapsyncer sync` always works |
 
 Fabric: `config/mapsyncer-client.properties`; Forge/NeoForge: `[client]` section in `config/mapsyncer-client.toml`.
 
@@ -119,7 +120,7 @@ NeoForge / Fabric config: `config/` directory (`.toml` for NeoForge, `.propertie
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `default_scan_mode` | SURFACE | Default for unconfigured dimensions (SURFACE = surface only; CAVE = single cave layer via `default_cave_start`) |
+| `default_scan_mode` | SURFACE | Default layer-plan fallback for unconfigured dimensions (SURFACE = surface only; CAVE = single cave layer via `default_cave_start`) |
 | `default_cave_start` | 63 | Cave start Y when `default_scan_mode=CAVE` |
 
 **Dimension config format** (new, recommended):
@@ -145,10 +146,12 @@ Format: `dimensionID|layerPlan|hasSkylight|hasCeiling|minY|height|logicalHeight`
 | `SURFACE,ALL` / `ALL,63` | Combined; `ALL` deduplicates with explicit Y by layer index |
 
 - `SURFACE` alone does **not** auto-generate cave layers; use explicit Y or `ALL` for caves
-- Nether default `SURFACE,63`: surface above logical top + cave layer 63
+- Nether default `SURFACE,63`: surface above logical top (bedrock ceiling) + cave layer Y=63 (Xaero layer 3, path `caves/3/`)
 - Legacy `dimension|SURFACE|63|…` / `dimension|CAVE|63|…` is still parsed into layerPlan
 
-**dim_type_info**: `hasSkylight|hasCeiling|minY|height|logicalHeight`. Nether `logicalHeight=128` means logical top at Y127; above that is the surface zone.
+**dim_type_info**: `hasSkylight|hasCeiling|minY|height|logicalHeight`. Nether `logicalHeight=128` means logical top at Y127; above that is the surface zone; `height=256` is total dimension height.
+
+**Cave layer index**: Xaero uses `caveStart >> 4` (e.g. Y=63 → layer 3, stored under `caves/3/`).
 
 ---
 
@@ -253,7 +256,9 @@ Client:
   <client>/XaeroWorldMap/Multiplayer_<IP>/       # Legacy Xaero path (compatibility fallback)
   ├── null/mw$<worldId>/   # Overworld
   ├── DIM-1/mw$<worldId>/  # Nether
-  └── DIM1/mw$<worldId>/   # End
+  ├── DIM1/mw$<worldId>/   # End
+  ├── caves/<layer>/        # Cave layers (e.g. caves/3/ for Y=63)
+  └── sync_timestamps.cache
 ```
 
 ### Dimension Mapping
@@ -264,14 +269,6 @@ Client:
 | Nether | `minecraft:the_nether` | `DIM-1` |
 | End | `minecraft:the_end` | `DIM1` |
 | Mod dimensions | `namespace:path` | `namespace$path` |
-
----
-
-## Known Issues
-
-| Issue | Details | Impact |
-|-------|---------|--------|
-| Cave rendering anomalies | Some cave content is inaccurate | Mostly affects Nether; under investigation |
 
 ---
 

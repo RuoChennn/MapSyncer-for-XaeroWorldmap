@@ -142,9 +142,12 @@ public class ModConfig {
         private volatile int hashThreads;
 
         /** 每 tick 加载的地图区域数（-1=不限制, 0=仅视距内, 1-5=限速） */
+        /**
+         * 视距外 region 加载 tick 间隔：-1=一次排空，0=仅视距内，1-100=每 N tick 加载 1 个。
+         */
         private volatile int mapRegionLoadIntervalTicks = 1;
 
-        /** 客户端自动同步（进服/在线周期） */
+        /** 客户端自动同步（进服：TICK/SCHEDULED；在线周期：仅 TICK） */
         private volatile boolean autoSyncEnabled = true;
 
         /** 配置文件路径 */
@@ -236,23 +239,23 @@ public class ModConfig {
                 sb.append("# 范围：1 - " + maxThreads + "\n");
                 sb.append("hashThreads=" + hashThreads + "\n");
                 sb.append("#\n");
-                sb.append("# Map regions loaded per client tick during sync\n");
-                sb.append("# 同步期间每客户端 tick 加载的地图区域数\n");
+                sb.append("# Tick interval between loading each out-of-view region into Xaero (1 = every tick)\n");
+                sb.append("# 视距外 region 传入 Xaero 的客户端 tick 间隔（1 = 每 tick 一个）\n");
                 sb.append("# Limits Xaero MapProcessor queue size to prevent OOM\n");
                 sb.append("# 限制 Xaero MapProcessor 队列大小以防止内存溢出\n");
                 sb.append("#\n");
-                sb.append("#  -1 = Unlimited (load all immediately)\n");
-                sb.append("#  -1 = 不限制（立即加载全部）\n");
+                sb.append("#  -1 = Unlimited (drain all at once)\n");
+                sb.append("#  -1 = 不限制（一次排空）\n");
                 sb.append("#   0 = View-distance only\n");
                 sb.append("#   0 = 仅加载视距内\n");
-                sb.append("# 1-5 = Load N per tick (default: 1)\n");
-                sb.append("# 1-5 = 每 tick 加载 N 个（默认：1）\n");
-                sb.append("#\n");
-                sb.append("#  -1 = unlimited, 0 = view only, 1-100 = one region every N ticks\n");
+                sb.append("# 1-100 = one region every N ticks (default: 1)\n");
+                sb.append("# 1-100 = 每 N tick 加载 1 个（默认：1）\n");
+                sb.append("# Legacy key mapRegionLoadsPerTick is still accepted on load\n");
+                sb.append("# 加载时仍兼容旧键名 mapRegionLoadsPerTick\n");
                 sb.append("mapRegionLoadIntervalTicks=" + mapRegionLoadIntervalTicks + "\n");
                 sb.append("#\n");
-                sb.append("# Enable automatic sync on join and periodic TICK sync\n");
-                sb.append("# 启用进服自动同步与 TICK 在线周期同步\n");
+                sb.append("# Enable join auto-sync (TICK/SCHEDULED) and online periodic sync (TICK only)\n");
+                sb.append("# 启用进服自动同步（TICK/SCHEDULED）与 TICK 在线周期同步\n");
                 sb.append("# Manual /mapsyncer sync is always available\n");
                 sb.append("# 手动 /mapsyncer sync 始终可用\n");
                 sb.append("autoSyncEnabled=" + autoSyncEnabled + "\n");
@@ -490,24 +493,29 @@ public class ModConfig {
                 sb.append("# Dimension scan settings / 维度扫描设置\n");
                 sb.append("# ========================================\n");
                 sb.append("#\n");
-                sb.append("# Default scan mode for dimensions not in the dimension_configs list\n");
-                sb.append("# 未在维度配置列表中的维度的默认扫描模式\n");
+                sb.append("# Default layer plan fallback for dimensions not in dimension_configs\n");
+                sb.append("# SURFACE = surface only; CAVE = single cave layer at defaultCaveStart\n");
+                sb.append("# 未在 dimension_configs 中的维度的默认层计划（SURFACE=仅地表，CAVE=单层洞穴）\n");
                 sb.append("defaultScanMode=" + defaultScanMode.name() + "\n");
                 sb.append("\n");
-                sb.append("# Default cave start height for CAVE mode (ignored for SURFACE mode)\n");
-                sb.append("# CAVE 模式的洞穴起始高度（SURFACE 模式忽略此项）\n");
+                sb.append("# Cave start Y when defaultScanMode=CAVE (maps to layerPlan caves(Y))\n");
+                sb.append("# defaultScanMode=CAVE 时的 caveStart Y（对应 caves(Y) 层计划）\n");
                 sb.append("# Range: -512 - 512 / 范围：-512 - 512\n");
                 sb.append("defaultCaveStart=" + defaultCaveStart + "\n");
                 sb.append("\n");
-                sb.append("# Per-dimension scan configuration list (string format)\n");
-                sb.append("# Format: \"dimension|scan_mode|cave_start|dim_type_info\"\n");
-                sb.append("# dim_type_info format: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
-                sb.append("# Example: \"minecraft:the_nether|CAVE|63|false|true|0|256|256\"\n");
+                sb.append("# Per-dimension scan configuration list\n");
+                sb.append("# Format: \"dimension|layerPlan|dim_type_info\"\n");
+                sb.append("# layerPlan: SURFACE, ALL, explicit Y (e.g. 63), or combos (e.g. SURFACE,63)\n");
+                sb.append("# dim_type_info: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
+                sb.append("# Example: \"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"\n");
+                sb.append("# Legacy \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" still accepted\n");
                 sb.append("#\n");
-                sb.append("# 维度扫描配置列表（字符串格式）\n");
-                sb.append("# 格式：\"dimension|scan_mode|cave_start|dim_type_info\"\n");
-                sb.append("# dim_type_info 格式：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
-                sb.append("# 例如：\"minecraft:the_nether|CAVE|63|false|true|0|256|256\"\n");
+                sb.append("# 维度扫描配置列表\n");
+                sb.append("# 格式：\"dimension|layerPlan|dim_type_info\"\n");
+                sb.append("# layerPlan：SURFACE、ALL、显式 Y（如 63）或组合（如 SURFACE,63）\n");
+                sb.append("# dim_type_info：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
+                sb.append("# 示例：\"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"\n");
+                sb.append("# 旧格式 \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" 仍可读取\n");
                 sb.append("dimensionConfigs=" + String.join(";", dimensionConfigs) + "\n");
 
                 Files.writeString(configFile, sb.toString());

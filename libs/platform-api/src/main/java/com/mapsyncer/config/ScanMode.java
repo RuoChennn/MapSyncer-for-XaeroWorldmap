@@ -1,22 +1,14 @@
 package com.mapsyncer.config;
 
 /**
- * 扫描模式枚举
+ * 未在 {@code dimension_configs} 中列出的维度之默认层计划回退值。
  *
- * <p>定义维度地图的扫描方式</p>
+ * <p>Per-dimension 配置请使用 {@link LayerPlan}（{@code dimension|layerPlan|dim_type_info}）。</p>
  */
 public enum ScanMode {
-    /**
-     * 地表模式：从高度图向下扫描
-     *
-     * <p>适用于普通地表地图，使用高度图确定扫描起始位置</p>
-     */
+    /** 回退为 {@link LayerPlan#surfaceOnly()} */
     SURFACE,
 
-    /**
-     * 洞穴模式：从固定高度向下扫描
-     *
-     * <p>适用于洞穴地图（如地狱），使用固定的起始高度向下扫描</p>
-     */
+    /** 回退为 {@link LayerPlan#caves(int)}，Y 由 {@code default_cave_start} 指定 */
     CAVE
 }
