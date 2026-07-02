@@ -4,7 +4,7 @@ license="GPL-3.0"
 
 [[mods]]
 modId="mapsyncer"
-version="1.0.3"
+version="1.0.4"
 displayName="MapSyncer"
 description="Syncs server-side explored areas to client's Xaero World Map"
 authors="Ruo_Chen"
