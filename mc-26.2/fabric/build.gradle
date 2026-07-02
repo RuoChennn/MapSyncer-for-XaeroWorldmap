@@ -2,27 +2,23 @@ plugins {
     id 'net.fabricmc.fabric-loom' version '1.16-SNAPSHOT'
 }
 
-version = mod_version + '-fabric-' + g4_261_jar_suffix
+version = mod_version + '-fabric-' + g4_262_jar_suffix
 group = mod_group_id
 
 base {
     archivesName = mod_id
 }
 
-// Fabric 26.1 需要 Java 25
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 repositories {
     mavenCentral()
     maven { url = 'https://maven.fabricmc.net/' }
     maven { url = 'https://maven.aliyun.com/repository/public' }
-    // Cloth Config
     maven { url = 'https://maven.shedaniel.me/' }
-    // Mod Menu (optional)
     maven { url = 'https://maven.terraformersmc.com/releases/' }
 }
 
-// 引用版本特定的共享源码（不独立编译，由本模块提供 MC 依赖）
 sourceSets.main.java.srcDirs(
     "${rootProject.projectDir}/libs/mc-26/src/main/java",
     "${rootProject.projectDir}/libs/common/src/main/java",
@@ -35,20 +31,13 @@ sourceSets.main.resources.srcDirs(
 )
 
 dependencies {
-    // Minecraft and Fabric 26.1 (无混淆映射，MC 26.1 即官方映射)
-    minecraft "com.mojang:minecraft:${minecraft_261_version}"
+    minecraft "com.mojang:minecraft:${minecraft_262_version}"
     implementation "net.fabricmc:fabric-loader:0.19.2"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_262_version}"
+    implementation "me.shedaniel.cloth:cloth-config-fabric:${cloth_config_262_version}"
 
-    // Fabric API for 26.1 (includes networking-api-v1 transitively)
-    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_261_version}"
-
-    // Cloth Config (for configuration)
-    implementation "me.shedaniel.cloth:cloth-config-fabric:${cloth_config_261_version}"
-
-    // 依赖核心模块
     implementation project(':libs:core')
     implementation project(':libs:platform-api')
-    // include 会将依赖打包到 JAR 中
     include project(':libs:core')
     include project(':libs:platform-api')
 }
@@ -60,19 +49,19 @@ tasks.withType(JavaCompile).configureEach {
 processResources {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     inputs.property "version", project.version
-    inputs.property "minecraft_range_fabric", g4_261_minecraft_range_fabric
+    inputs.property "minecraft_range_fabric", g4_262_minecraft_range_fabric
     inputs.property "loader_version", "0.19.2"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
-                "minecraft_range_fabric": g4_261_minecraft_range_fabric,
+                "minecraft_range_fabric": g4_262_minecraft_range_fabric,
                 "loader_version": "0.19.2"
     }
 }
 
 publishing {
     publications {
-        register('fabric26MavenJava', MavenPublication) {
+        register('fabric262MavenJava', MavenPublication) {
             from components.java
         }
     }

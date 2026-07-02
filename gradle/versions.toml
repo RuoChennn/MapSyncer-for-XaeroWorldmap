@@ -45,13 +45,26 @@ build_notes = "Fabric uses settings-12111.gradle; Forge uses settings-forge.grad
 [g4]
 path = "libs/mc-26"
 anchor = "26.1"
-includes = ["26.1", "26.1.1", "26.1.2", "26.2"]
-excludes = ["1.x"]
+includes = ["26.1", "26.1.1", "26.1.2"]
+excludes = ["1.x", "26.2+"]
 jdk = 25
 jar_suffix = "26.1"
-minecraft_range_fabric = ">=26.1 <27"
-minecraft_range_forge = "[26.1,27)"
-protocol_notes = "26.2 uses protocol 776; same G4 source, widened metadata includes 26.1.x and 26.2"
+minecraft_range_fabric = ">=26.1 <26.2"
+minecraft_range_forge = "[26.1,26.2)"
+protocol = "775"
 api_break = "deobfuscated; Loom no-remap; displayClientMessage split"
 glue = ["mc-26.1/fabric", "mc-26.1/neoforge"]
-build_notes = "No Forge for 26.x; 26.2 separate protocol but shares G4 source"
+build_notes = "No Forge for 26.x; use settings-26.gradle for isolated Loom build"
+
+[g4_262]
+path = "libs/mc-26"
+anchor = "26.2"
+includes = ["26.2"]
+excludes = ["1.x", "26.1.x"]
+jdk = 25
+jar_suffix = "26.2"
+minecraft_range_fabric = ">=26.2 <27"
+minecraft_range_forge = "[26.2,27)"
+protocol = "776"
+glue = ["mc-26.2/fabric", "mc-26.2/neoforge"]
+build_notes = "Same G4 source as 26.1; separate glue for protocol 776"

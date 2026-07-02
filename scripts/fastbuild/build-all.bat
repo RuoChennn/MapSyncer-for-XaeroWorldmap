@@ -29,7 +29,7 @@ mkdir "%OUTPUT_DIR%" 2>nul
 :: ============================================================
 :: Phase 1: Gradle 9.x platforms (Fabric + NeoForge)
 :: ============================================================
-echo [Phase 1/4] Building Gradle 9.x platforms...
+echo [Phase 1/5] Building Gradle 9.x platforms...
 call "%PROJECT_ROOT%\gradlew.bat" ^
     :mc-1.20.1:fabric:clean :mc-1.20.1:fabric:build ^
     :mc-1.21.1:fabric:clean  :mc-1.21.1:fabric:build ^
@@ -51,7 +51,7 @@ echo   Phase 1: done
 ::   Switches settings-forge.gradle + overrides JDK in gradle.properties
 :: ============================================================
 echo.
-echo [Phase 2/4] Building Forge platforms (Gradle 8.9)...
+echo [Phase 2/5] Building Forge platforms (Gradle 8.9)...
 
 :: Override gradle.properties JDK (Gradle 8.9 incompatible with JDK 25)
 if exist "%PROPS_BAK%" del "%PROPS_BAK%"
@@ -94,7 +94,7 @@ echo   Phase 2: done
 :: Phase 3: Fabric 1.21.11 (isolated, Loom 1.15.4)
 :: ============================================================
 echo.
-echo [Phase 3/4] Building mc-1.21.11:fabric (isolated, Loom 1.15.4)...
+echo [Phase 3/5] Building mc-1.21.11:fabric (isolated, Loom 1.15.4)...
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_12111%" "%SETTINGS_FILE%" >nul
@@ -107,19 +107,23 @@ call "%COPY_JARS%" mc-1.21.11\fabric\build\libs
 echo   Phase 3: done
 
 :: ============================================================
-:: Phase 4: Fabric 26.1 (isolated, Loom 1.16)
+:: Phase 4: MC 26.x (settings-26.gradle: 26.1 Fabric + 26.2 Fabric/NeoForge)
 :: ============================================================
 echo.
-echo [Phase 4/4] Building mc-26.1:fabric (isolated, Loom 1.16)...
+echo [Phase 4/5] Building MC 26.x (settings-26.gradle)...
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_26%" "%SETTINGS_FILE%" >nul
-call "%PROJECT_ROOT%\gradlew.bat" :mc-26.1:fabric:clean :mc-26.1:fabric:build -x test
+call "%PROJECT_ROOT%\gradlew.bat" ^
+    :mc-26.1:fabric:clean :mc-26.1:fabric:build ^
+    :mc-26.2:fabric:clean :mc-26.2:fabric:build ^
+    :mc-26.2:neoforge:clean :mc-26.2:neoforge:build ^
+    -x test
 set FABRIC26_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
-if %FABRIC26_RESULT% neq 0 echo   Fabric 26.1 FAILED
-call "%COPY_JARS%" mc-26.1\fabric\build\libs
+if %FABRIC26_RESULT% neq 0 echo   MC 26.x builds had errors
+call "%COPY_JARS%" mc-26.1\fabric\build\libs mc-26.2\fabric\build\libs mc-26.2\neoforge\build\libs
 echo   Phase 4: done
 
 :: ============================================================

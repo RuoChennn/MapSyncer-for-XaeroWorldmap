@@ -28,7 +28,8 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # 胶水层（Loader + 网络注册
 | G1 | `libs/mc-1.20` | 1.20.1 | 1.20.1（可扩 1.20.2–6） | 1.21+ | 17 | `ResourceLocation` · `key.location()` |
 | G2 | `libs/mc-1.21` | 1.21.1 | 1.21 · 1.21.1 · 1.21.4–1.21.10 | 1.21.2/3 · 1.21.11 · 26.x | 21 | `ResourceLocation` · Configuration 网络 |
 | G3 | `libs/mc-1.21.11` | 1.21.11 | 仅 1.21.11 | 其它 | 21 | `Identifier` · `key.identifier()` |
-| G4 | `libs/mc-26` | 26.1 | 26.1 · 26.1.1 · 26.1.2 · 26.2 | 1.x | 25 | 去混淆 · Loom no-remap · 客户端消息 API 变 |
+| G4 | `libs/mc-26` | 26.1 | 26.1 · 26.1.1 · 26.1.2 | 1.x · 26.2+ | 25 | 去混淆 · Loom no-remap · 客户端消息 API 变 |
+| G4′ | `libs/mc-26` | 26.2 | 26.2 | 1.x · 26.1.x | 25 | 协议 776；共用 G4 源码 |
 
 **跳过：** 1.21.2 · 1.21.3（物品/协议 API 断裂，不单独维护）。
 
@@ -44,7 +45,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # 胶水层（Loader + 网络注册
 | 1.21.1 | `mc-1.21.1/fabric` | `mc-1.21.1/forge` | `mc-1.21.1/neoforge` | Forge → settings-forge.gradle |
 | 1.21.11 | `mc-1.21.11/fabric` | `mc-1.21.11/forge` | `mc-1.21.11/neoforge` | Fabric → `settings-12111.gradle`；Forge → settings-forge |
 | 26.1 | `mc-26.1/fabric` | **无 Forge** | `mc-26.1/neoforge` | Fabric → `settings-26.gradle` |
-| 26.2 | （同上源码 G4） | **无 Forge** | `mc-26.2/neoforge` | 协议 776，deps 与 26.1 不同 |
+| 26.2 | `mc-26.2/fabric` | **无 Forge** | `mc-26.2/neoforge` | 协议 776；同 `libs/mc-26` 源码 |
 
 **Forge 说明：** 1.20.1 用 `ForgeLegacyPlatform`；1.21.x Forge 与 NeoForge 并存但 API 近 NeoForge；26.x 仅 NeoForge（无 Forge 官方线）。
 

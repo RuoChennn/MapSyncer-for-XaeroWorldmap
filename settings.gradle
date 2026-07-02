@@ -54,4 +54,8 @@ include 'mc-1.21.11:neoforge'
 
 // MC 26.1
 include 'mc-26.1:neoforge'
-// include 'mc-26.1:fabric'  // Loom 版本冲突，使用 scripts/settings-26.gradle 单独构建
+// include 'mc-26.1:fabric'  // Loom 版本冲突，使用 scripts/fastbuild/settings-26.gradle 单独构建
+
+// MC 26.2（协议 776）
+include 'mc-26.2:neoforge'
+// include 'mc-26.2:fabric'  // Loom 隔离，使用 settings-26.gradle

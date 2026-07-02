@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="GPL-3.0"
+
+[[mods]]
+modId="mapsyncer"
+version="${version}"
+displayName="MapSyncer"
+description="Syncs server-side explored areas to client's Xaero World Map"
+authors="Ruo_Chen"
+
+[[dependencies.mapsyncer]]
+modId="neoforge"
+type="required"
+versionRange="[26.2,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.mapsyncer]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_range_forge}"
+ordering="NONE"
+side="BOTH"

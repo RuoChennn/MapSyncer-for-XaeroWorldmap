@@ -99,11 +99,15 @@ restore_settings
 copy_jars mc-1.21.11/fabric/build/libs
 
 echo
-echo "[Phase 4/4] Fabric 26.1 (settings-26.gradle)..."
+echo [Phase 4/5] MC 26.x (settings-26.gradle)...
 switch_settings 26
-"$GRADLE" :mc-26.1:fabric:clean :mc-26.1:fabric:build -x test || echo "  Fabric 26.1 FAILED"
+"$GRADLE" \
+    :mc-26.1:fabric:clean :mc-26.1:fabric:build \
+    :mc-26.2:fabric:clean :mc-26.2:fabric:build \
+    :mc-26.2:neoforge:clean :mc-26.2:neoforge:build \
+    -x test || echo "  MC 26.x builds had errors"
 restore_settings
-copy_jars mc-26.1/fabric/build/libs
+copy_jars mc-26.1/fabric/build/libs mc-26.2/fabric/build/libs mc-26.2/neoforge/build/libs
 
 echo
 echo "============================================"
