@@ -17,7 +17,7 @@ import com.mapsyncer.util.DimensionTypeHelper;
 import com.mapsyncer.util.NamedThreadFactory;
 import com.mapsyncer.util.XaeroPathResolver;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -330,7 +330,7 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded for dimension: {}", dimensionId); isRunning.set(false); return true; }
 
         // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
-        String fullDimId = dimKey.identifier().toString(); // 完整维度 ID（包含 namespace）
+        String fullDimId = dimKey.location().toString(); // 完整维度 ID（包含 namespace）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path dimCacheDir = getCacheDir().resolve(xaeroDimName);
         clearDimensionCache(dimCacheDir);
@@ -391,7 +391,7 @@ public class ConversionOrchestrator {
         // 提前检查 MCA 文件是否存在
         Path mcaPath = checkMcaFileExists(server, dimension, regionX, regionZ);
         if (mcaPath == null) {
-            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.identifier().getPath());
+            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.location().getPath());
             isRunning.set(false);
             return SingleRegionResult.REGION_NOT_FOUND;
         }
@@ -405,8 +405,8 @@ public class ConversionOrchestrator {
         // Note: caller handles saveEverything on server thread before invoking this method.
 
         // 使用完整维度 ID 作为缓存 key（确保新格式路径正确转换）
-        String fullDimId = dimension.identifier().toString();
-        String dimPath = dimension.identifier().getPath(); // 用于配置查找
+        String fullDimId = dimension.location().toString();
+        String dimPath = dimension.location().getPath(); // 用于配置查找
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
@@ -483,8 +483,8 @@ public class ConversionOrchestrator {
         if (level == null) { LOGGER.error("Level not loaded"); return; }
 
         currentDimension = dimRegions.dimension();
-        String fullDimId = dimRegions.dimension().identifier().toString();
-        String dimPath = dimRegions.dimension().identifier().getPath();
+        String fullDimId = dimRegions.dimension().location().toString();
+        String dimPath = dimRegions.dimension().location().getPath();
 
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
 
@@ -561,7 +561,7 @@ public class ConversionOrchestrator {
             dimPath, regions.size(), convertedCountAtomic.get(), skippedCount.get(),
             dimRegions.skippedEmptyCount(), skippedEmptyContentCount.get(), failedRegions.size());
 
-        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension().identifier().toString());
+        String friendlyName = DimensionPathMapping.getInstance().getFriendlyName(dimRegions.dimension().location().toString());
         completedDimensions.add(friendlyName);
 
         mcaCache.saveCache();
@@ -586,7 +586,7 @@ public class ConversionOrchestrator {
             if (level == null) {
                 continue;
             }
-            String dimPath = dimRegions.dimension().identifier().getPath();
+            String dimPath = dimRegions.dimension().location().getPath();
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
             int passCount = RegionGenerationPlanner.countPasses(scanConfig, dimTypeInfo);
@@ -846,12 +846,12 @@ public class ConversionOrchestrator {
                 return Level.END;
         }
 
-        // 尝试解析为 Identifier 并查找维度
+        // 尝试解析为 ResourceLocation 并查找维度
         try {
-            Identifier location = Identifier.parse(id);
+            ResourceLocation location = new ResourceLocation(id);
             // 遍历所有已加载的维度查找匹配
             for (ServerLevel level : server.getAllLevels()) {
-                Identifier dimLocation = level.dimension().identifier();
+                ResourceLocation dimLocation = level.dimension().location();
                 if (dimLocation.equals(location) ||
                     dimLocation.getPath().equals(id) ||
                     dimLocation.toString().equals(id)) {
@@ -891,8 +891,8 @@ public class ConversionOrchestrator {
                 continue;
             }
 
-            String fullDimId = dimRegions.dimension().identifier().toString();
-            String dimPath = dimRegions.dimension().identifier().getPath();
+            String fullDimId = dimRegions.dimension().location().toString();
+            String dimPath = dimRegions.dimension().location().getPath();
 
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
