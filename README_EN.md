@@ -293,6 +293,16 @@ Build artifacts are placed in each platform module's `build/libs/` directory.
 
 ---
 
+## Known Issues
+
+| Issue | Description | Impact |
+|-------|-------------|--------|
+| Mod dimension cave layers | Multi-layer cave configs for some mod dimensions may need manual layerPlan tuning | Only when using ALL/explicit Y on mod dimensions |
+
+> v1.0.4 fixes Nether `SURFACE,63` surface/cave generation and client sync display; see `CHANGELOG.md`.
+
+---
+
 **License**: GPL-3.0
 
 **Acknowledgements**: Xaero's World Map & Minimap

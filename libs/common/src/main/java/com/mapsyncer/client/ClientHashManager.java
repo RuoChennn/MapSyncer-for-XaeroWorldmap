@@ -136,7 +136,11 @@ public class ClientHashManager {
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
         poolUsers.incrementAndGet();
         try {
-            return computeMetaForSyncWorker(mapDir, false);
+            MetaScanResult result = computeMetaForSyncWorker(mapDir, false);
+            if (!result.isSuccess()) {
+                throw new IllegalStateException("Hash scan failed: " + result.failureReason());
+            }
+            return result.meta();
         } finally {
             poolUsers.decrementAndGet();
         }
@@ -148,15 +152,14 @@ public class ClientHashManager {
      * @param mapDir 要扫描的目录
      * @param onComplete 完成回调（在后台线程调用，调用方应调度到主线程后再发网络包）
      */
-    public static void computeMetaForSyncAsync(Path mapDir, Consumer<Map<String, ClientMeta>> onComplete) {
+    public static void computeMetaForSyncAsync(Path mapDir, Consumer<MetaScanResult> onComplete) {
         poolUsers.incrementAndGet();
         getSharedPool().submit(() -> {
             try {
-                Map<String, ClientMeta> result = computeMetaForSyncWorker(mapDir, true);
-                onComplete.accept(result);
+                onComplete.accept(computeMetaForSyncWorker(mapDir, true));
             } catch (Exception e) {
                 LOGGER.error("Failed to compute hashes asynchronously", e);
-                onComplete.accept(new ConcurrentHashMap<>());
+                onComplete.accept(MetaScanResult.failure("async_error", 0));
             } finally {
                 SyncProgressTracker.completeHashScan();
                 poolUsers.decrementAndGet();
@@ -164,19 +167,18 @@ public class ClientHashManager {
         });
     }
 
-    private static Map<String, ClientMeta> computeMetaForSyncWorker(Path mapDir, boolean reportProgress) {
+    private static MetaScanResult computeMetaForSyncWorker(Path mapDir, boolean reportProgress) {
         Map<String, ClientMeta> metaMap = new ConcurrentHashMap<>();
 
         if (mapDir == null || !Files.exists(mapDir)) {
             LOGGER.info("Map directory does not exist or is null, will request all regions from server");
-            return metaMap;
+            return MetaScanResult.ok(metaMap);
         }
 
-        // Determine the server directory (Multiplayer_<server>) for cache lookup
         Path serverDir = findServerDir(mapDir);
         if (serverDir == null) {
-            LOGGER.warn("Could not find server directory from {}", mapDir);
-            return metaMap;
+            LOGGER.error("Could not resolve Multiplayer server directory from {}", mapDir);
+            return MetaScanResult.failure("server_dir", 0);
         }
 
         // Load cached timestamps from previous sync
@@ -190,8 +192,8 @@ public class ClientHashManager {
             zipFiles = walk.filter(p -> p.toString().endsWith(".zip"))
                     .toList();
         } catch (IOException e) {
-            LOGGER.error("Failed to walk map directory", e);
-            return metaMap;
+            LOGGER.error("Failed to walk map directory {}", mapDir, e);
+            return MetaScanResult.failure("walk_error", 0);
         }
 
         LOGGER.info("Computing hashes for {} region files in {} (parallel threads={})", zipFiles.size(), mapDir, currentPoolThreads);
@@ -201,10 +203,10 @@ public class ClientHashManager {
         }
 
         AtomicInteger processed = new AtomicInteger();
+        AtomicInteger failedFiles = new AtomicInteger();
         AtomicInteger lastReportedPercent = new AtomicInteger(-1);
         int totalFiles = zipFiles.size();
 
-        // 使用共享的 ForkJoinPool（配置线程数）避免阻塞游戏和重复创建开销
         ForkJoinPool pool = getSharedPool();
         try {
             pool.submit(() ->
@@ -230,7 +232,8 @@ public class ClientHashManager {
                                     metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
 
                                 } catch (Exception e) {
-                                    LOGGER.warn("Invalid region filename: {}", zipPath, e);
+                                    failedFiles.incrementAndGet();
+                                    LOGGER.warn("Failed to hash region file: {}", zipPath, e);
                                 } finally {
                                     if (reportProgress && totalFiles > 0) {
                                         int done = processed.incrementAndGet();
@@ -246,13 +249,19 @@ public class ClientHashManager {
             ).join();
         } catch (Exception e) {
             LOGGER.error("Failed to compute hashes in parallel", e);
+            return MetaScanResult.failure("parallel_error", failedFiles.get());
+        }
+
+        if (failedFiles.get() > 0) {
+            LOGGER.error("Hash scan completed with {} failed file(s) out of {}", failedFiles.get(), totalFiles);
+            return MetaScanResult.failure("partial_error", failedFiles.get());
         }
 
         addMissingCacheEntries(metaMap, cachedTimestamps, collectDimPrefixes(mapDir, serverDir));
 
         LOGGER.info("Found {} regions with metadata", metaMap.size());
 
-        return metaMap;
+        return MetaScanResult.ok(metaMap);
     }
 
     /**

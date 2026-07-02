@@ -60,6 +60,17 @@
 - 修复 RegionScanner 维度去重仅用短名导致同名不同命名空间维度被覆盖
 - 启动时清理残留 `.zip.temp` 文件
 
+#### 代码审计修复（v1.0.4）
+- 哈希扫描失败时不再静默降级为全量同步，聊天栏提示错误并中止
+- 服务端 sync 玩家校验超时由 5s 增至 15s（2 次重试），超时向客户端发送 `aborted:timeout`
+- 移除 Fabric `IncrementalUpdateHandler` 静态 tick 注册，避免集成服务器重载时重复注册
+- MCA chunk 读取失败写入 WARN 日志（`McaRegionLoader`）
+- Fabric Cloth Config 补全 `mapRegionLoadIntervalTicks` 与 `autoSyncEnabled` 选项
+- 移除 Fabric 1.20.1 `FabricNetworkHandler` 调试 `println`，改用 SLF4J
+- `DimensionConfigParser` 增加 `invalidateCache()` 与线程安全缓存；Fabric 配置保存时失效
+- Fabric 配置加载兼容 snake_case 键名（`PropertiesHelper`）
+- BlockColorMapper / BlockPropertyResolver 缓存 trim 至 75% 而非全量清空
+
 #### 平台与构建
 - 修复 Forge 1.21.11 `ClientTickEvent` 无 phase、LZ4 与 MC 内置 `at.yawk.lz4` 冲突
 - 修复 Forge 1.20.1 / 1.21.11 LZ4 依赖与 ClientTick 注册

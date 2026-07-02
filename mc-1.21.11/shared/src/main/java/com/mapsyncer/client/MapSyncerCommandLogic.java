@@ -273,13 +273,23 @@ public class MapSyncerCommandLogic {
             return;
         }
 
-        ClientHashManager.computeMetaForSyncAsync(scanDir, metaMap ->
+        ClientHashManager.computeMetaForSyncAsync(scanDir, result ->
                 mc.execute(() -> {
                     if (mc.player == null) {
                         return;
                     }
-                    LOGGER.debug("Sync hash scan complete: {} entries", metaMap.size());
-                    dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, metaMap);
+                    if (!result.isSuccess()) {
+                        if (result.failedFiles() > 0) {
+                            mc.player.displayClientMessage(
+                                    ChatUtils.error("mapsyncer.sync.hash_scan_partial", result.failedFiles()), false);
+                        } else {
+                            mc.player.displayClientMessage(
+                                    ChatUtils.error("mapsyncer.sync.hash_scan_failed"), false);
+                        }
+                        return;
+                    }
+                    LOGGER.debug("Sync hash scan complete: {} entries", result.meta().size());
+                    dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, result.meta());
                 }));
     }
 

@@ -33,20 +33,27 @@ public final class DimensionConfigParser {
         return defaults;
     }
 
+    public static void invalidateCache() {
+        cachedKey = null;
+        cachedResult = null;
+    }
+
     public static List<DimensionScanConfig> parseDimensionConfigs(List<? extends String> dimensionConfigs) {
         String key = String.join("\0", dimensionConfigs);
-        if (key.equals(cachedKey)) {
-            List<DimensionScanConfig> r = cachedResult;
-            if (r != null) return r;
+        synchronized (DimensionConfigParser.class) {
+            if (key.equals(cachedKey)) {
+                List<DimensionScanConfig> r = cachedResult;
+                if (r != null) return r;
+            }
+            List<DimensionScanConfig> result = new ArrayList<>(dimensionConfigs.size());
+            for (String configStr : dimensionConfigs) {
+                DimensionScanConfig config = parseConfigString(configStr);
+                if (config != null) result.add(config);
+            }
+            cachedKey = key;
+            cachedResult = List.copyOf(result);
+            return cachedResult;
         }
-        List<DimensionScanConfig> result = new ArrayList<>(dimensionConfigs.size());
-        for (String configStr : dimensionConfigs) {
-            DimensionScanConfig config = parseConfigString(configStr);
-            if (config != null) result.add(config);
-        }
-        cachedKey = key;
-        cachedResult = result;
-        return result;
     }
 
     public static DimensionScanConfig parseConfigString(String configStr) {

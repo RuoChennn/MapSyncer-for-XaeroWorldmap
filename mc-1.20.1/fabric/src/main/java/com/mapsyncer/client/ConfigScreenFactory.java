@@ -37,6 +37,21 @@ public class ConfigScreenFactory {
             .setSaveConsumer(config::setHashThreads)
             .build());
 
+        client.addEntry(entryBuilder.startIntSlider(
+                Component.translatable("option.mapsyncer.map_region_load_interval"),
+                config.getMapRegionLoadIntervalTicks(), -1, 100)
+            .setDefaultValue(1)
+            .setTooltip(Component.translatable("option.mapsyncer.map_region_load_interval.tooltip"))
+            .setSaveConsumer(config::setMapRegionLoadIntervalTicks)
+            .build());
+
+        client.addEntry(entryBuilder.startBooleanToggle(
+                Component.translatable("option.mapsyncer.auto_sync_enabled"), config.isAutoSyncEnabled())
+            .setDefaultValue(true)
+            .setTooltip(Component.translatable("option.mapsyncer.auto_sync_enabled.tooltip"))
+            .setSaveConsumer(config::setAutoSyncEnabled)
+            .build());
+
         builder.setSavingRunnable(config::save);
         return builder.build();
     }

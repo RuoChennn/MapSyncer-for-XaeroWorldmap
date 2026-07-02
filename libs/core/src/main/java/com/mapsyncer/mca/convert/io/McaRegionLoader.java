@@ -12,12 +12,17 @@ import com.mapsyncer.mca.convert.scan.ChunkColumnScanner;
 import com.mapsyncer.mca.convert.scan.RegionScanPass;
 import com.mapsyncer.nbt.Tag;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 public final class McaRegionLoader {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(McaRegionLoader.class);
 
     private McaRegionLoader() {}
 
@@ -103,6 +108,8 @@ public final class McaRegionLoader {
                 try {
                     nbt = reader.readChunkNbt(localX, localZ);
                 } catch (IOException e) {
+                    LOGGER.warn("Failed to read chunk ({}, {}) from region file, skipping: {}",
+                            localX, localZ, e.getMessage());
                     continue;
                 }
                 if (nbt == null) {

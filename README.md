@@ -104,6 +104,8 @@
 
 Fabric 配置文件：`config/mapsyncer-client.properties`；Forge/NeoForge：`config/mapsyncer-client.toml` 的 `[client]` 段。
 
+Fabric 服务端 `.properties` 同时接受 camelCase 与 snake_case 键名（如 `defaultScanMode` / `default_scan_mode`），便于从 TOML 复制配置。
+
 ### 服务端配置
 
 Forge 配置文件位于 `world/serverconfig/mapsyncer-server.toml`（每个世界独立配置）
@@ -371,7 +373,9 @@ scripts/fastbuild/build-target.ps1 all -NoTest  # PowerShell 构建全部
 
 | 问题 | 说明 | 影响 |
 |------|------|------|
-| 洞穴内容异常 | 洞穴模式下部分内容不准确 | 基本上只有地狱受影响，看情况优化 |
+| 非原版维度洞穴层 | 部分 Mod 维度的多层洞穴配置需自行验证 layerPlan | 仅在使用 ALL/显式 Y 的 Mod 维度时可能需调参 |
+
+> v1.0.4 已修复地狱 `SURFACE,63` 地表/洞穴层生成与客户端同步显示；详见 `CHANGELOG.md`。
 
 ---
 

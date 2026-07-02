@@ -10,6 +10,8 @@ import com.mapsyncer.network.payload.SyncResponsePayload;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.function.BiConsumer;
 
@@ -21,6 +23,8 @@ import java.util.function.BiConsumer;
  * <p>客户端接收器通过 {@link FabricClientNetworkHandler} 单独注册。</p>
  */
 public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FabricNetworkHandler.class);
 
     private BiConsumer<SyncResponsePayload, PayloadContext> syncResponseHandler;
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
@@ -34,21 +38,17 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
 
     @Override
     public void registerHandlers(Object event) {
-        // 注册服务端接收器 (旧版 5 参数 API)
         ServerPlayNetworking.registerGlobalReceiver(
                 FabricPayloadAdapters.SYNC_REQUEST_ID,
                 (server, player, handler, buf, responseSender) -> {
-                    System.out.println("[MapSyncer DEBUG] Server received SYNC_REQUEST from " + player.getName().getString());
                     if (syncRequestHandler != null) {
                         SyncRequestPayload payload = FabricPayloadAdapters.readSyncRequest(buf);
-                        System.out.println("[MapSyncer DEBUG] Parsed sync request with " + payload.clientMeta().size() + " entries");
                         syncRequestHandler.accept(payload, new PayloadContext(new ServerPlayerContext(server, player)));
                     } else {
-                        System.out.println("[MapSyncer DEBUG] syncRequestHandler is NULL!");
+                        LOGGER.warn("Sync request from {} ignored: handler not registered", player.getName().getString());
                     }
                 }
         );
-        System.out.println("[MapSyncer DEBUG] ServerPlayNetworking.registerGlobalReceiver called for " + FabricPayloadAdapters.SYNC_REQUEST_ID);
     }
 
     /**
@@ -60,8 +60,6 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     public void registerClientHandlers() {
         FabricClientNetworkHandler.init(this);
     }
-
-    // ===== Handler getters（供 FabricClientNetworkHandler 延迟读取） =====
 
     public BiConsumer<SyncResponsePayload, PayloadContext> getSyncResponseHandler() {
         return syncResponseHandler;
@@ -79,7 +77,6 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     public void sendToServer(SyncRequestPayload payload) {
         FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
         FabricPayloadAdapters.writeSyncRequest(buf, payload);
-        // 使用反射避免编译时依赖 ClientPlayNetworking
         FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.SYNC_REQUEST_ID, buf);
     }
 
@@ -130,7 +127,6 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
         if (platformCtx instanceof ServerPlayerContext spc) {
             spc.server().execute(work);
         } else {
-            // 客户端上下文：委托给客户端处理器（避免引用客户端类）
             FabricClientNetworkHandler.enqueueClientWork(work);
         }
     }

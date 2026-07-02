@@ -64,7 +64,7 @@ public class McaReader implements AutoCloseable {
     private static final int COMPRESS_NONE = 3;
 
     /**
-     * LZ4压缩类型标识（暂不支持）
+     * LZ4 压缩类型标识（由 {@link #decompress} 通过 lz4-java 解压）
      */
     private static final int COMPRESS_LZ4 = 4;
 

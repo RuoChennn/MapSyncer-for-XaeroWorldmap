@@ -232,12 +232,23 @@ public class BlockColorMapper {
      * 防止服务端长期运行导致无界缓存增长。
      */
     private static void checkCacheSize() {
-        if (blockColorCache.size() > MAX_CACHE_SIZE || textureColorCache.size() > MAX_CACHE_SIZE) {
-            LOGGER.debug("Cache size limit reached (block={}, texture={}), clearing caches",
-                    blockColorCache.size(), textureColorCache.size());
-            blockColorCache.clear();
-            textureColorCache.clear();
+        trimColorCacheIfNeeded(blockColorCache);
+        trimColorCacheIfNeeded(textureColorCache);
+    }
+
+    private static void trimColorCacheIfNeeded(ConcurrentHashMap<String, Integer> cache) {
+        int targetSize = (MAX_CACHE_SIZE * 3) / 4;
+        int toRemove = cache.size() - targetSize;
+        if (toRemove <= 0) {
+            return;
         }
+        var it = cache.keySet().iterator();
+        while (toRemove > 0 && it.hasNext()) {
+            it.next();
+            it.remove();
+            toRemove--;
+        }
+        LOGGER.debug("Trimmed color cache to {} entries (target {})", cache.size(), targetSize);
     }
 
     /**

@@ -183,7 +183,7 @@ mc-26.1/            MC 26.1 版本
 |------|------|------|
 | 全维度生成 | ✅ | 自动扫描所有已存在区块的维度 |
 | Mod 维度支持 | ✅ | 支持 ResourceLocation 格式（暮光森林测试通过） |
-| 洞穴模式 | ✅ | layerPlan 驱动地表/洞穴多层（SURFACE、ALL、显式 Y）；单次 MCA 解析多 pass；地狱默认 `SURFACE,63`（基岩顶层 + Y=63 洞穴层） |
+| 洞穴模式 | ✅ | layerPlan 驱动地表/洞穴多层（SURFACE、ALL、显式 Y）；单次 MCA 解析多 pass；地狱默认 `SURFACE,63`（v1.0.4 已验证） |
 | 地狱上层地表 | ✅ | 有顶盖维度 `SURFACE` 扫描逻辑顶以上（Y≥128），忽略指向下层的高度图 |
 | 增量更新 | ✅ | TICK 周期模式 + SCHEDULED 定时模式 |
 | 强制保存机制 | ✅ | 读取前调用 `server.saveEverything()` 确保数据一致性，兼容 C2ME |
@@ -208,8 +208,8 @@ mc-26.1/            MC 26.1 版本
 | 配置项 | 类型 | 默认值 | 范围 | 说明 |
 |--------|------|--------|------|------|
 | `hashThreads` | int | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
-| `mapRegionLoadIntervalTicks` | int | 1 | -1~100 | 视距外 region 传入 Xaero 的 tick 间隔：-1=一次排空，0=仅视距内，N=每 N tick 加载 1 个（Fabric 加载时兼容旧键 `mapRegionLoadsPerTick`） |
-| `autoSyncEnabled` | boolean | true | — | 进服自动同步（TICK/SCHEDULED）；TICK 模式另启在线周期同步；关闭后仍可手动 `/mapsyncer sync` |
+| `mapRegionLoadIntervalTicks` | int | 1 | -1~100 | 视距外 region 传入 Xaero 的 tick 间隔：-1=一次排空，0=仅视距内，N=每 N tick 加载 1 个（Fabric 加载时兼容旧键 `mapRegionLoadsPerTick`；Fabric GUI 可配置） |
+| `autoSyncEnabled` | boolean | true | — | 进服自动同步（TICK/SCHEDULED）；TICK 模式另启在线周期同步；关闭后仍可手动 `/mapsyncer sync`（Fabric GUI 可配置） |
 
 ### 服务端配置
 

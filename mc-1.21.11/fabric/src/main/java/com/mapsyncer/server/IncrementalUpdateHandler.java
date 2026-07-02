@@ -1,31 +1,15 @@
 package com.mapsyncer.server;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import com.mapsyncer.server.IncrementalUpdateHandlerLogic;
 import net.minecraft.server.MinecraftServer;
 
 /**
  * Fabric 增量更新处理器 - 薄包装器
  *
  * 委托所有业务逻辑给公共的 IncrementalUpdateHandlerLogic 类。
- * 此类仅负责 Fabric 特定的事件注册和生命周期管理。
+ * Tick 注册由 {@code MapSyncer.registerServerEvents()} 统一处理，避免重复注册。
  */
 public class IncrementalUpdateHandler {
-
-    static {
-        // 注册 Fabric 服务器 Tick 事件
-        ServerTickEvents.END_SERVER_TICK.register(IncrementalUpdateHandler::onServerTick);
-    }
-
-    /**
-     * 服务器Tick事件处理（Fabric 版本）
-     *
-     * 将事件委托给公共逻辑类处理。
-     *
-     * @param server Minecraft 服务器实例
-     */
-    private static void onServerTick(MinecraftServer server) {
-        IncrementalUpdateHandlerLogic.getInstance().onServerTick();
-    }
 
     /**
      * 启动增量更新处理器

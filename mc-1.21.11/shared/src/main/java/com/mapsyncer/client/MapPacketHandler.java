@@ -606,6 +606,23 @@ public class MapPacketHandler {
      */
     private static void handleProgressUpdate(SyncProgressPayload payload, PayloadContext context) {
         context.enqueueWork(() -> {
+            String status = payload.status();
+            if (status != null && status.startsWith("aborted")) {
+                SyncProgressTracker.cancelTracking();
+                MapPacketHandler.clearSyncData();
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.player != null) {
+                    if (status.contains("timeout")) {
+                        mc.player.displayClientMessage(
+                                ChatUtils.error("mapsyncer.sync.server_timeout"), false);
+                    } else {
+                        mc.player.displayClientMessage(
+                                ChatUtils.error("mapsyncer.sync.cancelled"), false);
+                    }
+                }
+                return;
+            }
+
             // 自动同步时静默，不显示进度
             if (AutoSyncManager.isActive()) return;
 

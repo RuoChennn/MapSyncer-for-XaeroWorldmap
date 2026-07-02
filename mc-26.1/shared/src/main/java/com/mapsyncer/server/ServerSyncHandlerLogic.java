@@ -279,42 +279,73 @@ public class ServerSyncHandlerLogic {
         return syncingPlayers.contains(playerId);
     }
 
+    private static final long PLAYER_VALIDATION_TIMEOUT_SEC = 15;
+    private static final int PLAYER_VALIDATION_MAX_ATTEMPTS = 2;
+
+    private enum PlayerCheckResult {
+        VALID, INVALID, TIMEOUT
+    }
+
     /**
      * 在主线程检查玩家是否仍在线且未切换维度。
      */
-    private static boolean checkPlayerOnMainThread(MinecraftServer server, UUID playerId,
+    private static PlayerCheckResult checkPlayerOnMainThread(MinecraftServer server, UUID playerId,
             ResourceKey<Level> startDimension, int syncVersion) {
-        try {
-            return server.submit(() -> {
-                if (!ServerSyncSession.isCurrent(playerId, syncVersion)) {
-                    return false;
+        for (int attempt = 1; attempt <= PLAYER_VALIDATION_MAX_ATTEMPTS; attempt++) {
+            try {
+                boolean valid = server.submit(() -> {
+                    if (!ServerSyncSession.isCurrent(playerId, syncVersion)) {
+                        return false;
+                    }
+                    if (!syncingPlayers.contains(playerId)) {
+                        return false;
+                    }
+                    ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+                    if (player == null || player.connection == null) {
+                        return false;
+                    }
+                    if (startDimension != null && !player.level().dimension().equals(startDimension)) {
+                        LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
+                                playerId, startDimension.identifier(), player.level().dimension().identifier());
+                        syncingPlayers.remove(playerId);
+                        playerSyncDimensions.remove(playerId);
+                        return false;
+                    }
+                    return true;
+                }).get(PLAYER_VALIDATION_TIMEOUT_SEC, TimeUnit.SECONDS);
+                return valid ? PlayerCheckResult.VALID : PlayerCheckResult.INVALID;
+            } catch (java.util.concurrent.TimeoutException e) {
+                LOGGER.warn("Player {} validation timed out (attempt {}/{})", playerId, attempt,
+                        PLAYER_VALIDATION_MAX_ATTEMPTS);
+                if (attempt >= PLAYER_VALIDATION_MAX_ATTEMPTS) {
+                    return PlayerCheckResult.TIMEOUT;
                 }
-                if (!syncingPlayers.contains(playerId)) {
-                    return false;
+            } catch (Exception e) {
+                LOGGER.warn("Failed to validate player {} on server thread (attempt {}/{})",
+                        playerId, attempt, PLAYER_VALIDATION_MAX_ATTEMPTS, e);
+                if (attempt >= PLAYER_VALIDATION_MAX_ATTEMPTS) {
+                    return PlayerCheckResult.TIMEOUT;
                 }
-                ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-                if (player == null || player.connection == null) {
-                    return false;
-                }
-                if (startDimension != null && !player.level().dimension().equals(startDimension)) {
-                    LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
-                            playerId, startDimension.identifier(), player.level().dimension().identifier());
-                    syncingPlayers.remove(playerId);
-                    playerSyncDimensions.remove(playerId);
-                    return false;
-                }
-                return true;
-            }).get(5, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            LOGGER.warn("Failed to validate player {} on server thread", playerId, e);
-            return false;
+            }
         }
+        return PlayerCheckResult.TIMEOUT;
+    }
+
+    private static void notifySyncAborted(MinecraftServer server, UUID playerId, int syncVersion, String reason) {
+        enqueueIfCurrent(server, playerId, syncVersion, player ->
+                NetworkManager.sendToPlayer(player, new SyncProgressPayload(0, 0, "aborted:" + reason)));
     }
 
     private static boolean isPlayerStillValid(MinecraftServer server, UUID playerId,
             ResourceKey<Level> startDimension, int syncVersion) {
-        return isSyncStillActive(playerId, syncVersion)
-                && checkPlayerOnMainThread(server, playerId, startDimension, syncVersion);
+        if (!isSyncStillActive(playerId, syncVersion)) {
+            return false;
+        }
+        PlayerCheckResult result = checkPlayerOnMainThread(server, playerId, startDimension, syncVersion);
+        if (result == PlayerCheckResult.TIMEOUT) {
+            notifySyncAborted(server, playerId, syncVersion, "timeout");
+        }
+        return result == PlayerCheckResult.VALID;
     }
 
     /**

@@ -2,6 +2,7 @@ package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.util.PropertiesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -297,6 +298,10 @@ public class ModConfig {
         public void setAutoSyncEnabled(boolean enabled) {
             autoSyncEnabled = enabled;
         }
+
+        public void setMapRegionLoadIntervalTicks(int value) {
+            mapRegionLoadIntervalTicks = Math.max(-1, Math.min(100, value));
+        }
     }
 
     /**
@@ -365,20 +370,28 @@ public class ModConfig {
                 props.load(is);
 
                 // 通用设置
-                enableDebugLogging = Boolean.parseBoolean(props.getProperty("enableDebugLogging", "false"));
-                maxConcurrentRegions = Integer.parseInt(props.getProperty("maxConcurrentRegions", "4"));
-                maxSyncPacketSize = Integer.parseInt(props.getProperty("maxSyncPacketSize", "262144"));
-                syncSpeedLimitKBps = Integer.parseInt(props.getProperty("syncSpeedLimitKBps", "1024"));
+                enableDebugLogging = Boolean.parseBoolean(
+                        PropertiesHelper.get(props, "enableDebugLogging", "enable_debug_logging", "false"));
+                maxConcurrentRegions = Integer.parseInt(
+                        PropertiesHelper.get(props, "maxConcurrentRegions", "max_concurrent_regions", "4"));
+                maxSyncPacketSize = Integer.parseInt(
+                        PropertiesHelper.get(props, "maxSyncPacketSize", "max_sync_packet_size", "262144"));
+                syncSpeedLimitKBps = Integer.parseInt(
+                        PropertiesHelper.get(props, "syncSpeedLimitKBps", "sync_speed_limit_kbps", "1024"));
 
-                // 增量更新设置
-                incrementalUpdateMode = UpdateMode.valueOf(props.getProperty("incrementalUpdateMode", "DISABLED"));
-                incrementalUpdateIntervalTicks = Integer.parseInt(props.getProperty("incrementalUpdateIntervalTicks", "6000"));
-                scheduledUpdateHour = Integer.parseInt(props.getProperty("scheduledUpdateHour", "4"));
-                scheduledUpdateMinute = Integer.parseInt(props.getProperty("scheduledUpdateMinute", "0"));
+                incrementalUpdateMode = UpdateMode.valueOf(
+                        PropertiesHelper.get(props, "incrementalUpdateMode", "incremental_update_mode", "DISABLED"));
+                incrementalUpdateIntervalTicks = Integer.parseInt(
+                        PropertiesHelper.get(props, "incrementalUpdateIntervalTicks", "incremental_update_interval_ticks", "6000"));
+                scheduledUpdateHour = Integer.parseInt(
+                        PropertiesHelper.get(props, "scheduledUpdateHour", "scheduled_update_hour", "4"));
+                scheduledUpdateMinute = Integer.parseInt(
+                        PropertiesHelper.get(props, "scheduledUpdateMinute", "scheduled_update_minute", "0"));
 
-                // 维度扫描配置
-                defaultScanMode = ScanMode.valueOf(props.getProperty("defaultScanMode", "SURFACE"));
-                defaultCaveStart = Integer.parseInt(props.getProperty("defaultCaveStart", "63"));
+                defaultScanMode = ScanMode.valueOf(
+                        PropertiesHelper.get(props, "defaultScanMode", "default_scan_mode", "SURFACE"));
+                defaultCaveStart = Integer.parseInt(
+                        PropertiesHelper.get(props, "defaultCaveStart", "default_cave_start", "63"));
 
                 String dimsStr = props.getProperty("dimensionConfigs", "");
                 dimensionConfigs.clear();
@@ -518,6 +531,7 @@ public class ModConfig {
                 sb.append("dimensionConfigs=" + String.join(";", dimensionConfigs) + "\n");
 
                 Files.writeString(configFile, sb.toString());
+                DimensionConfigParser.invalidateCache();
 
                 LOGGER.info("Saved config to: {}", configFile);
             } catch (Exception e) {
@@ -615,6 +629,7 @@ public class ModConfig {
 
         public void setDimensionConfigs(List<String> value) {
             dimensionConfigs = new ArrayList<>(value);
+            DimensionConfigParser.invalidateCache();
         }
 
         /**

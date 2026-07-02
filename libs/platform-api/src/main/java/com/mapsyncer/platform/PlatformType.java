@@ -22,7 +22,7 @@ public enum PlatformType {
     NEO_FORGE,
 
     /**
-     * Fabric (预留，暂不支持)
+     * Fabric 模组加载器
      */
     FABRIC
 }

@@ -185,15 +185,16 @@ public class BlockPropertyResolver {
     }
 
     private static void trimCacheIfNeeded() {
-        int excess = propertiesCache.size() - MAX_CACHE_SIZE;
-        if (excess <= 0) {
+        int targetSize = (MAX_CACHE_SIZE * 3) / 4;
+        int toRemove = propertiesCache.size() - targetSize;
+        if (toRemove <= 0) {
             return;
         }
         var it = propertiesCache.keySet().iterator();
-        while (excess > 0 && it.hasNext()) {
+        while (toRemove > 0 && it.hasNext()) {
             it.next();
             it.remove();
-            excess--;
+            toRemove--;
         }
     }
 

@@ -15,10 +15,10 @@
 |--------|----------|----------|----------|------|
 | 全维度生成 | `/mapsyncer generate` | 生成所有已加载维度的地图缓存 | ✅ | |
 | 单维度生成-主世界 | `/mapsyncer generate overworld` | 仅生成主世界缓存 | ✅ | |
-| 单维度生成-地狱 | `/mapsyncer generate the_nether` | 仅生成地狱缓存 | ⬜ | 生成的文件存在渲染差异 |
+| 单维度生成-地狱 | `/mapsyncer generate the_nether` | 仅生成地狱缓存（地表 + 默认 `SURFACE,63` 洞穴层） | ✅ | v1.0.4 修复基岩顶层与 Y=63 洞穴层 |
 | 单维度生成-末地 | `/mapsyncer generate the_end` | 仅生成末地缓存 | ✅ | v3.2+v3.8已修复虚空渲染 |
 | 单区域生成 | `/mapsyncer generate overworld 0 0` | 生成指定坐标的单个区域 | ✅ | |
-| 强制生成 | `/mapsyncer generate overworld force` | 强制重新生成，忽略缓存 | ✅ | |
+| 强制生成 | `/mapsyncer generate overworld --force` | 强制重新生成，忽略缓存 | ✅ | |
 | 生成状态查询 | `/mapsyncer status` | 显示生成进度+增量更新状态+下次更新时间 | ✅ | |
 | Mod维度识别与生成 | `/mapsyncer generate twilightforest:twilight_forest` | 显示完整维度ID建议 + 成功生成 | ✅ | 暮光森林测试通过 |
 | 维度路径格式 | 检查原版传统格式和Mod dimensions/格式 | 自动检测并正确使用 | ✅ | 原版：region/,DIM-1/,DIM1/；Mod：dimensions/<ns>/<path>/ |
@@ -43,11 +43,11 @@
 
 | 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
 |--------|----------|----------|----------|------|
-| 洞穴模式配置 | 配置CAVE模式 + 检查caves/<layer>/目录 | 配置生效，目录结构正确 | ⬜ | cave_start=63, layer=3 |
-| 洞穴层文件生成 | 检查zip文件命名 + 服务端生成日志 | 格式正确，生成成功 | ⬜ | |
-| 洞穴层同步传输 | 同步地狱 + 检查客户端caves/<layer>/目录 | 文件传输 + 目录正确 | ⬜ | |
-| 洞穴层显示 | Xaero地图切换洞穴层 | 显示洞穴地形 | ⬜ | 内容有一定异常 |
-| 洞穴+地表共存 | 同时生成地表和洞穴 | 两个目录都存在文件 | ⬜ | |
+| 洞穴模式配置 | 配置 layerPlan（如 `SURFACE,63`）+ 检查 `caves/<layer>/` 目录 | 配置生效，目录结构正确 | ✅ | 地狱默认 layer 3 (Y=63) |
+| 洞穴层文件生成 | 检查 zip 文件命名 + 服务端生成日志 | 格式正确，生成成功 | ✅ | v1.0.4 |
+| 洞穴层同步传输 | 同步地狱 + 检查客户端 `caves/<layer>/` 目录 | 文件传输 + 目录正确 | ✅ | v1.0.4 |
+| 洞穴层显示 | Xaero 地图切换洞穴层 | 显示洞穴地形 | ✅ | v1.0.4 修复空像素/群系/缓存 |
+| 洞穴+地表共存 | 同时生成地表和洞穴 | 两个目录都存在文件 | ✅ | `SURFACE,63` |
 
 ---
 
@@ -71,9 +71,9 @@
 | 服务端配置生成 | 首次运行生成配置文件 | 配置文件存在且格式正确 | ⬜ | |
 | 配置修改生效 | 修改配置后重启服务器 | 新配置生效 | ⬜ | |
 | 增量更新模式配置 | `incrementalUpdateMode = "TICK"` | TICK模式生效 | ⬜ | |
-| 维度扫描配置 | 添加dimension_configs + 设置scan_mode | 配置生效 | ⬜ | |
+| 维度扫描配置 | 添加 dimension_configs + 设置 layerPlan | 配置生效 | ⬜ | 格式见 README |
 | 客户端调试配置 | `enableDebugLogging=true` | 显示调试信息 | ⬜ | |
-| 断点续传开关 | `enableResumeSync=false` | 禁用续传 | ⬜ | |
+| 断点续传 | 同步中断后进服 | 提示 `/mapsyncer clearstate` 续传 | ⬜ | 由 `ClientTimestampCache.needsResume()` 驱动 |
 
 ---
 
