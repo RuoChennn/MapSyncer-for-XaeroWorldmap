@@ -1,4 +1,4 @@
-﻿package com.mapsyncer.config;
+package com.mapsyncer.config;
 
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.UpdateMode;

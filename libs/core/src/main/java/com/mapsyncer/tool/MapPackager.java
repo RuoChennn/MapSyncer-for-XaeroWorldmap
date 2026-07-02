@@ -189,15 +189,15 @@ public final class MapPackager {
         }
 
         if (mwDirs.size() == 1) {
-            Path only = mwDirs.getFirst();
+            Path only = mwDirs.get(0);
             if (!only.equals(preferred)) {
                 LOGGER.info("Using map source {} for dimension {}", only.getFileName(), dimDir.getFileName());
             }
             return only;
         }
         if (mwDirs.size() > 1) {
-            LOGGER.warn("Multiple mw$ directories in {}, using first: {}", dimDir.getFileName(), mwDirs.getFirst().getFileName());
-            return mwDirs.getFirst();
+            LOGGER.warn("Multiple mw$ directories in {}, using first: {}", dimDir.getFileName(), mwDirs.get(0).getFileName());
+            return mwDirs.get(0);
         }
 
         return dimDir;
