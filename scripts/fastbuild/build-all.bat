@@ -17,7 +17,8 @@ set OUTPUT_DIR=output
 set COPY_JARS=%~dp0copy-release-jars.bat
 
 echo ============================================
-echo   MapSyncer - Build ALL Platforms
+echo   MapSyncer - Build ALL Platforms (G1-G4)
+echo   libs/mc-* anchor + mc-*/glue loaders
 echo ============================================
 echo.
 

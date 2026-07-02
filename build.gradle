@@ -20,18 +20,16 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// 构建所有子项目（使用 afterEvaluate 确保子项目已配置）
+// 构建默认 settings.gradle 中已 include 的胶水模块（不含 Forge / 隔离 Fabric）
 afterEvaluate {
     task buildAll {
         dependsOn ':libs:core:build'
         dependsOn ':libs:platform-api:build'
+        dependsOn ':mc-1.20.1:fabric:build'
+        dependsOn ':mc-1.21.1:fabric:build'
         dependsOn ':mc-1.21.1:neoforge:build'
         dependsOn ':mc-1.21.11:neoforge:build'
-        dependsOn ':mc-1.21.11:forge:build'
-        dependsOn ':mc-1.21.11:fabric:build'
-        dependsOn ':mc-1.21.1:forge:build'
-        dependsOn ':mc-1.21.1:fabric:build'
-        dependsOn ':mc-1.20.1:forge:build'
+        dependsOn ':mc-26.1:neoforge:build'
         finalizedBy 'collectJars'
     }
 }

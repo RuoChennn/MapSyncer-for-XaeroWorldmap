@@ -1,5 +1,5 @@
-// settings-12111.gradle — 专用于构建 Fabric 1.21.11 模块
-// 隔离 Loom 1.15.4 (Yarn mappings) 与 Loom 1.9.2 (其他 Fabric 模块)
+// settings-12111.gradle — Fabric 1.21.11 胶水层专用（G3）
+// MC API 源码在 libs/mc-1.21.11；隔离 Loom 1.15.4 与 Loom 1.9.2。
 // 使用方式：gradlew.bat -c scripts/fastbuild/settings-12111.gradle build
 
 pluginManagement {

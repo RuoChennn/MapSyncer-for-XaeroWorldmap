@@ -19,5 +19,5 @@ call "%~dp0copy-release-jars.bat" mc-1.21.1\fabric\build\libs
 
 echo.
 echo Output: output\
-dir /b output\*-fabric-1.21.1*.jar 2>nul
+dir /b output\*-fabric-1.21*.jar 2>nul
 exit /b 0

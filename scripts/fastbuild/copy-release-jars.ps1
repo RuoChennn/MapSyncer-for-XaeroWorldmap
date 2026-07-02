@@ -3,6 +3,8 @@
 # 用法:
 #   .\copy-release-jars.ps1 mc-1.21.1\fabric\build\libs
 #   .\copy-release-jars.ps1 mc-1.21.1\forge\build\libs mc-1.21.1\neoforge\build\libs
+#
+# JAR 命名按锚点组后缀，例如 1.0.4-fabric-1.21（G2）、1.0.4-fabric-1.20（G1）
 
 param(
     [Parameter(ValueFromRemainingArguments = $true)]

@@ -1,7 +1,7 @@
-// settings-26.gradle — 专用于构建 MC 26.1 系列模块
-// 隔离 Loom 1.16 与旧版 Loom，避免 JarManifestService 类冲突
+// settings-26.gradle — MC 26.x 胶水层专用（G4）
+// MC API 源码在 libs/mc-26；隔离 Loom 1.16 与旧版 Loom。
 //
-// 使用方式：构建脚本会自动临时复制此文件到 settings.gradle
+// 使用方式：构建脚本临时切换此文件到 settings.gradle
 
 pluginManagement {
     repositories {

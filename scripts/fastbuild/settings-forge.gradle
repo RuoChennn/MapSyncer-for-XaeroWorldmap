@@ -1,5 +1,6 @@
-// settings-forge.gradle — 专用于构建 Forge 模块
-// ForgeGradle 6.x 不支持 Gradle 9.x，需使用 Gradle 8.x 构建
+// settings-forge.gradle — Forge 胶水层专用（G1/G2/G3）
+// MC API 源码在 libs/mc-1.20 | mc-1.21 | mc-1.21.11；本文件仅 include Forge 胶水模块。
+// ForgeGradle 6.x 不支持 Gradle 9.x，需使用 Gradle 8.9 构建。
 //
 // 使用方式：gradle-8.9\bin\gradle -c scripts\fastbuild\settings-forge.gradle build
 
