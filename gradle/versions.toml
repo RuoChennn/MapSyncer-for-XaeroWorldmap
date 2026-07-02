@@ -1,0 +1,47 @@
+# MapSyncer MC version matrix — anchor libs + glue loaders
+# Read before editing multi-version code.
+
+[common]
+path = "libs/common"
+covers = "all MC versions"
+
+[g1]
+path = "libs/mc-1.20"
+anchor = "1.20.1"
+includes = ["1.20.1"]
+excludes = ["1.21+"]
+jdk = 17
+glue = ["mc-1.20.1/fabric", "mc-1.20.1/forge"]
+build_notes = "Forge uses scripts/fastbuild/settings-forge.gradle + Gradle 8.9"
+
+[g2]
+path = "libs/mc-1.21"
+anchor = "1.21.1"
+includes = [
+  "1.21", "1.21.1",
+  "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10",
+]
+excludes = ["1.21.2", "1.21.3", "1.21.11", "26.x"]
+jdk = 21
+glue = ["mc-1.21.1/fabric", "mc-1.21.1/forge", "mc-1.21.1/neoforge"]
+build_notes = "Forge via settings-forge.gradle"
+
+[g3]
+path = "libs/mc-1.21.11"
+anchor = "1.21.11"
+includes = ["1.21.11"]
+excludes = ["1.21.10 and earlier", "26.x"]
+jdk = 21
+api_break = "ResourceLocation -> Identifier"
+glue = ["mc-1.21.11/fabric", "mc-1.21.11/forge", "mc-1.21.11/neoforge"]
+build_notes = "Fabric uses settings-12111.gradle; Forge uses settings-forge.gradle"
+
+[g4]
+path = "libs/mc-26"
+anchor = "26.1"
+includes = ["26.1", "26.1.1", "26.1.2", "26.2"]
+excludes = ["1.x"]
+jdk = 25
+api_break = "deobfuscated; Loom no-remap; displayClientMessage split"
+glue = ["mc-26.1/fabric", "mc-26.1/neoforge"]
+build_notes = "No Forge for 26.x; 26.2 separate protocol but shares G4 source"

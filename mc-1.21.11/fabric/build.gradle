@@ -20,12 +20,12 @@ repositories {
 }
 
 sourceSets.main.java.srcDirs(
-    '../shared/src/main/java',
+    "${rootProject.projectDir}/libs/mc-1.21.11/src/main/java",
     "${rootProject.projectDir}/libs/common/src/main/java",
     'src/main/java',
 )
 sourceSets.main.resources.srcDirs(
-    '../shared/src/main/resources',
+    "${rootProject.projectDir}/libs/mc-1.21.11/src/main/resources",
     "${rootProject.projectDir}/libs/common/src/main/resources",
     'src/main/resources',
 )

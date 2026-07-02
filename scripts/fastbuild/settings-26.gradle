@@ -23,8 +23,8 @@ rootProject.name = mod_id
 include 'libs:core'
 include 'libs:platform-api'
 include 'libs:common'
+include 'libs:mc-26'
 
 // ── MC 26.1 (仅包含 26.x 系列模块) ──
-include 'mc-26.1:shared'
 include 'mc-26.1:neoforge'
 include 'mc-26.1:fabric'

@@ -22,16 +22,16 @@ rootProject.name = mod_id
 include 'libs:core'             // 纯 Java 核心（MCA/NBT/工具类）
 include 'libs:platform-api'     // 平台抽象接口
 include 'libs:common'           // 全版本共享的代码（source-only，不独立编译）
+include 'libs:mc-1.20'          // G1 锚点 1.20.1
+include 'libs:mc-1.21'          // G2 锚点 1.21.1
+include 'libs:mc-1.21.11'       // G3 锚点 1.21.11
+include 'libs:mc-26'            // G4 锚点 26.1
 
 // ── 按 MC 版本组织的模块 ──
-// 每个 MC 版本包含：
-//   shared/  — 版本特定的共享源码（source-only，不独立编译）
-//   fabric/  — Fabric 平台实现
-//   forge/   — Forge 平台实现
-//   neoforge/ — NeoForge 平台实现
+//   mc-{version}/{fabric|forge|neoforge}/ — Loader 胶水（精确 MC 版本）
+//   MC API 源码见 libs/mc-* 与 gradle/versions.toml
 
 // MC 1.20.1
-include 'mc-1.20.1:shared'
 include 'mc-1.20.1:fabric'
 // include 'mc-1.20.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x → 使用 scripts/settings-forge.gradle 单独构建
 
@@ -42,18 +42,16 @@ include 'mc-1.20.1:fabric'
 // include 'mc-1.20.4:fabric'
 
 // MC 1.21.1
-include 'mc-1.21.1:shared'
 include 'mc-1.21.1:fabric'
 // include 'mc-1.21.1:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
 include 'mc-1.21.1:neoforge'
 
 // MC 1.21.11
-// include 'mc-1.21.11:shared'  // 已合并到 fabric-shared（三平台统一）
+// include 'mc-1.21.11:shared'  // → libs/mc-1.21.11
 include 'mc-1.21.11:neoforge'
 // include 'mc-1.21.11:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
 // include 'mc-1.21.11:fabric'  // Loom 1.15.4 隔离，使用 settings-12111.gradle
 
 // MC 26.1
-include 'mc-26.1:shared'
 include 'mc-26.1:neoforge'
 // include 'mc-26.1:fabric'  // Loom 版本冲突，使用 scripts/settings-26.gradle 单独构建

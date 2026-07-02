@@ -11,6 +11,7 @@ import com.mapsyncer.sync.SyncPhase;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.ClientMessageHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import org.slf4j.Logger;
@@ -611,11 +612,11 @@ public class MapPacketHandler {
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
                     if (status.contains("timeout")) {
-                        mc.player.displayClientMessage(
-                                ChatUtils.error("mapsyncer.sync.server_timeout"), false);
+                        ClientMessageHelper.sendChatMessage(
+                                ChatUtils.error("mapsyncer.sync.server_timeout"));
                     } else {
-                        mc.player.displayClientMessage(
-                                ChatUtils.error("mapsyncer.sync.cancelled"), false);
+                        ClientMessageHelper.sendChatMessage(
+                                ChatUtils.error("mapsyncer.sync.cancelled"));
                     }
                 }
                 return;

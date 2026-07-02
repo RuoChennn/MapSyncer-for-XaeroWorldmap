@@ -1,0 +1,14 @@
+---
+description: MapSyncer G1-G4 multi-version layout — where to edit code (common vs mc-* vs glue incl. Forge)
+alwaysApply: true
+---
+
+# 多版本编辑位置（MapSyncer）
+
+**业务逻辑** → `libs/common`（只改一处）
+
+**MC API 版本相关** → 四选一 `libs/mc-1.20` | `libs/mc-1.21` | `libs/mc-1.21.11` | `libs/mc-26`（见 `gradle/versions.toml`）
+
+**Loader 胶水** → `mc-{精确版本}/{fabric|forge|neoforge}/` — 含 **Forge**（1.20.1/1.21.1/1.21.11，Forge 用 `settings-forge.gradle`）；26.x **无 Forge**
+
+禁止复制到多个 `mc-*/shared`；改前先读 `.cursor/skills/mc-multi-version/SKILL.md`。

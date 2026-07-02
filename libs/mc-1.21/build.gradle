@@ -1,0 +1,31 @@
+plugins {
+    id 'java-library'
+}
+
+group = mod_group_id
+version = mod_version
+
+// G2 — MC 1.21.x API 源码（锚点 1.21.1，覆盖 1.21.4–1.21.10）
+// source-only；由 mc-1.21.1/{fabric,forge,neoforge} 胶水模块提供 Minecraft 依赖
+
+tasks.withType(JavaCompile).configureEach {
+    enabled = false
+}
+
+tasks.named('jar').configure {
+    enabled = false
+}
+
+tasks.named('classes').configure {
+    enabled = false
+}
+
+dependencies {
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}

@@ -40,8 +40,8 @@ minecraft {
 }
 
 // 直接将所有子模块源码合并编译，避免运行时 ClassNotFoundException
-sourceSets.main.java.srcDir '../shared/src/main/java'
-sourceSets.main.resources.srcDir '../shared/src/main/resources'
+sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/mc-1.20/src/main/java"
+sourceSets.main.resources.srcDir "${rootProject.projectDir}/libs/mc-1.20/src/main/resources"
 sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/common/src/main/java"
 sourceSets.main.resources.srcDir "${rootProject.projectDir}/libs/common/src/main/resources"
 sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/core/src/main/java"

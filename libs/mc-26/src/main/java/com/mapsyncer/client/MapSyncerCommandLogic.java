@@ -6,6 +6,7 @@ import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.ClientMessageHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -280,11 +281,11 @@ public class MapSyncerCommandLogic {
                     }
                     if (!result.isSuccess()) {
                         if (result.failedFiles() > 0) {
-                            mc.player.displayClientMessage(
-                                    ChatUtils.error("mapsyncer.sync.hash_scan_partial", result.failedFiles()), false);
+                            ClientMessageHelper.sendChatMessage(
+                                    ChatUtils.error("mapsyncer.sync.hash_scan_partial", result.failedFiles()));
                         } else {
-                            mc.player.displayClientMessage(
-                                    ChatUtils.error("mapsyncer.sync.hash_scan_failed"), false);
+                            ClientMessageHelper.sendChatMessage(
+                                    ChatUtils.error("mapsyncer.sync.hash_scan_failed"));
                         }
                         return;
                     }

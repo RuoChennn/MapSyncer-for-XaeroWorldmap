@@ -22,13 +22,13 @@ rootProject.name = 'mapsyncer'
 include 'libs:core'
 include 'libs:platform-api'
 include 'libs:common'
+include 'libs:mc-1.20'
+include 'libs:mc-1.21'
+include 'libs:mc-1.21.11'
 
 // ── Forge 模块（仅 Forge 相关，不含 Fabric/NeoForge/Loom）──
-include 'mc-1.20.1:shared'
 include 'mc-1.20.1:forge'
 
-include 'mc-1.21.1:shared'
 include 'mc-1.21.1:forge'
 
-// shared removed - merged to fabric-shared
 include 'mc-1.21.11:forge'
