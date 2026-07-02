@@ -11,6 +11,9 @@ anchor = "1.20.1"
 includes = ["1.20.1"]
 excludes = ["1.21+"]
 jdk = 17
+jar_suffix = "1.20"
+minecraft_range_fabric = ">=1.20 <1.20.2"
+minecraft_range_forge = "[1.20,1.20.2)"
 glue = ["mc-1.20.1/fabric", "mc-1.20.1/forge"]
 build_notes = "Forge uses scripts/fastbuild/settings-forge.gradle + Gradle 8.9"
 
@@ -32,6 +35,9 @@ anchor = "1.21.11"
 includes = ["1.21.11"]
 excludes = ["1.21.10 and earlier", "26.x"]
 jdk = 21
+jar_suffix = "1.21.11"
+minecraft_range_fabric = ">=1.21.11 <1.21.12"
+minecraft_range_forge = "[1.21.11,1.21.12)"
 api_break = "ResourceLocation -> Identifier"
 glue = ["mc-1.21.11/fabric", "mc-1.21.11/forge", "mc-1.21.11/neoforge"]
 build_notes = "Fabric uses settings-12111.gradle; Forge uses settings-forge.gradle"
@@ -42,6 +48,10 @@ anchor = "26.1"
 includes = ["26.1", "26.1.1", "26.1.2", "26.2"]
 excludes = ["1.x"]
 jdk = 25
+jar_suffix = "26.1"
+minecraft_range_fabric = ">=26.1 <27"
+minecraft_range_forge = "[26.1,27)"
+protocol_notes = "26.2 uses protocol 776; same G4 source, widened metadata includes 26.1.x and 26.2"
 api_break = "deobfuscated; Loom no-remap; displayClientMessage split"
 glue = ["mc-26.1/fabric", "mc-26.1/neoforge"]
 build_notes = "No Forge for 26.x; 26.2 separate protocol but shares G4 source"

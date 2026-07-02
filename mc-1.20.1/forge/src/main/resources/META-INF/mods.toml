@@ -4,7 +4,7 @@ license="GPL-3.0"
 
 [[mods]]
 modId="mapsyncer"
-version="1.0.4"
+version="${version}"
 displayName="MapSyncer"
 description="Syncs server-side explored areas to client's Xaero World Map"
 authors="Ruo_Chen"
@@ -21,6 +21,6 @@ side="BOTH"
 modId="minecraft"
 mandatory=true
 type="required"
-versionRange="[1.20,1.20.2)"
+versionRange="${minecraft_range_forge}"
 ordering="NONE"
 side="BOTH"

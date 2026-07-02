@@ -10,8 +10,10 @@ import com.mapsyncer.network.payload.SyncResponsePayload;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.HashUtils;
+import com.mapsyncer.util.PlayerLevelApiHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -306,7 +308,8 @@ public class ServerSyncHandlerLogic {
                     }
                     if (startDimension != null && !player.level().dimension().equals(startDimension)) {
                         LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
-                                playerId, startDimension.identifier(), player.level().dimension().identifier());
+                                playerId, DimensionApiHelper.getDimId(startDimension),
+                                DimensionApiHelper.getDimId(player.level().dimension()));
                         syncingPlayers.remove(playerId);
                         playerSyncDimensions.remove(playerId);
                         return false;
@@ -594,7 +597,7 @@ public class ServerSyncHandlerLogic {
         ServerSyncSession.assignVersion(playerId, syncVersion);
 
         ResourceKey<Level> startDimension = serverPlayer.level().dimension();
-        MinecraftServer server = serverPlayer.level().getServer();
+        MinecraftServer server = PlayerLevelApiHelper.getServer(serverPlayer);
 
         // Mark player as syncing and record starting dimension (在主线程快速完成)
         syncingPlayers.add(playerId);
@@ -603,7 +606,7 @@ public class ServerSyncHandlerLogic {
         // 在主线程预捕获玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
         int startBlockX = serverPlayer.getBlockX();
         int startBlockZ = serverPlayer.getBlockZ();
-        int viewDistanceChunks = serverPlayer.level().getServer().getPlayerList().getViewDistance() + 2;
+        int viewDistanceChunks = PlayerLevelApiHelper.getServer(serverPlayer).getPlayerList().getViewDistance() + 2;
         int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;
         int worldId = readWorldIdFromXaeroMap(serverPlayer);
 
@@ -612,6 +615,7 @@ public class ServerSyncHandlerLogic {
         boolean syncAll = payload.syncAll();
         String targetDimension = payload.targetDimension();
 
+        // 将耗时操作移到异步线程执行，避免阻塞主线程
         Thread syncThread = new Thread(() -> processSyncAsync(server, playerId, clientMeta, syncAll, targetDimension,
                 startDimension, syncVersion, startBlockX, startBlockZ, viewDistanceRegions, worldId),
                 "mapsyncer-sync-" + playerId);

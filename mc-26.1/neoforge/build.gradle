@@ -3,7 +3,7 @@ plugins {
     id 'com.gradleup.shadow' version '8.3.5'
 }
 
-version = mod_version + '-neoforge-26.1'
+version = mod_version + '-neoforge-' + g4_jar_suffix
 group = mod_group_id
 
 base {
@@ -64,6 +64,16 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_range_forge", g4_minecraft_range_forge
+
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand "version": project.version,
+                "minecraft_range_forge": g4_minecraft_range_forge
+    }
 }
 
 // 创建仅包含项目内部依赖的配置

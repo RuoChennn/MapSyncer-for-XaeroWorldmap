@@ -8,6 +8,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.CommandPermissionHelper;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.DimensionArgument;
@@ -38,7 +39,7 @@ public class CacheGenerateCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, String prefix) {
         dispatcher.register(Commands.literal(prefix)
-                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .requires(CommandPermissionHelper.admin())
                 .executes(CacheGenerateCommand::showHelp)
                 .then(Commands.literal("help")
                         .executes(CacheGenerateCommand::showHelp))

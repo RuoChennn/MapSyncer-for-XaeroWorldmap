@@ -2,7 +2,7 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
 }
 
-version = mod_version + '-forge-1.20.1'
+version = mod_version + '-forge-' + g1_jar_suffix
 group = mod_group_id
 
 base {
@@ -59,6 +59,16 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_range_forge", g1_minecraft_range_forge
+
+    filesMatching("META-INF/mods.toml") {
+        expand "version": project.version,
+                "minecraft_range_forge": g1_minecraft_range_forge
+    }
 }
 
 publishing {

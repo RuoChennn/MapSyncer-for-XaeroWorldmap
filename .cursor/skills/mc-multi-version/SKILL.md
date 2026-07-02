@@ -70,7 +70,7 @@ implementation project(':libs:platform-api')
 2. **仅当调用 MC 版本敏感 API** 时改对应 `libs/mc-{锚点}`（四选一，勿复制到多个目录）。
 3. **禁止** 在 `mc-*/shared` 或 4 份重复文件里改同一逻辑（迁移完成后删除 `mc-*/shared`）。
 4. **Loader 差异**（事件注册、Payload、Cloth Config、mods.toml）只改对应 `mc-{版本}/{fabric|forge|neoforge}`。
-5. **维度 ID / ResourceKey** 统一走 `DimensionApiHelper`（或 `McResourceKeys`），禁止在大文件里直接 `.location()` / `.identifier()`。
+5. **维度 ID / ResourceKey** 统一走 `DimensionApiHelper`；**玩家 Server 访问** 走 `PlayerLevelApiHelper`；**命令权限** 走 `CommandPermissionHelper`。
 6. **客户端消息** 统一走 `ClientMessageHelper` 或 Platform；G4 的 API 差异不进 common。
 7. **新增 MC 子版本**：先查 `gradle/versions.toml`；同 G 组只改 glue 的 `minecraft` 依赖，不改 Java。
 8. **改完编译**：至少 `:libs:core:compileJava` + 受影响 glue 的 `:mc-*:{loader}:compileJava`；Forge 用 fastbuild 脚本。
@@ -80,8 +80,8 @@ implementation project(':libs:platform-api')
 - [x] 删除 `mc-*/shared/`，源码迁入对应 `libs/mc-*`
 - [x] 各 glue `build.gradle` 的 `srcDirs` 指向新路径
 - [x] `settings.gradle` / fastbuild settings 引用 `libs:mc-*`
-- [ ] 相同文件只保留一份（如 `CacheGenerateCommand` → common）
-- [ ] 更新 `gradle/versions.toml` includes/excludes
+- [x] 相同文件只保留一份（`CacheGenerateCommand`、`ServerSyncHandlerLogic` → common）
+- [x] 更新 `gradle/versions.toml` includes/excludes + JAR 版本范围
 
 ## 反模式
 

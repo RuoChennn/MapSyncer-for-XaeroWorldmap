@@ -2,7 +2,7 @@ plugins {
     id 'fabric-loom' version '1.9.2'
 }
 
-version = mod_version + '-fabric-1.20.1'
+version = mod_version + '-fabric-' + g1_jar_suffix
 group = mod_group_id
 
 base {
@@ -55,12 +55,12 @@ tasks.withType(JavaCompile).configureEach {
 
 processResources {
     inputs.property "version", project.version
-    inputs.property "minecraft_version", minecraft_1201_version
+    inputs.property "minecraft_range_fabric", g1_minecraft_range_fabric
     inputs.property "loader_version", "0.15.11"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
-                "minecraft_version": minecraft_1201_version,
+                "minecraft_range_fabric": g1_minecraft_range_fabric,
                 "loader_version": "0.15.11"
     }
 }
