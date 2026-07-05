@@ -32,26 +32,37 @@ public class SyncRequestPayload {
     private final int totalParts;
     private final boolean syncAll;
     private final String targetDimension;
+    private final boolean silent;
 
     public SyncRequestPayload(Map<String, ClientMeta> clientMeta) {
-        this(clientMeta, 0, 0, false, "");
+        this(clientMeta, 0, 0, false, "", false);
     }
 
     public SyncRequestPayload(Map<String, ClientMeta> clientMeta, int partIndex, int totalParts) {
-        this(clientMeta, partIndex, totalParts, false, "");
+        this(clientMeta, partIndex, totalParts, false, "", false);
     }
 
     public SyncRequestPayload(Map<String, ClientMeta> clientMeta, boolean syncAll, String targetDimension) {
-        this(clientMeta, 0, 0, syncAll, targetDimension);
+        this(clientMeta, 0, 0, syncAll, targetDimension, false);
+    }
+
+    public SyncRequestPayload(Map<String, ClientMeta> clientMeta, boolean syncAll, String targetDimension, boolean silent) {
+        this(clientMeta, 0, 0, syncAll, targetDimension, silent);
     }
 
     public SyncRequestPayload(Map<String, ClientMeta> clientMeta, int partIndex, int totalParts,
             boolean syncAll, String targetDimension) {
+        this(clientMeta, partIndex, totalParts, syncAll, targetDimension, false);
+    }
+
+    public SyncRequestPayload(Map<String, ClientMeta> clientMeta, int partIndex, int totalParts,
+            boolean syncAll, String targetDimension, boolean silent) {
         this.clientMeta = clientMeta;
         this.partIndex = partIndex;
         this.totalParts = totalParts;
         this.syncAll = syncAll;
         this.targetDimension = targetDimension != null ? targetDimension : "";
+        this.silent = silent;
     }
 
     public Map<String, ClientMeta> clientMeta() { return clientMeta; }
@@ -59,6 +70,7 @@ public class SyncRequestPayload {
     public int totalParts() { return totalParts; }
     public boolean syncAll() { return syncAll; }
     public String targetDimension() { return targetDimension; }
+    public boolean silent() { return silent; }
 
     /**
      * 估算单个 meta entry 的序列化字节数上限。
@@ -71,9 +83,13 @@ public class SyncRequestPayload {
      * 如果不需要拆分，返回只包含自身的数组。
      */
     public static SyncRequestPayload[] split(Map<String, ClientMeta> metaMap, boolean syncAll, String targetDimension) {
+        return split(metaMap, syncAll, targetDimension, false);
+    }
+
+    public static SyncRequestPayload[] split(Map<String, ClientMeta> metaMap, boolean syncAll, String targetDimension, boolean silent) {
         int maxEntriesPerPart = Math.max(1, MAX_PAYLOAD_BYTES / ESTIMATED_ENTRY_BYTES);
         if (metaMap.size() <= maxEntriesPerPart) {
-            return new SyncRequestPayload[] { new SyncRequestPayload(metaMap, syncAll, targetDimension) };
+            return new SyncRequestPayload[] { new SyncRequestPayload(metaMap, syncAll, targetDimension, silent) };
         }
 
         List<Map.Entry<String, ClientMeta>> entries = new ArrayList<>(metaMap.entrySet());
@@ -87,7 +103,7 @@ public class SyncRequestPayload {
             for (int j = start; j < end; j++) {
                 partMap.put(entries.get(j).getKey(), entries.get(j).getValue());
             }
-            parts[i] = new SyncRequestPayload(partMap, i, totalParts, syncAll, targetDimension);
+            parts[i] = new SyncRequestPayload(partMap, i, totalParts, syncAll, targetDimension, silent);
         }
         return parts;
     }

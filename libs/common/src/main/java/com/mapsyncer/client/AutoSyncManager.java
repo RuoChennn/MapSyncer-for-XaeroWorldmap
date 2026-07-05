@@ -140,6 +140,12 @@ public class AutoSyncManager {
      */
     public static boolean shouldAutoSyncOnJoin(long serverGenTime, int intervalMinutes) {
         if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
+            LOGGER.debug("Join auto-sync skipped: client auto-sync disabled");
+            return false;
+        }
+        // 服务端未启用增量更新时，不发起自动同步（即使有待处理的恢复）
+        if (serverUpdateMode == UpdateMode.DISABLED) {
+            LOGGER.debug("Join auto-sync skipped: server incremental updates disabled");
             return false;
         }
         if (hasPendingResume()) {
@@ -147,11 +153,14 @@ public class AutoSyncManager {
             return true;
         }
         if (serverUpdateMode == UpdateMode.SCHEDULED) {
+            LOGGER.debug("Join auto-sync: SCHEDULED mode, checking timestamps...");
             return shouldSyncScheduledOnJoin(serverGenTime);
         }
         if (intervalMinutes <= 0) {
+            LOGGER.debug("Join auto-sync skipped: intervalMinutes={}", intervalMinutes);
             return false;
         }
+        LOGGER.debug("Join auto-sync: TICK mode, checking conditions (serverGenTime={}, intervalMinutes={})...", serverGenTime, intervalMinutes);
         return shouldAutoSync(serverGenTime, intervalMinutes);
     }
 

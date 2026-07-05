@@ -131,7 +131,7 @@ public class SyncProgressTracker {
                 AutoSyncManager.clearPeriodicSync();
                 ClientMessageHelper.sendOverlayMessage(
                         ChatUtils.message("mapsyncer.autosync.periodic.complete", count, elapsed));
-            } else {
+            } else if (!AutoSyncManager.isActive()) {
                 ClientMessageHelper.sendChatMessage(ChatUtils.success("mapsyncer.sync.completed", count, elapsed));
             }
         }

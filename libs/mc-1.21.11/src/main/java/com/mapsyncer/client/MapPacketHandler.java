@@ -245,13 +245,14 @@ public class MapPacketHandler {
         // 注册服务端已安装通知处理器
         handler.registerServerInstalledHandler((payload, ctx) -> {
             ctx.enqueueWork(() -> {
+                try {
                 serverInstalled = true;
                 serverVersion = payload.version();
                 int intervalMinutes = payload.autoSyncIntervalMinutes();
                 AutoSyncManager.configureFromServer(
                         payload.updateMode(), intervalMinutes, payload.incrementalUpdateIntervalTicks());
-                LOGGER.info("Server has MapSyncer installed, version: {}, mode={}, joinAutoSync={}",
-                        serverVersion, payload.updateMode(), intervalMinutes > 0);
+                LOGGER.info("Server has MapSyncer installed, version: {}, mode={}, intervalMinutes={}, joinAutoSync={}",
+                        serverVersion, payload.updateMode(), intervalMinutes, intervalMinutes > 0);
 
                 // 显示自动同步状态
                 Object[] statusKey = AutoSyncManager.getStatusKey(intervalMinutes);
@@ -264,8 +265,11 @@ public class MapPacketHandler {
                         ChatUtils.prefix().append(ChatUtils.desc(key)), false);
                 }
 
-                if (AutoSyncManager.shouldAutoSyncOnJoin(
-                        payload.lastGenerationTimestamp(), intervalMinutes)) {
+                boolean shouldJoinSync = AutoSyncManager.shouldAutoSyncOnJoin(
+                        payload.lastGenerationTimestamp(), intervalMinutes);
+                LOGGER.info("shouldAutoSyncOnJoin result: {} (serverGenTime={}, intervalMinutes={})",
+                        shouldJoinSync, payload.lastGenerationTimestamp(), intervalMinutes);
+                if (shouldJoinSync) {
                     AutoSyncManager.schedule(() -> {
                         Minecraft.getInstance().execute(() -> {
                             if (Minecraft.getInstance().player != null
@@ -273,7 +277,7 @@ public class MapPacketHandler {
                                 Minecraft.getInstance().player.displayClientMessage(
                                     ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
                                 AutoSyncManager.markStarted();
-                                MapSyncerCommandLogic.executeSyncAll();
+                                MapSyncerCommandLogic.executeSyncAll(true);
                             }
                         });
                     }, 5);
@@ -285,9 +289,12 @@ public class MapPacketHandler {
                                     && !MapPacketHandler.isSyncInProgress()) {
                                 LOGGER.debug("TICK periodic auto-sync: requesting sync");
                                 AutoSyncManager.markPeriodicSync();
-                                MapSyncerCommandLogic.executeSyncAll();
+                                MapSyncerCommandLogic.executeSyncAll(true);
                             }
                         }));
+                } catch (Exception e) {
+                    LOGGER.error("Error processing ServerInstalledPayload", e);
+                }
             });
         });
 

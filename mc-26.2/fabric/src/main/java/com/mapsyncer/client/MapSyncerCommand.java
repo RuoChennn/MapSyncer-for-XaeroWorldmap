@@ -24,7 +24,7 @@ public class MapSyncerCommand {
                         .then(ClientCommands.literal("sync")
                                 .executes(ctx -> MapSyncerCommandLogic.executeSyncCurrentDim())
                                 .then(ClientCommands.literal("all")
-                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncAll()))
+                                        .executes(ctx -> MapSyncerCommandLogic.executeSyncAll(false)))
                                 .then(ClientCommands.argument("dimension", DimensionArgument.dimension())
                                         .suggests((ctx, builder) -> { MapSyncerCommandLogic.suggestDimensions(builder); return builder.buildFuture(); })
                                         .executes(ctx -> {

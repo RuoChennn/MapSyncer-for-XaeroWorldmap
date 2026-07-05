@@ -28,6 +28,7 @@ public final class SyncRequestWireCodec {
         if (!payload.syncAll()) {
             buf.writeUtf(payload.targetDimension());
         }
+        buf.writeBoolean(payload.silent());
     }
 
     public static SyncRequestPayload read(FriendlyByteBuf buf) {
@@ -61,6 +62,11 @@ public final class SyncRequestWireCodec {
             syncAll = true;
         }
 
-        return new SyncRequestPayload(metaMap, partIndex, totalParts, syncAll, targetDimension);
+        boolean silent = false;
+        if (buf.readableBytes() > 0) {
+            silent = buf.readBoolean();
+        }
+
+        return new SyncRequestPayload(metaMap, partIndex, totalParts, syncAll, targetDimension, silent);
     }
 }

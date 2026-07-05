@@ -149,14 +149,14 @@ public class MapSyncerCommandLogic {
      */
     public static int executeSyncDimension(String dimInput) {
         if ("all".equalsIgnoreCase(dimInput)) {
-            return executeSyncAll();
+            return executeSyncAll(false);
         }
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return 0;
 
         String dimensionId = resolveDimensionId(dimInput, mc.level);
-        sendSyncRequest(mc, dimensionId, false);
+        sendSyncRequest(mc, dimensionId, false, false);
 
         return 1;
     }
@@ -164,11 +164,11 @@ public class MapSyncerCommandLogic {
     /**
      * 同步所有维度。
      */
-    public static int executeSyncAll() {
+    public static int executeSyncAll(boolean silent) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
-        sendSyncRequest(mc, "all", true);
+        sendSyncRequest(mc, "all", true, silent);
         return 1;
     }
 
@@ -181,7 +181,7 @@ public class MapSyncerCommandLogic {
 
         ResourceKey<Level> currentDim = mc.level.dimension();
         String dimensionId = currentDim.identifier().toString();
-        sendSyncRequest(mc, dimensionId, false);
+        sendSyncRequest(mc, dimensionId, false, false);
 
         return 1;
     }
@@ -226,7 +226,7 @@ public class MapSyncerCommandLogic {
     /**
      * 发送同步请求到服务端。
      */
-    public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
+    public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll, boolean silent) {
         if (MapPacketHandler.isSyncInProgress() || ClientHashManager.isComputingMeta()) {
             if (mc.player != null) {
                 mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.in_progress"), false);
@@ -269,7 +269,7 @@ public class MapSyncerCommandLogic {
         }
 
         if (immediateMeta != null) {
-            dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, immediateMeta);
+            dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, immediateMeta, silent);
             return;
         }
 
@@ -289,13 +289,13 @@ public class MapSyncerCommandLogic {
                         return;
                     }
                     LOGGER.debug("Sync hash scan complete: {} entries", result.meta().size());
-                    dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, result.meta());
+                    dispatchSyncRequest(mc, dimensionId, syncAll, serverDir, tsCache, xaeroDim, result.meta(), silent);
                 }));
     }
 
     private static void dispatchSyncRequest(Minecraft mc, String dimensionId, boolean syncAll,
             Path serverDir, ClientTimestampCache tsCache, String xaeroDim,
-            Map<String, ClientMeta> metaMap) {
+            Map<String, ClientMeta> metaMap, boolean silent) {
         if (MapPacketHandler.isSyncInProgress()) {
             if (mc.player != null) {
                 mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.in_progress"), false);
@@ -317,7 +317,7 @@ public class MapSyncerCommandLogic {
         }
 
         SyncRequestPayload[] parts = SyncRequestPayload.split(metaMap, syncAll,
-                syncAll ? "" : (xaeroDim != null ? xaeroDim : ""));
+                syncAll ? "" : (xaeroDim != null ? xaeroDim : ""), silent);
         for (SyncRequestPayload part : parts) {
             NetworkManager.sendToServer(part);
         }

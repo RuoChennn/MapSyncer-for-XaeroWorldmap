@@ -614,10 +614,11 @@ public class ServerSyncHandlerLogic {
         Map<String, ClientMeta> clientMeta = payload.clientMeta();
         boolean syncAll = payload.syncAll();
         String targetDimension = payload.targetDimension();
+        boolean silent = payload.silent();
 
         // 将耗时操作移到异步线程执行，避免阻塞主线程
         Thread syncThread = new Thread(() -> processSyncAsync(server, playerId, clientMeta, syncAll, targetDimension,
-                startDimension, syncVersion, startBlockX, startBlockZ, viewDistanceRegions, worldId),
+                startDimension, syncVersion, startBlockX, startBlockZ, viewDistanceRegions, worldId, silent),
                 "mapsyncer-sync-" + playerId);
         syncThread.setDaemon(true);
         syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
@@ -682,7 +683,7 @@ public class ServerSyncHandlerLogic {
     private static void processSyncAsync(MinecraftServer server, UUID playerId,
             Map<String, ClientMeta> clientMeta, boolean syncAll, String targetDimension,
             ResourceKey<Level> startDimension, int syncVersion,
-            int startBlockX, int startBlockZ, int viewDistanceRegions, int worldId) {
+            int startBlockX, int startBlockZ, int viewDistanceRegions, int worldId, boolean silent) {
 
         LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
 
@@ -840,7 +841,7 @@ public class ServerSyncHandlerLogic {
 
         if (total == 0) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate"));
+                player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
                 finalizePlayerSync(playerId);
@@ -851,8 +852,12 @@ public class ServerSyncHandlerLogic {
         sortByViewDistancePriority(regionsToSync, startBlockX, startBlockZ, viewDistanceRegions);
 
         final int initialTotal = total;
+        final int initialHashMatch = hashMatchCount;
+        final int initialTimestampSkip = timestampSkipCount;
         enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start", initialTotal));
+                if (!silent) {
+                    player.sendSystemMessage(ChatUtils.message("mapsyncer.server.sync_start", initialTotal, initialHashMatch, initialTimestampSkip));
+                }
                 NetworkManager.sendToPlayer(player,
                         new SyncProgressPayload(0, initialTotal, "Sync started"));
         });
@@ -929,7 +934,9 @@ public class ServerSyncHandlerLogic {
                             new SyncResponsePayload(finalBatch, true, worldId, completeStatus));
                     NetworkManager.sendToPlayer(player,
                             new SyncProgressPayload(finalTotal, finalTotal, "completed"));
-                    sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
+                    if (!silent) {
+                        sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
+                    }
                     finalizePlayerSync(playerId);
                 });
             } else {
@@ -963,7 +970,9 @@ public class ServerSyncHandlerLogic {
                                 new SyncResponsePayload(lastChunk, true, worldId, completeStatus));
                         NetworkManager.sendToPlayer(player,
                                 new SyncProgressPayload(finalTotal, finalTotal, "completed"));
-                        sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
+                        if (!silent) {
+                            sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
+                        }
                         finalizePlayerSync(playerId);
                     });
                 }
@@ -972,7 +981,9 @@ public class ServerSyncHandlerLogic {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
                 NetworkManager.sendToPlayer(player,
                         new SyncProgressPayload(finalTotal, finalTotal, "completed"));
-                sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
+                if (!silent) {
+                    sendSyncCompleteMessage(player, finalSentCount, finalFailedCount, finalTotal);
+                }
                 finalizePlayerSync(playerId);
             });
         }
