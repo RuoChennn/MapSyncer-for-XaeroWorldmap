@@ -393,9 +393,6 @@ public class MapPacketHandler {
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.finishUptodate();
-                if (AutoSyncManager.isActive()) {
-                    AutoSyncManager.markComplete();
-                }
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
                 }

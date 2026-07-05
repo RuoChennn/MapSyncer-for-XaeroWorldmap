@@ -841,9 +841,7 @@ public class ServerSyncHandlerLogic {
 
         if (total == 0) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                if (!silent) {
-                    player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
-                }
+                player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
                 finalizePlayerSync(playerId);
