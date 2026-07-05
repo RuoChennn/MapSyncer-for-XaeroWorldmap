@@ -143,10 +143,12 @@ public class SyncProgressTracker {
         stopTimeoutChecker();
         if (AutoSyncManager.isPeriodicSync()) {
             AutoSyncManager.clearPeriodicSync();
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                ClientMessageHelper.sendOverlayMessage(
-                        ChatUtils.message("mapsyncer.autosync.periodic.uptodate"));
+            if (!AutoSyncManager.isActive()) {
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.player != null) {
+                    ClientMessageHelper.sendOverlayMessage(
+                            ChatUtils.message("mapsyncer.autosync.periodic.uptodate"));
+                }
             }
         }
         setOverlayActive(false);
