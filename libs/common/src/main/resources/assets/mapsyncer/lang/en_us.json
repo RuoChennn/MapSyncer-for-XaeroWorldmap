@@ -47,6 +47,9 @@
   "mapsyncer.help.server.incremental_off": "/mapsyncer incremental off - Disable incremental updates",
   "mapsyncer.help.server.incremental_tick": "/mapsyncer incremental tick [interval] - Set TICK mode",
   "mapsyncer.help.server.incremental_scheduled": "/mapsyncer incremental scheduled [hour] [min] - Set scheduled mode",
+  "mapsyncer.help.server.reloadconfig": "/mapsyncer reloadconfig - Reload server configuration from disk",
+  "mapsyncer.command.config_reloaded": "Server configuration reloaded successfully",
+  "mapsyncer.command.config_reload_failed": "Failed to reload server configuration, check server log for details",
 
   "mapsyncer.chunk.paused": "Chunk updates paused...",
   "mapsyncer.chunk.resumed": "Chunk updates resumed",

@@ -1,6 +1,7 @@
 package com.mapsyncer.platform.impl;
 
 import com.mapsyncer.config.DimensionScanConfig;
+import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import com.mapsyncer.platform.BlockProperties;
@@ -234,6 +235,11 @@ public class ForgeLegacyPlatform implements Platform {
     @Override
     public void saveConfig() {
         ModConfig.SERVER_SPEC.save();
+    }
+
+    @Override
+    public void reloadConfig() {
+        DimensionConfigParser.invalidateCache();
     }
 
     @Override

@@ -203,6 +203,14 @@ public interface Platform {
     void saveConfig();
 
     /**
+     * 从磁盘重新加载服务端配置并清除内部缓存。
+     *
+     * <p>Fabric 平台会重新读取 properties 文件；
+     * NeoForge/Forge 平台仅清除缓存（加载器已自动重载 TOML）。</p>
+     */
+    void reloadConfig();
+
+    /**
      * 获取维度配置列表（原始字符串格式）
      *
      * @return 维度配置字符串列表

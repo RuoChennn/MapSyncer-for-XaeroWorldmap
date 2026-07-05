@@ -41,8 +41,6 @@ public class CacheGenerateCommand {
         dispatcher.register(Commands.literal(prefix)
                 .requires(CommandPermissionHelper.admin())
                 .executes(CacheGenerateCommand::showHelp)
-                .then(Commands.literal("help")
-                        .executes(CacheGenerateCommand::showHelp))
                 .then(Commands.literal("generate")
                         .executes(CacheGenerateCommand::generateAll)
                         .then(Commands.argument("dimension", DimensionArgument.dimension())
@@ -66,11 +64,26 @@ public class CacheGenerateCommand {
                                 .then(Commands.argument("hour", IntegerArgumentType.integer(0, 23))
                                         .executes(CacheGenerateCommand::setScheduledTimeDefaultMinute)
                                         .then(Commands.argument("minute", IntegerArgumentType.integer(0, 59))
-                                                .executes(CacheGenerateCommand::setScheduledTime))))));
+                                                .executes(CacheGenerateCommand::setScheduledTime)))))
+                .then(Commands.literal("reloadconfig")
+                        .executes(CacheGenerateCommand::reloadConfig))
+                .then(Commands.literal("help")
+                        .executes(CacheGenerateCommand::showHelp)));
     }
 
     private static int showHelp(CommandContext<CommandSourceStack> ctx) {
         CacheCommandHandler.showHelp(component -> ctx.getSource().sendSuccess(() -> component, false));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int reloadConfig(CommandContext<CommandSourceStack> ctx) {
+        if (CacheCommandHandler.reloadConfig()) {
+            ctx.getSource().sendSuccess(
+                    () -> ChatUtils.success("mapsyncer.command.config_reloaded"), false);
+        } else {
+            ctx.getSource().sendFailure(
+                    ChatUtils.error("mapsyncer.command.config_reload_failed"));
+        }
         return Command.SINGLE_SUCCESS;
     }
 

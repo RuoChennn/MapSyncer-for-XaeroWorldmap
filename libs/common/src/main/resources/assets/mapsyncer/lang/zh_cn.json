@@ -47,6 +47,9 @@
   "mapsyncer.help.server.incremental_off": "/mapsyncer incremental off - 禁用增量更新",
   "mapsyncer.help.server.incremental_tick": "/mapsyncer incremental tick [间隔] - 设置 TICK 模式",
   "mapsyncer.help.server.incremental_scheduled": "/mapsyncer incremental scheduled [时] [分] - 设置定时模式",
+  "mapsyncer.help.server.reloadconfig": "/mapsyncer reloadconfig - 从磁盘重新加载服务端配置",
+  "mapsyncer.command.config_reloaded": "服务端配置已重新加载",
+  "mapsyncer.command.config_reload_failed": "服务端配置重新加载失败，请查看服务端日志",
 
   "mapsyncer.chunk.paused": "区块更新已暂停...",
   "mapsyncer.chunk.resumed": "区块更新已恢复",

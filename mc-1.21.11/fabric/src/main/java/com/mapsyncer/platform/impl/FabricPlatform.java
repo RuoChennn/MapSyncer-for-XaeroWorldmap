@@ -238,6 +238,11 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
+    public void reloadConfig() {
+        ModConfig.SERVER().reload();
+    }
+
+    @Override
     public java.util.List<String> getDimensionConfigs() {
         return ModConfig.SERVER().getDimensionConfigs();
     }

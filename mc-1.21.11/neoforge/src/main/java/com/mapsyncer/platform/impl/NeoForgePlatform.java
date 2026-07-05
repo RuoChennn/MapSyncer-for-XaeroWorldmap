@@ -5,6 +5,7 @@ import com.mapsyncer.platform.BlockProperties;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.server.BlockPropertyResolver;
@@ -228,6 +229,11 @@ public class NeoForgePlatform implements Platform {
     @Override
     public void saveConfig() {
         ModConfig.SERVER_SPEC.save();
+    }
+
+    @Override
+    public void reloadConfig() {
+        DimensionConfigParser.invalidateCache();
     }
 
     @Override

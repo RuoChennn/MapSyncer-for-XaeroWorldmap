@@ -7,6 +7,7 @@ import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
+import com.mapsyncer.util.ModLogConfig;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -41,6 +42,7 @@ public class CacheCommandHandler {
         sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_off"));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_tick"));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.reloadconfig"));
     }
 
     /**
@@ -295,6 +297,21 @@ public class CacheCommandHandler {
      */
     public static int getScheduledUpdateMinute() {
         return PlatformManager.getPlatform().getScheduledUpdateMinute();
+    }
+
+    /**
+     * 从磁盘重新加载服务端配置。
+     */
+    public static boolean reloadConfig() {
+        try {
+            PlatformManager.getPlatform().reloadConfig();
+            ModLogConfig.applyDebugLogging();
+            LOGGER.info("Server configuration reloaded");
+            return true;
+        } catch (Exception e) {
+            LOGGER.error("Failed to reload server configuration", e);
+            return false;
+        }
     }
 
     /**

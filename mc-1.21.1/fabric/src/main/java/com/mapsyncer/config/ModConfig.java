@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.Properties;
 
+import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ScanMode;
 
@@ -408,6 +409,14 @@ public class ModConfig {
             } catch (Exception e) {
                 LOGGER.warn("Failed to load config, using defaults: {}", e.getMessage());
             }
+        }
+
+        /**
+         * 从磁盘重新加载配置。
+         */
+        public void reload() {
+            load();
+            DimensionConfigParser.invalidateCache();
         }
 
         /**
