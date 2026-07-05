@@ -27,9 +27,9 @@ public final class DimensionConfigParser {
 
     public static List<String> getDefaultDimensionConfigStrings() {
         List<String> defaults = new ArrayList<>(3);
-        defaults.add("minecraft:overworld|SURFACE|true|false|-64|384|384");
-        defaults.add("minecraft:the_nether|SURFACE,63|false|true|0|256|128");
-        defaults.add("minecraft:the_end|SURFACE|false|false|0|256|256");
+        defaults.add("minecraft:overworld|SURFACE");
+        defaults.add("minecraft:the_nether|SURFACE,63");
+        defaults.add("minecraft:the_end|SURFACE");
         return defaults;
     }
 
@@ -94,18 +94,6 @@ public final class DimensionConfigParser {
 
     private static DimensionScanConfig finishParse(String dimension, LayerPlan layerPlan,
             DimensionTypeInfo dimTypeInfo, String[] parts, int dimTypeStartIndex, String configStr) {
-        if (parts.length >= dimTypeStartIndex + 5) {
-            try {
-                boolean hasSkylight = Boolean.parseBoolean(parts[dimTypeStartIndex].trim());
-                boolean hasCeiling = Boolean.parseBoolean(parts[dimTypeStartIndex + 1].trim());
-                int minY = Integer.parseInt(parts[dimTypeStartIndex + 2].trim());
-                int height = Integer.parseInt(parts[dimTypeStartIndex + 3].trim());
-                int logicalHeight = Integer.parseInt(parts[dimTypeStartIndex + 4].trim());
-                dimTypeInfo = new DimensionTypeInfo(hasSkylight, hasCeiling, minY, height, logicalHeight);
-            } catch (NumberFormatException e) {
-                LOGGER.warn("Invalid dim_type_info in dimension config [{}], using inferred type", configStr);
-            }
-        }
         return new DimensionScanConfig(dimension, layerPlan, dimTypeInfo);
     }
 

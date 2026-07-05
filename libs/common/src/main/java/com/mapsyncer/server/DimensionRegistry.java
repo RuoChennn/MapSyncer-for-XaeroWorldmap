@@ -177,16 +177,7 @@ public class DimensionRegistry {
      * @return 配置字符串
      */
     private static String configToString(DimensionScanConfig config) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(config.dimension());
-        sb.append("|").append(config.layerPlan().toConfigString());
-
-        // 添加维度类型信息
-        if (config.dimTypeInfo() != null) {
-            sb.append("|").append(config.dimTypeInfo().toConfigString());
-        }
-
-        return sb.toString();
+        return config.dimension() + "|" + config.layerPlan().toConfigString();
     }
 
     /**

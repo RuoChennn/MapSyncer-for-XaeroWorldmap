@@ -525,17 +525,15 @@ public class ModConfig {
                 sb.append("defaultCaveStart=" + defaultCaveStart + "\n");
                 sb.append("\n");
                 sb.append("# Per-dimension scan configuration list\n");
-                sb.append("# Format: \"dimension|layerPlan|dim_type_info\"\n");
+                sb.append("# Format: \"dimension|layerPlan\"\n");
                 sb.append("# layerPlan: SURFACE, ALL, explicit Y (e.g. 63), or combos (e.g. SURFACE,63)\n");
-                sb.append("# dim_type_info: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
-                sb.append("# Example: \"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"\n");
+                sb.append("# Example: \"minecraft:the_nether|SURFACE,63\"\n");
                 sb.append("# Legacy \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" still accepted\n");
                 sb.append("#\n");
                 sb.append("# 维度扫描配置列表\n");
-                sb.append("# 格式：\"dimension|layerPlan|dim_type_info\"\n");
+                sb.append("# 格式：\"dimension|layerPlan\"\n");
                 sb.append("# layerPlan：SURFACE、ALL、显式 Y（如 63）或组合（如 SURFACE,63）\n");
-                sb.append("# dim_type_info：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"\n");
-                sb.append("# 示例：\"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"\n");
+                sb.append("# 示例：\"minecraft:the_nether|SURFACE,63\"\n");
                 sb.append("# 旧格式 \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" 仍可读取\n");
                 sb.append("dimensionConfigs=" + String.join(";", dimensionConfigs) + "\n");
 
