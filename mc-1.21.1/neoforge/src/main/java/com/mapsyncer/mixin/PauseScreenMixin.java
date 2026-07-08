@@ -4,6 +4,8 @@ import com.mapsyncer.client.PreDisconnectHooks;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -18,9 +20,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PauseScreen.class)
 public class PauseScreenMixin {
 
+    @Unique
+    private static boolean mapsyncer$runningOriginalDisconnect;
+
+    @Shadow
+    private void onDisconnect() {
+        throw new AssertionError();
+    }
+
     @Inject(method = "onDisconnect", at = @At("HEAD"), cancellable = true)
     private void mapsyncer$interceptDisconnect(CallbackInfo ci) {
-        Runnable originalDisconnect = () -> Minecraft.getInstance().disconnect();
+        if (mapsyncer$runningOriginalDisconnect) {
+            return;
+        }
+        Runnable originalDisconnect = () -> {
+            mapsyncer$runningOriginalDisconnect = true;
+            try {
+                this.onDisconnect();
+            } finally {
+                mapsyncer$runningOriginalDisconnect = false;
+            }
+        };
         if (PreDisconnectHooks.tryStart(originalDisconnect)) {
             ci.cancel();
         }

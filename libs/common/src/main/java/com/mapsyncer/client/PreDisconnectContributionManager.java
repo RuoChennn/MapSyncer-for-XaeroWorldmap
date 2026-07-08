@@ -7,6 +7,7 @@ import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.platform.PlatformManager;
+import net.minecraft.client.Minecraft;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -254,7 +255,16 @@ public final class PreDisconnectContributionManager {
         activeServerSessionId = -1;
         disconnectAction = null;
         if (action != null) {
+            runDisconnectOnClientThread(action);
+        }
+    }
+
+    private static void runDisconnectOnClientThread(Runnable action) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.isSameThread()) {
             action.run();
+        } else {
+            mc.execute(action);
         }
     }
 }

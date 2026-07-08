@@ -82,13 +82,14 @@ public class PreDisconnectSyncScreen extends Screen {
         // 1.20.1 的 renderBackground 仅接收 GuiGraphics 单参数。
         renderBackground(graphics);
 
+        // 先绘制按钮等控件，再把标题和状态文字绘制到最上层。
+        super.render(graphics, mouseX, mouseY, partialTick);
+
         // 标题。
         graphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
 
         // 状态文字。
         graphics.drawCenteredString(this.font, statusComponent, this.width / 2, this.height / 2 + STATUS_Y_OFFSET, 0xCCCCCC);
-
-        super.render(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override

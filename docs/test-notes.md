@@ -192,15 +192,30 @@
 | Jar 产物烟测 | 4 个 Fabric、3 个 Forge、3 个 NeoForge 发布 jar | ✅ | 检查 loader 元数据、`mapsyncer.mixins.json`；Forge jar 额外检查 `mapsyncer.refmap.json` |
 | Dev-client 启动前烟测 | 默认 settings 下 `configureClientLaunch` / `prepareClientRun` | ⚠️ | 批量任务 120 秒无输出超时；单独 1.20.1 Fabric `configureClientLaunch` 60 秒无输出超时；`gradlew help` 正常，需后续真实客户端环境继续排查 |
 
+### 2026-07-09 退出前同步修复验证记录
+
+| 验证项 | 覆盖范围 | 结果 | 备注 |
+|--------|----------|------|------|
+| 退出动作线程修复 | `PreDisconnectContributionManager.finish()` | ✅ | 贡献结束后的原始断开动作统一通过 Minecraft 客户端线程执行，避免 RenderSystem wrong-thread 崩溃 |
+| 原版退出流程回放 | 1.20.1 Fabric/Forge、1.21.1 Fabric/Forge/NeoForge | ✅ | 这些版本的暂停菜单有完整 `onDisconnect()` 收尾流程，Mixin 回放原方法，保留 `level.disconnect()`、保存界面、标题/多人界面跳转 |
+| 新版本退出流程核对 | 1.21.11 Fabric/Forge/NeoForge、26.1 Fabric/NeoForge | ✅ | 反编译确认目标 lambda 只调用 `disconnectFromWorld(ClientLevel.DEFAULT_QUIT_MESSAGE)`，无需额外回放 `onDisconnect()` |
+| 等待界面文字层级 | 1.20.1、1.21.1、1.21.11 shared screen | ✅ | 文本绘制移到 `super.render()` 之后，避免被按钮/背景后续渲染覆盖导致失焦感 |
+| 主 Gradle 构建 | libs、1.20.1 Fabric、1.21.1 Fabric、1.21.1 NeoForge、1.21.11 NeoForge、26.1 NeoForge | ✅ | `build -x test` 通过 |
+| Forge 独立构建 | 1.20.1 Forge、1.21.1 Forge、1.21.11 Forge | ✅ | 使用 Gradle 8.9 + `scripts/fastbuild/settings-forge.gradle` 临时 settings 构建通过，settings 已还原 |
+| Fabric 隔离构建 | 1.21.11 Fabric、26.1 Fabric | ✅ | 使用 `settings-12111.gradle`、`settings-26.gradle` 临时 settings 构建通过，settings 已还原 |
+| Jar 产物烟测 | 4 个 Fabric、3 个 Forge、3 个 NeoForge 发布 jar | ✅ | 检查 loader 元数据、`mapsyncer.mixins.json`、`PauseScreenMixin`、`PreDisconnectHooks`、等待界面与管理器 class；Forge jar 额外检查 `mapsyncer.refmap.json` |
+| 1.21.1 NeoForge 真实客户端烟测 | `D:\games\MC\.minecraft\versions\1.21.1-NeoForge_21.1.235` | ✅ | 用户确认回放原版退出流程后不再崩溃，读秒后能正常退出；该目录作为后续手动验收入口 |
+| 线上多人贡献流程 | 真实多人服务器 + 服务端允许贡献 | ⬜ | 仍需在可连接服务器环境中验证等待、取消、跳过、超时、贡献完成后退出 |
+
 ### 测试环境信息
 
 | 项目 | 信息 |
 |------|------|
-| Minecraft 版本 | |
-| NeoForge 版本 | |
+| Minecraft 版本 | 1.21.1 |
+| NeoForge 版本 | 21.1.235 |
 | Xaero's World Map 版本 | |
 | MapSyncer 版本 | |
-| 服务端类型 | |
+| 服务端类型 | 本地真实客户端测试目录：`D:\games\MC\.minecraft\versions\1.21.1-NeoForge_21.1.235` |
 | 其他安装的 Mod | |
 
 ---
@@ -249,6 +264,7 @@
 | 聊天消息风格 | v4.2 | 统一[MapSyncer]前缀格式 |
 | 代码重构清理 | v4.5 | 统一工具类，清理弃用方法，简化映射逻辑 |
 | 视野范围保护 | v4.6 | 同步当前维度时跳过视野范围内区块，保留本地实时更新 |
+| 退出前同步崩溃与黑屏 | 当前双向同步分支 | 原始断开动作切回客户端线程执行，并在 1.20.1/1.21.1 回放原版 `onDisconnect()` 完整退出流程 |
 
 ---
 
