@@ -7,6 +7,7 @@
   "mapsyncer.sync.cancelled": "同步已取消",
   "mapsyncer.sync.timeout": "同步超时，请重试",
   "mapsyncer.sync.server_not_installed": "服务端没有安装 MapSyncer",
+  "mapsyncer.sync.disabled": "客户端配置已禁用地图同步。",
   "mapsyncer.sync.unloading_regions": "卸载 %d 个视野范围内区域准备更新",
 
   "mapsyncer.command.no_map_dir": "无法确定地图目录，您是否已连接到服务器？",

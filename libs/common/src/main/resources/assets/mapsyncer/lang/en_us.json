@@ -7,6 +7,7 @@
   "mapsyncer.sync.cancelled": "Sync cancelled",
   "mapsyncer.sync.timeout": "Sync timed out, please try again",
   "mapsyncer.sync.server_not_installed": "Server doesn't have MapSyncer installed",
+  "mapsyncer.sync.disabled": "Map sync is disabled in client config.",
   "mapsyncer.sync.unloading_regions": "Unloading %d view distance regions for update",
 
   "mapsyncer.command.no_map_dir": "Unable to determine map directory. Are you connected to a server?",

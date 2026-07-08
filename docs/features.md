@@ -135,6 +135,17 @@ mc-26.1/            MC 26.1 版本
 3. 哈希不匹配 + 客户端时间戳较新 → 跳过（客户端更新）
 4. 客户端无元数据 → 同步（新区域）
 
+### 双向同步与贡献规则
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 客户端同步模式 | 🧪 | `DISABLED` 完全禁用同步，`RECEIVE_ONLY` 只接收服务端数据，`BIDIRECTIONAL` 在接收后贡献本地更新区域 |
+| 先分发后贡献 | 🧪 | 每次服务端同步先完成权威地图分发，再请求允许贡献的客户端上传较新区域 |
+| 双端判新 | 🧪 | 客户端只上传哈希不同且逻辑时间戳晚于服务端基线的区域；服务端再次校验哈希、时间戳、路径和请求基线 |
+| 增量贡献 | 🧪 | 贡献数据沿用同步分片路径，只传有变化的区域，不因部分区域变化触发全量上传 |
+| 逻辑时间戳 | 🧪 | 客户端优先使用 `sync_timestamps.cache` 中与当前哈希匹配的时间戳，避免下载后的文件修改时间被误当作贡献时间 |
+| 贡献队列 | 🧪 | 多名玩家同时触发贡献时按队列串行处理，会话结束后进入冷却期，避免竞争写入服务端缓存 |
+
 ---
 
 ## 四、地图生成系统
@@ -165,6 +176,8 @@ mc-26.1/            MC 26.1 版本
 | 配置项 | 类型 | 默认值 | 范围 | 说明 |
 |--------|------|--------|------|------|
 | `hashThreads` | int | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
+| `clientSyncMode` | ClientSyncMode | RECEIVE_ONLY | DISABLED/RECEIVE_ONLY/BIDIRECTIONAL | 客户端是否禁用同步、只接收，或参与双向贡献 |
+| `backgroundSyncIntervalMinutes` | int | 60 | 0-1440 | 在线时后台检查间隔，0 表示只在加入游戏或手动命令时检查 |
 
 ### 服务端配置
 
@@ -176,6 +189,9 @@ mc-26.1/            MC 26.1 版本
 | `maxConcurrentRegions` | int | 4 | 1-16 | 并发区域转换线程数 |
 | `maxSyncPacketSize` | int | 262144 (256KB) | 64KB-1MB | 单包最大字节数 |
 | `syncSpeedLimitKBps` | int | 1024 (1MiB/s) | 0-10240 | 同步速率限制（0=不限） |
+| `contributionScope` | ContributionScope | WHITELIST | DISABLED/ALL/OPS/WHITELIST/OPS_AND_WHITELIST | 允许哪些客户端向服务端贡献较新的地图区域 |
+| `contributionQueueCooldownSeconds` | int | 10 | 0-3600 | 每个贡献会话结束后的冷却秒数 |
+| `maxContributionQueueSize` | int | 32 | 1-1024 | 服务端贡献请求等待队列容量 |
 
 **增量更新设置:**
 
@@ -201,6 +217,8 @@ mc-26.1/            MC 26.1 版本
 - 地狱: CAVE, hasSkylight=false, hasCeiling=true, minY=0, height=256
 - 末地: SURFACE, hasSkylight=false, hasCeiling=false, minY=0, height=256
 
+**贡献白名单:** `world/serverconfig/mapsyncer-contributors.json`。文件首次启动时自动创建为空白 JSON，按世界独立记录允许贡献的玩家 UUID，不与加载器通用配置混合。
+
 ### 缓存常量 (`CacheConfig`)
 
 | 常量 | 值 | 说明 |
@@ -223,7 +241,7 @@ mc-26.1/            MC 26.1 版本
 
 ## 六、网络协议
 
-6 种 Payload，全部平台无关:
+10 种 Payload，全部平台无关:
 
 | Payload | 方向 | 说明 |
 |---------|------|------|
@@ -233,6 +251,10 @@ mc-26.1/            MC 26.1 版本
 | `ChunkMapData` | 嵌入 SyncResponse | 单区域压缩地图数据，含 caveLayer 字段 |
 | `SyncProgressPayload` | 服务端→客户端 | 进度更新（已处理/总数/状态），客户端以 Action Bar 形式显示 |
 | `ClientMeta` | 嵌入 SyncRequest | 区域元数据: 秒级时间戳 + CRC32 哈希 |
+| `ContributionRequestPayload` | 服务端→客户端 | 服务端列出可贡献候选区域及当前权威基线 |
+| `ContributionDataPayload` | 客户端→服务端 | 客户端上传单个较新区域的分片数据及观察到的服务端基线 |
+| `ContributionCompletePayload` | 客户端→服务端 | 客户端通知本次贡献发送完成、禁用或无本地目录 |
+| `ContributionResultPayload` | 服务端→客户端 | 服务端返回贡献接受、拒绝数量和状态 |
 
 ### 握手保护
 
@@ -263,6 +285,9 @@ mc-26.1/            MC 26.1 版本
 ├── namespace$path/                 # Mod 维度
 ├── caves/<layer>/                  # 洞穴模式输出
 └── generation_cache.properties     # 时间戳+哈希缓存
+
+服务端: <world>/serverconfig/
+└── mapsyncer-contributors.json     # 贡献白名单（UUID，按世界独立）
 
 客户端: <client>/xaero/world-map/Multiplayer_<serverIP>/  # 新版统一路径（优先）
        <client>/XaeroWorldMap/Multiplayer_<serverIP>/      # 旧版路径（兼容 fallback）
@@ -353,3 +378,5 @@ mc-26.1/            MC 26.1 版本
 | 多线程哈希 | ✅ | ForkJoinPool 并行计算 CRC32，线程数可配置 |
 | Xaero 路径兼容 | ✅ | 优先新版 `xaero/world-map`，旧版 `XaeroWorldMap` 目录存在时自动 fallback |
 | 单机目录命名 | ✅ | 对齐 Xaero 单机目录命名，使用存档文件夹名 |
+| 后台巡检 | 🧪 | `backgroundSyncIntervalMinutes` 大于 0 且允许接收时，在线周期触发元数据检查 |
+| 贡献上传 | 🧪 | `BIDIRECTIONAL` 模式下响应服务端贡献请求，仅上传本地判定为较新的区域 |
