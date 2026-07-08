@@ -182,14 +182,14 @@ public class ClientHashManager {
 
                                     TimestampHashEntry cached = cachedTimestamps.get(relativePath);
                                     long timestampSeconds;
-                                    if (cached != null) {
+                                    if (cached != null && cached.hash().equals(hash)) {
                                         timestampSeconds = cached.timestampSeconds();
                                         LOGGER.debug("Region {}: using cached ts={}s, hash={}",
                                                 relativePath, timestampSeconds, hash);
                                     } else {
                                         long timestampMillis = getFileModificationTime(zipPath);
                                         timestampSeconds = timestampMillis / 1000;
-                                        LOGGER.debug("Region {}: using file ts={}s, hash={} (no cache)",
+                                        LOGGER.debug("Region {}: using file ts={}s, hash={} (cache missing or hash changed)",
                                                 relativePath, timestampSeconds, hash);
                                     }
 
