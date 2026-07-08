@@ -2,6 +2,9 @@ modLoader="javafml"
 loaderVersion="[4,)"
 license="GPL-3.0"
 
+[[mixins]]
+config="mapsyncer.mixins.json"
+
 [[mods]]
 modId="mapsyncer"
 version="1.0.3"

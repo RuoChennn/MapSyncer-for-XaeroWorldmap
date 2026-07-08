@@ -13,7 +13,9 @@
     "main": ["com.mapsyncer.MapSyncer"],
     "client": ["com.mapsyncer.MapSyncerClient"]
   },
-  "mixins": [],
+  "mixins": [
+    "mapsyncer.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.15.0",
     "minecraft": ">=1.20 <1.20.2",

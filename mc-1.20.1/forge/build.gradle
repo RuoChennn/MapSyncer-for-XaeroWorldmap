@@ -50,6 +50,10 @@ sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/platform-api/src/mai
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_1201_version}-${forge_1201_version}"
 
+    // Mixin annotation processor and compile-time dependency
+    annotationProcessor "org.spongepowered:mixin:0.8.5:processor"
+    compileOnly "org.spongepowered:mixin:0.8.5"
+
     // 强制 jopt-simple 版本
     implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
 }

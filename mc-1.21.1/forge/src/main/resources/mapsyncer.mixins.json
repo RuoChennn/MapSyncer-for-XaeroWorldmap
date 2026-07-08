@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "com.mapsyncer.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "mapsyncer.refmap.json",
+  "client": [
+    "PauseScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

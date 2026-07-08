@@ -54,6 +54,10 @@ dependencies {
     // Minecraft Forge 1.21.11 (Forge 61.x)
     minecraft "net.minecraftforge:forge:1.21.11-61.0.0"
 
+    // Mixin annotation processor and compile-time dependency
+    annotationProcessor "org.spongepowered:mixin:0.8.5:processor"
+    compileOnly "org.spongepowered:mixin:0.8.5"
+
     // 强制 jopt-simple 版本（Mojang 使用的版本）
     implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
 
