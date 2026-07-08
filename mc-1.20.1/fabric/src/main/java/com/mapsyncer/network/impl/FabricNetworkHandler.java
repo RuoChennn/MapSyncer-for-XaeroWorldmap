@@ -5,6 +5,7 @@ import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -33,6 +34,7 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
     private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
     private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyRequestHandler;
     private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     /**
@@ -74,6 +76,16 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
                     if (contributionCompleteHandler != null) {
                         ContributionCompletePayload payload = FabricPayloadAdapters.readContributionComplete(buf);
                         contributionCompleteHandler.accept(payload, new PayloadContext(new ServerPlayerContext(server, player)));
+                    }
+                }
+        );
+
+        ServerPlayNetworking.registerGlobalReceiver(
+                FabricPayloadAdapters.CONTRIBUTION_ONLY_REQUEST_ID,
+                (server, player, handler, buf, responseSender) -> {
+                    if (contributionOnlyRequestHandler != null) {
+                        ContributionOnlyRequestPayload payload = FabricPayloadAdapters.readContributionOnlyRequest(buf);
+                        contributionOnlyRequestHandler.accept(payload, new PayloadContext(new ServerPlayerContext(server, player)));
                     }
                 }
         );
@@ -131,6 +143,13 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
         FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
         FabricPayloadAdapters.writeContributionComplete(buf, payload);
         FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.CONTRIBUTION_COMPLETE_ID, buf);
+    }
+
+    @Override
+    public void sendToServer(ContributionOnlyRequestPayload payload) {
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeContributionOnlyRequest(buf, payload);
+        FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.CONTRIBUTION_ONLY_REQUEST_ID, buf);
     }
 
     @Override
@@ -201,6 +220,13 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     @Override
     public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
         this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    ) {
+        this.contributionOnlyRequestHandler = handler;
     }
 
     @Override

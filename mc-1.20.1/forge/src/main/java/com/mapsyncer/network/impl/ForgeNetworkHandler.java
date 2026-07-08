@@ -6,6 +6,7 @@ import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.ForgePayloadAdapters;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionCompleteMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionDataMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionOnlyRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionResultMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncRequestMessage;
@@ -14,6 +15,7 @@ import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncProgressMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeServerInstalledMessage;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -53,6 +55,7 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
     private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
     private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyRequestHandler;
     private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     private boolean registered = false;
@@ -110,6 +113,12 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
                 ForgeContributionResultMessage::decode,
                 this::handleContributionResult,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+
+        CHANNEL.registerMessage(8, ForgeContributionOnlyRequestMessage.class,
+                ForgeContributionOnlyRequestMessage::encode,
+                ForgeContributionOnlyRequestMessage::decode,
+                this::handleContributionOnlyRequest,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
     private void handleSyncRequest(ForgeSyncRequestMessage msg, Supplier<NetworkEvent.Context> ctx) {
@@ -166,6 +175,16 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
         }
     }
 
+    private void handleContributionOnlyRequest(ForgeContributionOnlyRequestMessage msg, Supplier<NetworkEvent.Context> ctx) {
+        ServerPlayer sender = ctx.get().getSender();
+        if (sender != null) {
+            confirmPlayer(sender.getUUID());
+        }
+        if (contributionOnlyRequestHandler != null) {
+            contributionOnlyRequestHandler.accept(msg.getData(), new PayloadContext(ctx));
+        }
+    }
+
     private void handleContributionResult(ForgeContributionResultMessage msg, Supplier<NetworkEvent.Context> ctx) {
         if (contributionResultHandler != null) {
             contributionResultHandler.accept(msg.getData(), new PayloadContext(ctx));
@@ -192,6 +211,11 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void sendToServer(ContributionCompletePayload payload) {
         CHANNEL.sendToServer(new ForgeContributionCompleteMessage(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionOnlyRequestPayload payload) {
+        CHANNEL.sendToServer(new ForgeContributionOnlyRequestMessage(payload));
     }
 
     @Override
@@ -257,6 +281,13 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
         this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    ) {
+        this.contributionOnlyRequestHandler = handler;
     }
 
     @Override

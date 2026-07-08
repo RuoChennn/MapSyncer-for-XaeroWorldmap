@@ -5,6 +5,7 @@ import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -39,6 +40,7 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
     private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
     private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyRequestHandler;
     private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     @Override
@@ -134,6 +136,20 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
             }
         );
 
+        // 仅贡献请求（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
+        registrar.playToServer(
+            NeoForgePayloadAdapters.NeoForgeContributionOnlyRequestPayload.TYPE,
+            NeoForgePayloadAdapters.NeoForgeContributionOnlyRequestPayload.STREAM_CODEC,
+            (payload, ctx) -> {
+                if (ctx.player() instanceof ServerPlayer sp) {
+                    confirmedPlayers.add(sp.getUUID());
+                }
+                if (contributionOnlyRequestHandler != null) {
+                    contributionOnlyRequestHandler.accept(payload.data(), new PayloadContext(ctx));
+                }
+            }
+        );
+
         // 贡献结果（服务端 -> 客户端）
         registrar.playToClient(
             NeoForgePayloadAdapters.NeoForgeContributionResultPayload.TYPE,
@@ -159,6 +175,11 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     @Override
     public void sendToServer(ContributionCompletePayload payload) {
         PacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeContributionCompletePayload(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionOnlyRequestPayload payload) {
+        PacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeContributionOnlyRequestPayload(payload));
     }
 
     @Override
@@ -234,6 +255,13 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     @Override
     public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
         this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    ) {
+        this.contributionOnlyRequestHandler = handler;
     }
 
     @Override

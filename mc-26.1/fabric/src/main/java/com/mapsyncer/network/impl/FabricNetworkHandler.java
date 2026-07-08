@@ -5,6 +5,7 @@ import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -35,6 +36,7 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
     private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
     private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyRequestHandler;
     private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     /** 防止 Payload 类型被重复注册（集成客户端环境下 main + client 入口点各调用一次） */
@@ -76,6 +78,10 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
                 FabricPayloadAdapters.CONTRIBUTION_COMPLETE_TYPE,
                 FabricPayloadAdapters.CONTRIBUTION_COMPLETE_CODEC
         );
+        PayloadTypeRegistry.serverboundPlay().register(
+                FabricPayloadAdapters.CONTRIBUTION_ONLY_REQUEST_TYPE,
+                FabricPayloadAdapters.CONTRIBUTION_ONLY_REQUEST_CODEC
+        );
         PayloadTypeRegistry.clientboundPlay().register(
                 FabricPayloadAdapters.CONTRIBUTION_RESULT_TYPE,
                 FabricPayloadAdapters.CONTRIBUTION_RESULT_CODEC
@@ -103,6 +109,12 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
         ServerPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.CONTRIBUTION_COMPLETE_TYPE, (wrapper, context) -> {
             if (contributionCompleteHandler != null) {
                 contributionCompleteHandler.accept(wrapper.payload(), new PayloadContext(context));
+            }
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(FabricPayloadAdapters.CONTRIBUTION_ONLY_REQUEST_TYPE, (wrapper, context) -> {
+            if (contributionOnlyRequestHandler != null) {
+                contributionOnlyRequestHandler.accept(wrapper.payload(), new PayloadContext(context));
             }
         });
     }
@@ -158,6 +170,11 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     @Override
     public void sendToServer(ContributionCompletePayload payload) {
         ClientPlayNetworking.send(new FabricPayloadAdapters.ContributionCompleteWrapper(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionOnlyRequestPayload payload) {
+        ClientPlayNetworking.send(new FabricPayloadAdapters.ContributionOnlyRequestWrapper(payload));
     }
 
     @Override
@@ -218,6 +235,13 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     @Override
     public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
         this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    ) {
+        this.contributionOnlyRequestHandler = handler;
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
@@ -46,6 +47,8 @@ public class FabricPayloadAdapters {
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_DATA_ID));
     public static final CustomPacketPayload.Type<ContributionCompleteWrapper> CONTRIBUTION_COMPLETE_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_COMPLETE_ID));
+    public static final CustomPacketPayload.Type<ContributionOnlyRequestWrapper> CONTRIBUTION_ONLY_REQUEST_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_ONLY_REQUEST_ID));
     public static final CustomPacketPayload.Type<ContributionResultWrapper> CONTRIBUTION_RESULT_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_RESULT_ID));
 
@@ -91,6 +94,12 @@ public class FabricPayloadAdapters {
             StreamCodec.of(
                     (buf, wrapper) -> writeContributionComplete(buf, wrapper.payload()),
                     buf -> new ContributionCompleteWrapper(readContributionComplete(buf))
+            );
+
+    public static final StreamCodec<RegistryFriendlyByteBuf, ContributionOnlyRequestWrapper> CONTRIBUTION_ONLY_REQUEST_CODEC =
+            StreamCodec.of(
+                    (buf, wrapper) -> writeContributionOnlyRequest(buf, wrapper.payload()),
+                    buf -> new ContributionOnlyRequestWrapper(readContributionOnlyRequest(buf))
             );
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ContributionResultWrapper> CONTRIBUTION_RESULT_CODEC =
@@ -147,6 +156,13 @@ public class FabricPayloadAdapters {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return CONTRIBUTION_COMPLETE_TYPE;
+        }
+    }
+
+    public record ContributionOnlyRequestWrapper(ContributionOnlyRequestPayload payload) implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return CONTRIBUTION_ONLY_REQUEST_TYPE;
         }
     }
 
@@ -321,6 +337,36 @@ public class FabricPayloadAdapters {
 
     private static ContributionCompletePayload readContributionComplete(RegistryFriendlyByteBuf buf) {
         return new ContributionCompletePayload(buf.readInt(), buf.readInt(), buf.readUtf());
+    }
+
+    // ===== 仅贡献请求序列化 =====
+
+    private static void writeContributionOnlyRequest(RegistryFriendlyByteBuf buf, ContributionOnlyRequestPayload payload) {
+        buf.writeInt(payload.requestId());
+        buf.writeInt(payload.partIndex());
+        buf.writeInt(payload.totalParts());
+        buf.writeInt(payload.clientMeta().size());
+        for (var entry : payload.clientMeta().entrySet()) {
+            buf.writeUtf(entry.getKey());
+            buf.writeLong(entry.getValue().timestampSeconds());
+            buf.writeUtf(entry.getValue().hash());
+        }
+        buf.writeUtf(payload.reason());
+    }
+
+    private static ContributionOnlyRequestPayload readContributionOnlyRequest(RegistryFriendlyByteBuf buf) {
+        int requestId = buf.readInt();
+        int partIndex = buf.readInt();
+        int totalParts = buf.readInt();
+        int size = buf.readInt();
+        Map<String, ClientMeta> metaMap = new HashMap<>();
+        for (int i = 0; i < size; i++) {
+            String path = buf.readUtf();
+            long timestampSeconds = buf.readLong();
+            String hash = buf.readUtf();
+            metaMap.put(path, new ClientMeta(timestampSeconds, hash));
+        }
+        return new ContributionOnlyRequestPayload(requestId, partIndex, totalParts, metaMap, buf.readUtf());
     }
 
     // ===== 贡献结果序列化 =====

@@ -5,6 +5,7 @@ import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
@@ -43,6 +44,8 @@ public class FabricPayloadAdapters {
             new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_DATA_ID);
     public static final ResourceLocation CONTRIBUTION_COMPLETE_ID =
             new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_COMPLETE_ID);
+    public static final ResourceLocation CONTRIBUTION_ONLY_REQUEST_ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_ONLY_REQUEST_ID);
     public static final ResourceLocation CONTRIBUTION_RESULT_ID =
             new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_RESULT_ID);
 
@@ -204,6 +207,36 @@ public class FabricPayloadAdapters {
 
     public static ContributionCompletePayload readContributionComplete(FriendlyByteBuf buf) {
         return new ContributionCompletePayload(buf.readInt(), buf.readInt(), buf.readUtf());
+    }
+
+    // ===== 仅贡献请求 =====
+
+    public static void writeContributionOnlyRequest(FriendlyByteBuf buf, ContributionOnlyRequestPayload payload) {
+        buf.writeInt(payload.requestId());
+        buf.writeInt(payload.partIndex());
+        buf.writeInt(payload.totalParts());
+        buf.writeInt(payload.clientMeta().size());
+        for (var entry : payload.clientMeta().entrySet()) {
+            buf.writeUtf(entry.getKey());
+            buf.writeLong(entry.getValue().timestampSeconds());
+            buf.writeUtf(entry.getValue().hash());
+        }
+        buf.writeUtf(payload.reason());
+    }
+
+    public static ContributionOnlyRequestPayload readContributionOnlyRequest(FriendlyByteBuf buf) {
+        int requestId = buf.readInt();
+        int partIndex = buf.readInt();
+        int totalParts = buf.readInt();
+        int size = buf.readInt();
+        Map<String, ClientMeta> metaMap = new HashMap<>();
+        for (int i = 0; i < size; i++) {
+            String path = buf.readUtf();
+            long timestampSeconds = buf.readLong();
+            String hash = buf.readUtf();
+            metaMap.put(path, new ClientMeta(timestampSeconds, hash));
+        }
+        return new ContributionOnlyRequestPayload(requestId, partIndex, totalParts, metaMap, buf.readUtf());
     }
 
     // ===== 贡献结果 =====

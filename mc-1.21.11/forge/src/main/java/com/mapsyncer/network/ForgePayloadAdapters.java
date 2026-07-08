@@ -5,6 +5,7 @@ import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
@@ -273,6 +274,50 @@ public class ForgePayloadAdapters {
                     buf.readInt(),
                     buf.readUtf()
             ));
+        }
+    }
+
+    // ===== 仅贡献请求消息 =====
+
+    public static class ForgeContributionOnlyRequestMessage {
+        private final ContributionOnlyRequestPayload data;
+
+        public ForgeContributionOnlyRequestMessage(ContributionOnlyRequestPayload data) {
+            this.data = data;
+        }
+
+        public ContributionOnlyRequestPayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeContributionOnlyRequestMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.requestId());
+            buf.writeInt(msg.data.partIndex());
+            buf.writeInt(msg.data.totalParts());
+            buf.writeInt(msg.data.clientMeta().size());
+            for (var entry : msg.data.clientMeta().entrySet()) {
+                buf.writeUtf(entry.getKey());
+                buf.writeLong(entry.getValue().timestampSeconds());
+                buf.writeUtf(entry.getValue().hash());
+            }
+            buf.writeUtf(msg.data.reason());
+        }
+
+        public static ForgeContributionOnlyRequestMessage decode(FriendlyByteBuf buf) {
+            int requestId = buf.readInt();
+            int partIndex = buf.readInt();
+            int totalParts = buf.readInt();
+            int size = buf.readInt();
+            Map<String, ClientMeta> metaMap = new HashMap<>();
+            for (int i = 0; i < size; i++) {
+                String path = buf.readUtf();
+                long timestampSeconds = buf.readLong();
+                String hash = buf.readUtf();
+                metaMap.put(path, new ClientMeta(timestampSeconds, hash));
+            }
+            return new ForgeContributionOnlyRequestMessage(
+                    new ContributionOnlyRequestPayload(requestId, partIndex, totalParts, metaMap, buf.readUtf())
+            );
         }
     }
 

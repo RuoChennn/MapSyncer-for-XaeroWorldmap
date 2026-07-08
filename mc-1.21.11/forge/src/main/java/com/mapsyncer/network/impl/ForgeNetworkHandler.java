@@ -4,6 +4,7 @@ import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.ForgePayloadAdapters;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionCompleteMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionDataMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionOnlyRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionResultMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncRequestMessage;
@@ -14,6 +15,7 @@ import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -55,6 +57,7 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
     private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
     private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyRequestHandler;
     private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     public void init() {
@@ -154,6 +157,20 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
                 }
             })
             .add();
+
+        // 仅贡献请求（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
+        CHANNEL.messageBuilder(ForgeContributionOnlyRequestMessage.class, 8, NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ForgeContributionOnlyRequestMessage::encode)
+            .decoder(ForgeContributionOnlyRequestMessage::decode)
+            .consumerMainThread((msg, ctx) -> {
+                if (ctx.getSender() != null) {
+                    confirmPlayer(ctx.getSender().getUUID());
+                }
+                if (contributionOnlyRequestHandler != null) {
+                    contributionOnlyRequestHandler.accept(msg.getData(), new PayloadContext(ctx));
+                }
+            })
+            .add();
     }
 
     @Override
@@ -176,6 +193,11 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void sendToServer(ContributionCompletePayload payload) {
         CHANNEL.send(new ForgeContributionCompleteMessage(payload), PacketDistributor.SERVER.noArg());
+    }
+
+    @Override
+    public void sendToServer(ContributionOnlyRequestPayload payload) {
+        CHANNEL.send(new ForgeContributionOnlyRequestMessage(payload), PacketDistributor.SERVER.noArg());
     }
 
     @Override
@@ -241,6 +263,13 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
         this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    ) {
+        this.contributionOnlyRequestHandler = handler;
     }
 
     @Override

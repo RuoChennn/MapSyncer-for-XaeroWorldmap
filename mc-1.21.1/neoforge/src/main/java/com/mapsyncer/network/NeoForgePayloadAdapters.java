@@ -5,6 +5,7 @@ import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
@@ -289,6 +290,51 @@ public class NeoForgePayloadAdapters {
                 buf.readInt(),
                 buf.readUtf()
             ));
+        }
+    }
+
+    // ===== 仅贡献请求适配器 =====
+
+    public record NeoForgeContributionOnlyRequestPayload(ContributionOnlyRequestPayload data) implements CustomPacketPayload {
+        public static final Type<NeoForgeContributionOnlyRequestPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_ONLY_REQUEST_ID));
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeContributionOnlyRequestPayload> STREAM_CODEC =
+            StreamCodec.of(NeoForgeContributionOnlyRequestPayload::encode, NeoForgeContributionOnlyRequestPayload::decode);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeContributionOnlyRequestPayload payload) {
+            buf.writeInt(payload.data.requestId());
+            buf.writeInt(payload.data.partIndex());
+            buf.writeInt(payload.data.totalParts());
+            buf.writeInt(payload.data.clientMeta().size());
+            for (var entry : payload.data.clientMeta().entrySet()) {
+                buf.writeUtf(entry.getKey());
+                buf.writeLong(entry.getValue().timestampSeconds());
+                buf.writeUtf(entry.getValue().hash());
+            }
+            buf.writeUtf(payload.data.reason());
+        }
+
+        public static NeoForgeContributionOnlyRequestPayload decode(RegistryFriendlyByteBuf buf) {
+            int requestId = buf.readInt();
+            int partIndex = buf.readInt();
+            int totalParts = buf.readInt();
+            int size = buf.readInt();
+            Map<String, ClientMeta> metaMap = new HashMap<>();
+            for (int i = 0; i < size; i++) {
+                String path = buf.readUtf();
+                long timestampSeconds = buf.readLong();
+                String hash = buf.readUtf();
+                metaMap.put(path, new ClientMeta(timestampSeconds, hash));
+            }
+            return new NeoForgeContributionOnlyRequestPayload(
+                new ContributionOnlyRequestPayload(requestId, partIndex, totalParts, metaMap, buf.readUtf())
+            );
         }
     }
 
