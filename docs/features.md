@@ -146,6 +146,19 @@ mc-26.1/            MC 26.1 版本
 | 逻辑时间戳 | 🧪 | 客户端优先使用 `sync_timestamps.cache` 中与当前哈希匹配的时间戳，避免下载后的文件修改时间被误当作贡献时间 |
 | 贡献队列 | 🧪 | 多名玩家同时触发贡献时按队列串行处理，会话结束后进入冷却期，避免竞争写入服务端缓存 |
 
+### 退出前贡献同步（Pre-Disconnect）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 正常退出拦截 | 🧪 | 暂停菜单 Mixin 拦截多人服务器“断开连接”按钮，单人“返回主菜单”不触发 |
+| 退出前等待界面 | 🧪 | 锁定输入的 `PreDisconnectSyncScreen`，显示扫描/上传/结果状态，提供“跳过并退出”与“返回游戏”按钮 |
+| 仅贡献请求 | 🧪 | 发送 `ContributionOnlyRequestPayload`，服务端只生成贡献候选，不分发服务端地图数据回客户端 |
+| ID 边界 | 🧪 | 入队前直接拒绝（not_allowed / no_candidates / queue_full）用客户端请求 ID；成功入队后用服务端会话 ID；`terminal=true` 才执行断开 |
+| 取消语义 | 🧪 | “返回游戏”只取消本地等待，已入队的服务端贡献会话可能继续在后台运行 |
+| DISABLED / RECEIVE_ONLY | ✅ | 这两种模式直接断开，不进入退出前同步 |
+| 普通同步进行中 | ✅ | 普通 `/mapsyncer sync` 的贡献阶段置位 `contributionInProgress`，阻止退出前同步重叠启动 |
+| 崩溃/强制关闭 | ⚠️ | 无法保证同步，本功能只覆盖正常点击退出的路径 |
+
 ---
 
 ## 四、地图生成系统
@@ -178,6 +191,8 @@ mc-26.1/            MC 26.1 版本
 | `hashThreads` | int | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
 | `clientSyncMode` | ClientSyncMode | RECEIVE_ONLY | DISABLED/RECEIVE_ONLY/BIDIRECTIONAL | 客户端是否禁用同步、只接收，或参与双向贡献 |
 | `backgroundSyncIntervalMinutes` | int | 60 | 0-1440 | 在线时后台检查间隔，0 表示只在加入游戏或手动命令时检查 |
+| `syncBeforeDisconnect` | boolean | true | -- | 正常点击断开连接时是否先尝试上传本地 Xaero 地图贡献。仅 BIDIRECTIONAL 客户端生效，无法保护崩溃、强制关闭进程或网络中断 |
+| `disconnectSyncTimeoutSeconds` | int | 15 | 0-60 | 退出前贡献同步等待界面的最大秒数，0 等同于关闭该能力 |
 
 ### 服务端配置
 

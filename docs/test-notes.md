@@ -113,6 +113,30 @@
 
 ---
 
+## 七之二、退出前贡献同步测试（Pre-Disconnect）
+
+**前置条件**: 客户端 `clientSyncMode=BIDIRECTIONAL`、`syncBeforeDisconnect=true`、`disconnectSyncTimeoutSeconds>0`、服务端已安装 MapSyncer 且允许贡献。
+
+| 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
+|--------|----------|----------|----------|------|
+| 元数据时间戳判新 | 本地修改某区域后，缓存哈希与当前文件哈希不一致 | 使用文件修改时间而非旧逻辑时间戳 | ✅ | ClientHashManagerTest 覆盖 |
+| 正常退出打开等待界面 | 多人服务器按 Esc → 断开连接 | 进入 PreDisconnectSyncScreen，不立即断开 | ⬜ | 需 dev client 烟测 |
+| 取消返回游戏 | 等待界面点击“返回游戏” | 界面关闭，玩家保持连接；已入队会话可能继续 | ⬜ | |
+| 跳过立即退出 | 等待界面点击“跳过并退出” | 立即执行原始断开；不发送服务端取消 | ⬜ | |
+| 贡献完成后退出 | 收到 terminal=true 结果 | 状态更新后执行原始断开动作 | ⬜ | |
+| 超时退出 | 等待超过 disconnectSyncTimeoutSeconds | 超时后自动跳过并断开 | ⬜ | |
+| DISABLED 直接退出 | clientSyncMode=DISABLED 时断开 | 不进入等待界面，立即断开 | ⬜ | |
+| RECEIVE_ONLY 直接退出 | clientSyncMode=RECEIVE_ONLY 时断开 | 不进入等待界面，立即断开 | ⬜ | |
+| 普通同步进行中不重叠 | 普通 /mapsyncer sync 贡献阶段进行中断开 | 不启动退出前同步（contributionInProgress 阻止） | ⬜ | |
+| 单人返回主菜单不触发 | 单人世界按 Esc → 返回主菜单 | 不进入退出前同步，正常返回标题 | ⬜ | isLocalServer() 判断 |
+| 终态结果用客户端请求 ID | 服务端入队前拒绝（not_allowed/no_candidates/queue_full） | ContributionResultPayload.requestId = 客户端请求 ID，terminal=true | ⬜ | |
+| 入队后会话用服务端 ID | 服务端成功入队后的最终结果 | ContributionResultPayload.requestId = 服务端会话 ID | ⬜ | |
+| 非终态结果仅更新 UI | 收到 accepted / stale_upload 等 region 级结果 | 状态文字更新，不执行断开 | ⬜ | terminal=false |
+| 崩溃/杀进程不同步 | 强制关闭游戏进程 | 无法保证同步，本功能不覆盖 | ⚠️ | 设计限制 |
+| Forge 模块编译验证 | Forge 1.20.1/1.21.1/1.21.11 Mixin 编译 | compileJava 通过 | ⬜ | 受 ForgeGradle 6.x 不兼容 Gradle 9.x 限制，需独立 Gradle 8.x 环境 |
+
+---
+
 ## 八、兼容性与性能测试
 
 | 测试项 | 测试内容 | 预期结果 | 测试结果 | 备注 |
@@ -588,5 +612,5 @@
 
 ---
 
-**测试文档版本**: 4.1（补充双向同步手动验收）
+**测试文档版本**: 4.2（补充退出前贡献同步验收项）
 **最后更新**: 2026-07-08
