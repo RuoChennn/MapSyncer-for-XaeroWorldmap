@@ -8,6 +8,9 @@ import net.minecraftforge.common.ForgeConfigSpec.IntValue;
 import net.minecraftforge.common.ForgeConfigSpec.EnumValue;
 import net.minecraftforge.common.ForgeConfigSpec.ConfigValue;
 
+import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -86,6 +89,33 @@ public class ModConfig {
     public static void saveClientConfig() {
         CLIENT_SPEC.save();
     }
+
+    /** 从磁盘重新加载服务端 TOML 配置 */
+    public static void bindServerConfig(net.minecraftforge.fml.config.ModConfig config) {
+        if (config.getType() == net.minecraftforge.fml.config.ModConfig.Type.SERVER) {
+            boundServerConfig = config;
+        }
+    }
+
+    public static void reloadServerFromDisk() {
+        net.minecraftforge.fml.config.IConfigSpec.ILoadedConfig loaded = boundServerConfig != null
+                ? boundServerConfig.getLoadedConfig() : null;
+        if (loaded != null) {
+            Path path = boundServerConfig.getFullPath();
+            CommentedFileConfig disk = CommentedFileConfig.of(path);
+            disk.load();
+            try {
+                loaded.config().clear();
+                loaded.config().putAll(disk);
+                SERVER_SPEC.acceptConfig(loaded);
+            } finally {
+                disk.close();
+            }
+        }
+        DimensionConfigParser.invalidateCache();
+    }
+
+    private static volatile net.minecraftforge.fml.config.ModConfig boundServerConfig;
 
     /**
      * 客户端配置内部类

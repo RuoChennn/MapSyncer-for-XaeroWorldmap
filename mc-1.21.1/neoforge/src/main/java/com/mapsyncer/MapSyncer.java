@@ -67,6 +67,8 @@ public class MapSyncer {
 
         modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         modContainer.registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
+        modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Loading event) ->
+                ModConfig.bindServerConfig(event.getConfig()));
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(MapPacketReceiver::register);

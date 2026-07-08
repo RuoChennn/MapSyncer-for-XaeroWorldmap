@@ -170,8 +170,8 @@ public class DimensionRegistry {
     /**
      * 将DimensionScanConfig转换为字符串格式（用于配置文件）
      *
-     * 格式：dimension|layerPlan|dim_type_info
-     * dim_type_info格式：hasSkylight|hasCeiling|minY|height|logicalHeight
+     * 格式：dimension|layerPlan
+     * dim_type_info 不再写入配置文件；注册新维度时从运行中的 ServerLevel 动态获取
      *
      * @param config 维度扫描配置
      * @return 配置字符串

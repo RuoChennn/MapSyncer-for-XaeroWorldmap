@@ -11,8 +11,8 @@ import java.util.List;
 /**
  * 维度配置解析工具类。
  *
- * <p>新格式：{@code dimension|layerPlan|dim_type_info}（layerPlan 为 SURFACE / Y 坐标 / 组合）</p>
- * <p>旧格式：{@code dimension|scanMode|caveField|dim_type_info} 仍可读，合并为 {@link LayerPlan}</p>
+ * <p>格式：{@code dimension|layerPlan}（layerPlan 为 SURFACE / ALL / Y 坐标 / 组合）</p>
+ * <p>旧格式：{@code dimension|scanMode|caveField|dim_type_info} 仍可读；多余 dim_type_info 字段已忽略，运行时从服务器 API 获取</p>
  */
 public final class DimensionConfigParser {
 

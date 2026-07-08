@@ -62,6 +62,8 @@ public class MapSyncer {
         // 注册配置（FML 3.0 eventbus 7.0: 保留 ModLoadingContext 兼容层）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
+        modBus.addListener((net.minecraftforge.fml.event.config.ModConfigEvent.Loading event) ->
+                ModConfig.bindServerConfig(event.getConfig()));
 
         // 创建网络处理器实例
         ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();

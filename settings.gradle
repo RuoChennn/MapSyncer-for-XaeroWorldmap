@@ -47,7 +47,7 @@ include 'mc-1.21.1:fabric'
 include 'mc-1.21.1:neoforge'
 
 // MC 1.21.11
-// include 'mc-1.21.11:shared'  // → libs/mc-1.21.11
+// include 'mc-1.21.11'  // → libs/mc-1.21.11（锚点源码）
 include 'mc-1.21.11:neoforge'
 // include 'mc-1.21.11:forge'  // ForgeGradle 6.x 不支持 Gradle 9.x
 // include 'mc-1.21.11:fabric'  // Loom 1.15.4 隔离，使用 settings-12111.gradle

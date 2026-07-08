@@ -143,14 +143,14 @@ public class AutoSyncManager {
             LOGGER.debug("Join auto-sync skipped: client auto-sync disabled");
             return false;
         }
-        // 服务端未启用增量更新时，不发起自动同步（即使有待处理的恢复）
-        if (serverUpdateMode == UpdateMode.DISABLED) {
-            LOGGER.debug("Join auto-sync skipped: server incremental updates disabled");
-            return false;
-        }
         if (hasPendingResume()) {
             LOGGER.info("Join auto-sync: resuming interrupted sync");
             return true;
+        }
+        // 服务端未启用增量更新时，不发起新的自动同步
+        if (serverUpdateMode == UpdateMode.DISABLED) {
+            LOGGER.debug("Join auto-sync skipped: server incremental updates disabled");
+            return false;
         }
         if (serverUpdateMode == UpdateMode.SCHEDULED) {
             LOGGER.debug("Join auto-sync: SCHEDULED mode, checking timestamps...");

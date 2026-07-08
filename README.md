@@ -18,6 +18,7 @@
 | 1.21.1 | ✅ | ✅ | ✅ |
 | 1.21.11 | ✅ | ✅ | ✅ |
 | 26.1 | — | ✅ | ✅ |
+| 26.2 | — | ✅ | ✅ |
 
 > 详细平台兼容性信息见 [`docs/features.md`](docs/features.md)
 
@@ -89,6 +90,7 @@
 | `/mapsyncer incremental off` | 禁用增量更新 |
 | `/mapsyncer incremental tick [间隔]` | 启用周期更新（2400–72000 ticks，默认 6000 = 5 分钟） |
 | `/mapsyncer incremental scheduled [时] [分]` | 启用定时更新（默认 04:00） |
+| `/mapsyncer reloadconfig` | 从磁盘重新加载服务端配置（含维度列表与增量更新模式） |
 
 ---
 
@@ -140,13 +142,13 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 
 ```toml
 dimension_configs = [
-    "minecraft:overworld|SURFACE|true|false|-64|384|384",
-    "minecraft:the_nether|SURFACE,63|false|true|0|256|128",
-    "minecraft:the_end|SURFACE|false|false|0|256|256"
+    "minecraft:overworld|SURFACE",
+    "minecraft:the_nether|SURFACE,63",
+    "minecraft:the_end|SURFACE"
 ]
 ```
 
-格式：`维度ID|layerPlan|有天空光|有顶棚|minY|高度|逻辑高度`
+格式：`维度ID|layerPlan`
 
 **layerPlan**（逗号分隔，可组合）：
 
@@ -160,9 +162,7 @@ dimension_configs = [
 
 - 仅写 `SURFACE` 时**不会**自动生成洞穴层；需要洞穴须显式写 Y 或 `ALL`
 - 地狱默认 `SURFACE,63`：逻辑顶以上地表（基岩顶层）+ 洞穴层 Y=63（Xaero 层号 3，目录 `caves/3/`）
-- 旧格式 `维度|SURFACE|63|…` / `维度|CAVE|63|…` 仍可读取，会自动合并为 layerPlan
-
-**dim_type_info** 字段：`hasSkylight|hasCeiling|minY|height|logicalHeight`。地狱 `logicalHeight=128` 表示逻辑顶在 Y127，其以上为地表区；`height=256` 为维度总高度。
+- 旧格式 `维度|SURFACE|63|…` / `维度|CAVE|63|…` 仍可读取，会自动合并为 layerPlan；尾部 `dim_type_info` 字段已忽略，维度类型信息在运行时从服务器 API 获取
 
 **洞穴层号**：Xaero 使用 `caveStart >> 4`（如 Y=63 → 层 3），缓存与 zip 输出路径为 `caves/3/`。
 
@@ -254,27 +254,31 @@ java -jar mapsyncer-packager.jar -c ./cache -d ./world -o output.zip
 libs/                   抽象库层（平台无关，编译为独立 JAR）
 ├── core/               纯 Java 核心：MCA/NBT 解析、工具类、MapPackager
 ├── platform-api/       平台抽象接口、网络 Payload 定义
-└── common/             客户端/服务端共享逻辑（同步、缓存、自动同步管理器）
+├── common/             客户端/服务端共享逻辑（同步、缓存、自动同步管理器）
+├── mc-1.20/            G1 锚点源码（1.20.1 API）
+├── mc-1.21/            G2 锚点源码（1.21.1 API）
+├── mc-1.21.11/         G3 锚点源码（1.21.11 API）
+└── mc-26/              G4 锚点源码（26.x API）
 
-mc-1.20.1/              1.20.1 版本
-├── shared/             源码复用层（由平台模块 sourceSet 引用）
-├── fabric/             平台实现层（编译产出最终 mod JAR）
+mc-1.20.1/              1.20.1 胶水层（Loader + Platform 实现）
+├── fabric/
 └── forge/
 
-mc-1.21.1/              1.21.1 版本
-├── shared/
+mc-1.21.1/              1.21.1 胶水层
 ├── fabric/
 ├── forge/
 └── neoforge/
 
-mc-1.21.11/             1.21.11 版本
-├── shared/
+mc-1.21.11/             1.21.11 胶水层
 ├── fabric/
 ├── forge/
 └── neoforge/
 
-mc-26.1/                26.1 版本
-├── shared/
+mc-26.1/                26.1 胶水层（协议 775）
+├── fabric/
+└── neoforge/
+
+mc-26.2/                26.2 胶水层（协议 776，复用 libs/mc-26）
 ├── fabric/
 └── neoforge/
 ```

@@ -77,7 +77,7 @@ public class CacheGenerateCommand {
     }
 
     private static int reloadConfig(CommandContext<CommandSourceStack> ctx) {
-        if (CacheCommandHandler.reloadConfig()) {
+        if (CacheCommandHandler.reloadConfig(ctx.getSource().getServer())) {
             ctx.getSource().sendSuccess(
                     () -> ChatUtils.success("mapsyncer.command.config_reloaded"), false);
         } else {

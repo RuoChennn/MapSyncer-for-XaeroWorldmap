@@ -584,7 +584,7 @@ public class ServerSyncHandlerLogic {
                 }
             }
             payload = new SyncRequestPayload(merged, refPart.partIndex(), refPart.totalParts(),
-                    refPart.syncAll(), refPart.targetDimension());
+                    refPart.syncAll(), refPart.targetDimension(), refPart.silent());
             LOGGER.debug("SyncRequest assembled from {} parts, {} entries total", parts.size(), merged.size());
         }
 
@@ -841,7 +841,9 @@ public class ServerSyncHandlerLogic {
 
         if (total == 0) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
+                if (!silent) {
+                    player.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
+                }
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
                 finalizePlayerSync(playerId);

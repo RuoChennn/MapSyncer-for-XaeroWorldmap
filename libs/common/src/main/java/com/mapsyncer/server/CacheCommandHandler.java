@@ -1,5 +1,6 @@
 package com.mapsyncer.server;
 
+import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
@@ -300,12 +301,22 @@ public class CacheCommandHandler {
     }
 
     /**
-     * 从磁盘重新加载服务端配置。
+     * 从磁盘重新加载服务端配置，并重置维度注册与增量更新调度。
      */
-    public static boolean reloadConfig() {
+    public static boolean reloadConfig(MinecraftServer server) {
         try {
             PlatformManager.getPlatform().reloadConfig();
             ModLogConfig.applyDebugLogging();
+            DimensionRegistry.resetRegistration();
+            DimensionConfigParser.invalidateCache();
+
+            IncrementalUpdateHandlerLogic handler = IncrementalUpdateHandlerLogic.getInstance();
+            handler.stop();
+            UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
+            if (mode != UpdateMode.DISABLED && server != null) {
+                handler.start(server);
+            }
+
             LOGGER.info("Server configuration reloaded");
             return true;
         } catch (Exception e) {

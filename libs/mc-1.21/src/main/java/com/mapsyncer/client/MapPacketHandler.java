@@ -393,6 +393,7 @@ public class MapPacketHandler {
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.finishUptodate();
+                finishJoinAutoSyncIfActive();
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
                 }
@@ -582,6 +583,7 @@ public class MapPacketHandler {
         } else {
             LOGGER.info("Sync complete with no data received");
             SyncProgressTracker.finishUptodate();
+            finishJoinAutoSyncIfActive();
             if (tsCache != null) {
                 tsCache.markSyncComplete();
             }
@@ -891,6 +893,19 @@ public class MapPacketHandler {
                 mc.player.displayClientMessage(
                         ChatUtils.desc("mapsyncer.sync.unloading_regions", unloaded), false);
             }
+        }
+    }
+
+    /** 进服自动同步结束（含地图已是最新）：显示唯一完成提示 */
+    private static void finishJoinAutoSyncIfActive() {
+        if (!AutoSyncManager.isActive()) {
+            return;
+        }
+        AutoSyncManager.markComplete();
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.displayClientMessage(
+                    ChatUtils.success("mapsyncer.autosync.complete"), false);
         }
     }
 }

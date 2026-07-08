@@ -233,7 +233,7 @@ public class NeoForgePlatform implements Platform {
 
     @Override
     public void reloadConfig() {
-        DimensionConfigParser.invalidateCache();
+        ModConfig.reloadServerFromDisk();
     }
 
     @Override
