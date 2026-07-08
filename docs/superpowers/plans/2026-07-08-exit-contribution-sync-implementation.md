@@ -336,7 +336,7 @@ git commit -m "feat: 添加退出前贡献请求协议" -m "新增 ContributionO
 - Modify every `FabricPayloadAdapters.java`, `ForgePayloadAdapters.java`, and `NeoForgePayloadAdapters.java`.
 - Modify every `FabricNetworkHandler.java`, `ForgeNetworkHandler.java`, and `NeoForgeNetworkHandler.java`.
 
-- [ ] **Step 1: Add adapter wrappers/codecs**
+- [x] **Step 1: Add adapter wrappers/codecs**
 
 For Fabric 1.21+ adapters, add wrapper:
 
@@ -387,7 +387,7 @@ For Forge adapters, add `ForgeContributionOnlyRequestMessage` with encode/decode
 
 For NeoForge adapters, add `NeoForgeContributionOnlyRequestPayload` with a `StreamCodec` using the same field order.
 
-- [ ] **Step 2: Add NetworkHandler state and registration**
+- [x] **Step 2: Add NetworkHandler state and registration**
 
 In every platform network handler, add:
 
@@ -433,7 +433,7 @@ public void sendToServer(ContributionOnlyRequestPayload payload) {
 
 In NeoForge `registrar.playToServer`, confirm the sender UUID before invoking the handler. In Forge message consumers, confirm the sender UUID before invoking the handler.
 
-- [ ] **Step 3: Compile representative platform**
+- [x] **Step 3: Compile representative platform**
 
 Run:
 
@@ -441,7 +441,7 @@ Run:
 
 Expected: compile succeeds. If adapter compilation fails, fix exact wrapper names and imports before proceeding.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mc-1.20.1 mc-1.21.1 mc-1.21.11 mc-26.1
