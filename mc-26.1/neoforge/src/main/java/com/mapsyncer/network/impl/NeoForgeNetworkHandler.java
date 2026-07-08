@@ -3,6 +3,10 @@ package com.mapsyncer.network.impl;
 import com.mapsyncer.network.NeoForgePayloadAdapters;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -33,6 +37,10 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
+    private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
+    private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
+    private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     @Override
     public void registerHandlers(RegisterPayloadHandlersEvent event) {
@@ -87,11 +95,71 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
                 }
             }
         );
+
+        // 贡献请求（服务端 -> 客户端）
+        registrar.playToClient(
+            NeoForgePayloadAdapters.NeoForgeContributionRequestPayload.TYPE,
+            NeoForgePayloadAdapters.NeoForgeContributionRequestPayload.STREAM_CODEC,
+            (payload, ctx) -> {
+                if (contributionRequestHandler != null) {
+                    contributionRequestHandler.accept(payload.data(), new PayloadContext(ctx));
+                }
+            }
+        );
+
+        // 贡献数据（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
+        registrar.playToServer(
+            NeoForgePayloadAdapters.NeoForgeContributionDataPayload.TYPE,
+            NeoForgePayloadAdapters.NeoForgeContributionDataPayload.STREAM_CODEC,
+            (payload, ctx) -> {
+                if (ctx.player() instanceof ServerPlayer sp) {
+                    confirmedPlayers.add(sp.getUUID());
+                }
+                if (contributionDataHandler != null) {
+                    contributionDataHandler.accept(payload.data(), new PayloadContext(ctx));
+                }
+            }
+        );
+
+        // 贡献完成（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
+        registrar.playToServer(
+            NeoForgePayloadAdapters.NeoForgeContributionCompletePayload.TYPE,
+            NeoForgePayloadAdapters.NeoForgeContributionCompletePayload.STREAM_CODEC,
+            (payload, ctx) -> {
+                if (ctx.player() instanceof ServerPlayer sp) {
+                    confirmedPlayers.add(sp.getUUID());
+                }
+                if (contributionCompleteHandler != null) {
+                    contributionCompleteHandler.accept(payload.data(), new PayloadContext(ctx));
+                }
+            }
+        );
+
+        // 贡献结果（服务端 -> 客户端）
+        registrar.playToClient(
+            NeoForgePayloadAdapters.NeoForgeContributionResultPayload.TYPE,
+            NeoForgePayloadAdapters.NeoForgeContributionResultPayload.STREAM_CODEC,
+            (payload, ctx) -> {
+                if (contributionResultHandler != null) {
+                    contributionResultHandler.accept(payload.data(), new PayloadContext(ctx));
+                }
+            }
+        );
     }
 
     @Override
     public void sendToServer(SyncRequestPayload payload) {
         ClientPacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeSyncRequestPayload(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionDataPayload payload) {
+        ClientPacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeContributionDataPayload(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionCompletePayload payload) {
+        ClientPacketDistributor.sendToServer(new NeoForgePayloadAdapters.NeoForgeContributionCompletePayload(payload));
     }
 
     @Override
@@ -113,6 +181,20 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
         if (!confirmedPlayers.contains(player.getUUID())) return;
         PacketDistributor.sendToPlayer(player,
             new NeoForgePayloadAdapters.NeoForgeServerInstalledPayload(payload));
+    }
+
+    @Override
+    public void sendToPlayer(ServerPlayer player, ContributionRequestPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        PacketDistributor.sendToPlayer(player,
+            new NeoForgePayloadAdapters.NeoForgeContributionRequestPayload(payload));
+    }
+
+    @Override
+    public void sendToPlayer(ServerPlayer player, ContributionResultPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        PacketDistributor.sendToPlayer(player,
+            new NeoForgePayloadAdapters.NeoForgeContributionResultPayload(payload));
     }
 
     /** 玩家断线时清理确认状态 */
@@ -138,6 +220,26 @@ public class NeoForgeNetworkHandler implements NetworkHandler<ServerPlayer, Regi
     @Override
     public void registerSyncRequestHandler(BiConsumer<SyncRequestPayload, PayloadContext> handler) {
         this.syncRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionRequestHandler(BiConsumer<ContributionRequestPayload, PayloadContext> handler) {
+        this.contributionRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionDataHandler(BiConsumer<ContributionDataPayload, PayloadContext> handler) {
+        this.contributionDataHandler = handler;
+    }
+
+    @Override
+    public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
+        this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionResultHandler(BiConsumer<ContributionResultPayload, PayloadContext> handler) {
+        this.contributionResultHandler = handler;
     }
 
     @Override

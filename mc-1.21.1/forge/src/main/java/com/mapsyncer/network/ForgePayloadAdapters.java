@@ -3,6 +3,11 @@ package com.mapsyncer.network;
 import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRegionMeta;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -155,6 +160,149 @@ public class ForgePayloadAdapters {
 
         public static ForgeServerInstalledMessage decode(FriendlyByteBuf buf) {
             return new ForgeServerInstalledMessage(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
+        }
+    }
+
+    // ===== 贡献请求消息 =====
+
+    public static class ForgeContributionRequestMessage {
+        private final ContributionRequestPayload data;
+
+        public ForgeContributionRequestMessage(ContributionRequestPayload data) {
+            this.data = data;
+        }
+
+        public ContributionRequestPayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeContributionRequestMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.requestId());
+            buf.writeInt(msg.data.regions().size());
+            for (ContributionRegionMeta region : msg.data.regions()) {
+                buf.writeUtf(region.relativePath());
+                buf.writeInt(region.regionX());
+                buf.writeInt(region.regionZ());
+                buf.writeUtf(region.dimension());
+                buf.writeInt(region.caveLayer());
+                buf.writeLong(region.serverTimestampSeconds());
+                buf.writeUtf(region.serverHash());
+            }
+            buf.writeUtf(msg.data.status());
+        }
+
+        public static ForgeContributionRequestMessage decode(FriendlyByteBuf buf) {
+            int requestId = buf.readInt();
+            int size = buf.readInt();
+            List<ContributionRegionMeta> regions = new ArrayList<>();
+            for (int i = 0; i < size; i++) {
+                regions.add(new ContributionRegionMeta(
+                        buf.readUtf(),
+                        buf.readInt(),
+                        buf.readInt(),
+                        buf.readUtf(),
+                        buf.readInt(),
+                        buf.readLong(),
+                        buf.readUtf()
+                ));
+            }
+            String status = buf.readUtf();
+            return new ForgeContributionRequestMessage(new ContributionRequestPayload(requestId, regions, status));
+        }
+    }
+
+    // ===== 贡献数据消息 =====
+
+    public static class ForgeContributionDataMessage {
+        private final ContributionDataPayload data;
+
+        public ForgeContributionDataMessage(ContributionDataPayload data) {
+            this.data = data;
+        }
+
+        public ContributionDataPayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeContributionDataMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.requestId());
+            encodeChunkMapData(buf, msg.data.chunk());
+            buf.writeUtf(msg.data.relativePath());
+            buf.writeLong(msg.data.observedServerTimestampSeconds());
+            buf.writeUtf(msg.data.observedServerHash());
+        }
+
+        public static ForgeContributionDataMessage decode(FriendlyByteBuf buf) {
+            int requestId = buf.readInt();
+            ChunkMapData chunk = decodeChunkMapData(buf);
+            String relativePath = buf.readUtf();
+            long observedServerTimestampSeconds = buf.readLong();
+            String observedServerHash = buf.readUtf();
+            return new ForgeContributionDataMessage(new ContributionDataPayload(
+                    requestId,
+                    chunk,
+                    relativePath,
+                    observedServerTimestampSeconds,
+                    observedServerHash
+            ));
+        }
+    }
+
+    // ===== 贡献完成消息 =====
+
+    public static class ForgeContributionCompleteMessage {
+        private final ContributionCompletePayload data;
+
+        public ForgeContributionCompleteMessage(ContributionCompletePayload data) {
+            this.data = data;
+        }
+
+        public ContributionCompletePayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeContributionCompleteMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.requestId());
+            buf.writeInt(msg.data.sentRegions());
+            buf.writeUtf(msg.data.status());
+        }
+
+        public static ForgeContributionCompleteMessage decode(FriendlyByteBuf buf) {
+            return new ForgeContributionCompleteMessage(new ContributionCompletePayload(
+                    buf.readInt(),
+                    buf.readInt(),
+                    buf.readUtf()
+            ));
+        }
+    }
+
+    // ===== 贡献结果消息 =====
+
+    public static class ForgeContributionResultMessage {
+        private final ContributionResultPayload data;
+
+        public ForgeContributionResultMessage(ContributionResultPayload data) {
+            this.data = data;
+        }
+
+        public ContributionResultPayload getData() {
+            return data;
+        }
+
+        public static void encode(ForgeContributionResultMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.data.requestId());
+            buf.writeInt(msg.data.accepted());
+            buf.writeInt(msg.data.rejected());
+            buf.writeUtf(msg.data.status());
+        }
+
+        public static ForgeContributionResultMessage decode(FriendlyByteBuf buf) {
+            return new ForgeContributionResultMessage(new ContributionResultPayload(
+                    buf.readInt(),
+                    buf.readInt(),
+                    buf.readInt(),
+                    buf.readUtf()
+            ));
         }
     }
 

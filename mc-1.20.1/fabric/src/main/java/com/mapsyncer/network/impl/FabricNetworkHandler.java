@@ -3,6 +3,10 @@ package com.mapsyncer.network.impl;
 import com.mapsyncer.network.FabricPayloadAdapters;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -26,6 +30,10 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
+    private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
+    private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
+    private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     /**
      * 服务端 handler 上下文持有者
@@ -49,6 +57,26 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
                 }
         );
         System.out.println("[MapSyncer DEBUG] ServerPlayNetworking.registerGlobalReceiver called for " + FabricPayloadAdapters.SYNC_REQUEST_ID);
+
+        ServerPlayNetworking.registerGlobalReceiver(
+                FabricPayloadAdapters.CONTRIBUTION_DATA_ID,
+                (server, player, handler, buf, responseSender) -> {
+                    if (contributionDataHandler != null) {
+                        ContributionDataPayload payload = FabricPayloadAdapters.readContributionData(buf);
+                        contributionDataHandler.accept(payload, new PayloadContext(new ServerPlayerContext(server, player)));
+                    }
+                }
+        );
+
+        ServerPlayNetworking.registerGlobalReceiver(
+                FabricPayloadAdapters.CONTRIBUTION_COMPLETE_ID,
+                (server, player, handler, buf, responseSender) -> {
+                    if (contributionCompleteHandler != null) {
+                        ContributionCompletePayload payload = FabricPayloadAdapters.readContributionComplete(buf);
+                        contributionCompleteHandler.accept(payload, new PayloadContext(new ServerPlayerContext(server, player)));
+                    }
+                }
+        );
     }
 
     /**
@@ -75,12 +103,34 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
         return serverInstalledHandler;
     }
 
+    public BiConsumer<ContributionRequestPayload, PayloadContext> getContributionRequestHandler() {
+        return contributionRequestHandler;
+    }
+
+    public BiConsumer<ContributionResultPayload, PayloadContext> getContributionResultHandler() {
+        return contributionResultHandler;
+    }
+
     @Override
     public void sendToServer(SyncRequestPayload payload) {
         FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
         FabricPayloadAdapters.writeSyncRequest(buf, payload);
         // 使用反射避免编译时依赖 ClientPlayNetworking
         FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.SYNC_REQUEST_ID, buf);
+    }
+
+    @Override
+    public void sendToServer(ContributionDataPayload payload) {
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeContributionData(buf, payload);
+        FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.CONTRIBUTION_DATA_ID, buf);
+    }
+
+    @Override
+    public void sendToServer(ContributionCompletePayload payload) {
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeContributionComplete(buf, payload);
+        FabricClientNetworkHandler.sendToServer(FabricPayloadAdapters.CONTRIBUTION_COMPLETE_ID, buf);
     }
 
     @Override
@@ -105,6 +155,20 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     }
 
     @Override
+    public void sendToPlayer(ServerPlayer player, ContributionRequestPayload payload) {
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeContributionRequest(buf, payload);
+        ServerPlayNetworking.send(player, FabricPayloadAdapters.CONTRIBUTION_REQUEST_ID, buf);
+    }
+
+    @Override
+    public void sendToPlayer(ServerPlayer player, ContributionResultPayload payload) {
+        FriendlyByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+        FabricPayloadAdapters.writeContributionResult(buf, payload);
+        ServerPlayNetworking.send(player, FabricPayloadAdapters.CONTRIBUTION_RESULT_ID, buf);
+    }
+
+    @Override
     public void registerSyncResponseHandler(BiConsumer<SyncResponsePayload, PayloadContext> handler) {
         this.syncResponseHandler = handler;
     }
@@ -122,6 +186,26 @@ public class FabricNetworkHandler implements NetworkHandler<ServerPlayer, Object
     @Override
     public void registerSyncRequestHandler(BiConsumer<SyncRequestPayload, PayloadContext> handler) {
         this.syncRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionRequestHandler(BiConsumer<ContributionRequestPayload, PayloadContext> handler) {
+        this.contributionRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionDataHandler(BiConsumer<ContributionDataPayload, PayloadContext> handler) {
+        this.contributionDataHandler = handler;
+    }
+
+    @Override
+    public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
+        this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionResultHandler(BiConsumer<ContributionResultPayload, PayloadContext> handler) {
+        this.contributionResultHandler = handler;
     }
 
     @Override

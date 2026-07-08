@@ -4,10 +4,18 @@ import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.ForgePayloadAdapters;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionCompleteMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionDataMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionRequestMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionResultMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncResponseMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncProgressMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeServerInstalledMessage;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -24,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -41,6 +50,10 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
+    private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
+    private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
+    private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     private boolean registered = false;
 
@@ -73,6 +86,30 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
                 ForgeServerInstalledMessage::encode,
                 ForgeServerInstalledMessage::decode,
                 this::handleServerInstalled);
+
+        CHANNEL.registerMessage(4, ForgeContributionRequestMessage.class,
+                ForgeContributionRequestMessage::encode,
+                ForgeContributionRequestMessage::decode,
+                this::handleContributionRequest,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+
+        CHANNEL.registerMessage(5, ForgeContributionDataMessage.class,
+                ForgeContributionDataMessage::encode,
+                ForgeContributionDataMessage::decode,
+                this::handleContributionData,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
+
+        CHANNEL.registerMessage(6, ForgeContributionCompleteMessage.class,
+                ForgeContributionCompleteMessage::encode,
+                ForgeContributionCompleteMessage::decode,
+                this::handleContributionComplete,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
+
+        CHANNEL.registerMessage(7, ForgeContributionResultMessage.class,
+                ForgeContributionResultMessage::encode,
+                ForgeContributionResultMessage::decode,
+                this::handleContributionResult,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
     private void handleSyncRequest(ForgeSyncRequestMessage msg, Supplier<NetworkEvent.Context> ctx) {
@@ -103,6 +140,38 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
         }
     }
 
+    private void handleContributionRequest(ForgeContributionRequestMessage msg, Supplier<NetworkEvent.Context> ctx) {
+        if (contributionRequestHandler != null) {
+            contributionRequestHandler.accept(msg.getData(), new PayloadContext(ctx));
+        }
+    }
+
+    private void handleContributionData(ForgeContributionDataMessage msg, Supplier<NetworkEvent.Context> ctx) {
+        ServerPlayer sender = ctx.get().getSender();
+        if (sender != null) {
+            confirmPlayer(sender.getUUID());
+        }
+        if (contributionDataHandler != null) {
+            contributionDataHandler.accept(msg.getData(), new PayloadContext(ctx));
+        }
+    }
+
+    private void handleContributionComplete(ForgeContributionCompleteMessage msg, Supplier<NetworkEvent.Context> ctx) {
+        ServerPlayer sender = ctx.get().getSender();
+        if (sender != null) {
+            confirmPlayer(sender.getUUID());
+        }
+        if (contributionCompleteHandler != null) {
+            contributionCompleteHandler.accept(msg.getData(), new PayloadContext(ctx));
+        }
+    }
+
+    private void handleContributionResult(ForgeContributionResultMessage msg, Supplier<NetworkEvent.Context> ctx) {
+        if (contributionResultHandler != null) {
+            contributionResultHandler.accept(msg.getData(), new PayloadContext(ctx));
+        }
+    }
+
     @Override
     public void registerHandlers(Object event) {
         if (registered) return;
@@ -113,6 +182,16 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void sendToServer(SyncRequestPayload payload) {
         CHANNEL.sendToServer(new ForgeSyncRequestMessage(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionDataPayload payload) {
+        CHANNEL.sendToServer(new ForgeContributionDataMessage(payload));
+    }
+
+    @Override
+    public void sendToServer(ContributionCompletePayload payload) {
+        CHANNEL.sendToServer(new ForgeContributionCompleteMessage(payload));
     }
 
     @Override
@@ -134,6 +213,18 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     }
 
     @Override
+    public void sendToPlayer(ServerPlayer player, ContributionRequestPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ForgeContributionRequestMessage(payload));
+    }
+
+    @Override
+    public void sendToPlayer(ServerPlayer player, ContributionResultPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ForgeContributionResultMessage(payload));
+    }
+
+    @Override
     public void registerSyncResponseHandler(BiConsumer<SyncResponsePayload, PayloadContext> handler) {
         this.syncResponseHandler = handler;
     }
@@ -151,6 +242,26 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void registerSyncRequestHandler(BiConsumer<SyncRequestPayload, PayloadContext> handler) {
         this.syncRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionRequestHandler(BiConsumer<ContributionRequestPayload, PayloadContext> handler) {
+        this.contributionRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionDataHandler(BiConsumer<ContributionDataPayload, PayloadContext> handler) {
+        this.contributionDataHandler = handler;
+    }
+
+    @Override
+    public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
+        this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionResultHandler(BiConsumer<ContributionResultPayload, PayloadContext> handler) {
+        this.contributionResultHandler = handler;
     }
 
     @Override

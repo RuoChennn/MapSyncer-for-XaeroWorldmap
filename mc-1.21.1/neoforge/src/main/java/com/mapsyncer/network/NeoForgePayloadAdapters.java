@@ -3,6 +3,11 @@ package com.mapsyncer.network;
 import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRegionMeta;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -161,6 +166,160 @@ public class NeoForgePayloadAdapters {
 
         public static NeoForgeServerInstalledPayload decode(RegistryFriendlyByteBuf buf) {
             return new NeoForgeServerInstalledPayload(new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt()));
+        }
+    }
+
+    // ===== 贡献请求适配器 =====
+
+    public record NeoForgeContributionRequestPayload(ContributionRequestPayload data) implements CustomPacketPayload {
+        public static final Type<NeoForgeContributionRequestPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_REQUEST_ID));
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeContributionRequestPayload> STREAM_CODEC =
+            StreamCodec.of(NeoForgeContributionRequestPayload::encode, NeoForgeContributionRequestPayload::decode);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeContributionRequestPayload payload) {
+            buf.writeInt(payload.data.requestId());
+            buf.writeInt(payload.data.regions().size());
+            for (ContributionRegionMeta region : payload.data.regions()) {
+                buf.writeUtf(region.relativePath());
+                buf.writeInt(region.regionX());
+                buf.writeInt(region.regionZ());
+                buf.writeUtf(region.dimension());
+                buf.writeInt(region.caveLayer());
+                buf.writeLong(region.serverTimestampSeconds());
+                buf.writeUtf(region.serverHash());
+            }
+            buf.writeUtf(payload.data.status());
+        }
+
+        public static NeoForgeContributionRequestPayload decode(RegistryFriendlyByteBuf buf) {
+            int requestId = buf.readInt();
+            int size = buf.readInt();
+            List<ContributionRegionMeta> regions = new ArrayList<>();
+            for (int i = 0; i < size; i++) {
+                String relativePath = buf.readUtf();
+                int regionX = buf.readInt();
+                int regionZ = buf.readInt();
+                String dimension = buf.readUtf();
+                int caveLayer = buf.readInt();
+                long serverTimestampSeconds = buf.readLong();
+                String serverHash = buf.readUtf();
+                regions.add(new ContributionRegionMeta(
+                    relativePath,
+                    regionX,
+                    regionZ,
+                    dimension,
+                    caveLayer,
+                    serverTimestampSeconds,
+                    serverHash
+                ));
+            }
+            String status = buf.readUtf();
+            return new NeoForgeContributionRequestPayload(new ContributionRequestPayload(requestId, regions, status));
+        }
+    }
+
+    // ===== 贡献数据适配器 =====
+
+    public record NeoForgeContributionDataPayload(ContributionDataPayload data) implements CustomPacketPayload {
+        public static final Type<NeoForgeContributionDataPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_DATA_ID));
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeContributionDataPayload> STREAM_CODEC =
+            StreamCodec.of(NeoForgeContributionDataPayload::encode, NeoForgeContributionDataPayload::decode);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeContributionDataPayload payload) {
+            buf.writeInt(payload.data.requestId());
+            encodeChunkMapData(buf, payload.data.chunk());
+            buf.writeUtf(payload.data.relativePath());
+            buf.writeLong(payload.data.observedServerTimestampSeconds());
+            buf.writeUtf(payload.data.observedServerHash());
+        }
+
+        public static NeoForgeContributionDataPayload decode(RegistryFriendlyByteBuf buf) {
+            int requestId = buf.readInt();
+            ChunkMapData chunk = decodeChunkMapData(buf);
+            String relativePath = buf.readUtf();
+            long observedServerTimestampSeconds = buf.readLong();
+            String observedServerHash = buf.readUtf();
+            return new NeoForgeContributionDataPayload(new ContributionDataPayload(
+                requestId,
+                chunk,
+                relativePath,
+                observedServerTimestampSeconds,
+                observedServerHash
+            ));
+        }
+    }
+
+    // ===== 贡献完成适配器 =====
+
+    public record NeoForgeContributionCompletePayload(ContributionCompletePayload data) implements CustomPacketPayload {
+        public static final Type<NeoForgeContributionCompletePayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_COMPLETE_ID));
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeContributionCompletePayload> STREAM_CODEC =
+            StreamCodec.of(NeoForgeContributionCompletePayload::encode, NeoForgeContributionCompletePayload::decode);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeContributionCompletePayload payload) {
+            buf.writeInt(payload.data.requestId());
+            buf.writeInt(payload.data.sentRegions());
+            buf.writeUtf(payload.data.status());
+        }
+
+        public static NeoForgeContributionCompletePayload decode(RegistryFriendlyByteBuf buf) {
+            return new NeoForgeContributionCompletePayload(new ContributionCompletePayload(
+                buf.readInt(),
+                buf.readInt(),
+                buf.readUtf()
+            ));
+        }
+    }
+
+    // ===== 贡献结果适配器 =====
+
+    public record NeoForgeContributionResultPayload(ContributionResultPayload data) implements CustomPacketPayload {
+        public static final Type<NeoForgeContributionResultPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_RESULT_ID));
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, NeoForgeContributionResultPayload> STREAM_CODEC =
+            StreamCodec.of(NeoForgeContributionResultPayload::encode, NeoForgeContributionResultPayload::decode);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        public static void encode(RegistryFriendlyByteBuf buf, NeoForgeContributionResultPayload payload) {
+            buf.writeInt(payload.data.requestId());
+            buf.writeInt(payload.data.accepted());
+            buf.writeInt(payload.data.rejected());
+            buf.writeUtf(payload.data.status());
+        }
+
+        public static NeoForgeContributionResultPayload decode(RegistryFriendlyByteBuf buf) {
+            return new NeoForgeContributionResultPayload(new ContributionResultPayload(
+                buf.readInt(),
+                buf.readInt(),
+                buf.readInt(),
+                buf.readUtf()
+            ));
         }
     }
 

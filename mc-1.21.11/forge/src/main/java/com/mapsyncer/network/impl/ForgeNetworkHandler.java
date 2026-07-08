@@ -2,12 +2,20 @@ package com.mapsyncer.network.impl;
 
 import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.ForgePayloadAdapters;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionCompleteMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionDataMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionRequestMessage;
+import com.mapsyncer.network.ForgePayloadAdapters.ForgeContributionResultMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncRequestMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncResponseMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeSyncProgressMessage;
 import com.mapsyncer.network.ForgePayloadAdapters.ForgeServerInstalledMessage;
 import com.mapsyncer.network.NetworkHandler;
 import com.mapsyncer.network.PayloadContext;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -44,6 +52,10 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     private BiConsumer<SyncProgressPayload, PayloadContext> syncProgressHandler;
     private BiConsumer<ServerInstalledPayload, PayloadContext> serverInstalledHandler;
     private BiConsumer<SyncRequestPayload, PayloadContext> syncRequestHandler;
+    private BiConsumer<ContributionRequestPayload, PayloadContext> contributionRequestHandler;
+    private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
+    private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
+    private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
 
     public void init() {
         // 同步请求（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
@@ -92,6 +104,56 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
                 }
             })
             .add();
+
+        // 贡献请求（服务端 -> 客户端）
+        CHANNEL.messageBuilder(ForgeContributionRequestMessage.class, 4, NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(ForgeContributionRequestMessage::encode)
+            .decoder(ForgeContributionRequestMessage::decode)
+            .consumerMainThread((msg, ctx) -> {
+                if (contributionRequestHandler != null) {
+                    contributionRequestHandler.accept(msg.getData(), new PayloadContext(ctx));
+                }
+            })
+            .add();
+
+        // 贡献数据（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
+        CHANNEL.messageBuilder(ForgeContributionDataMessage.class, 5, NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ForgeContributionDataMessage::encode)
+            .decoder(ForgeContributionDataMessage::decode)
+            .consumerMainThread((msg, ctx) -> {
+                if (ctx.getSender() != null) {
+                    confirmPlayer(ctx.getSender().getUUID());
+                }
+                if (contributionDataHandler != null) {
+                    contributionDataHandler.accept(msg.getData(), new PayloadContext(ctx));
+                }
+            })
+            .add();
+
+        // 贡献完成（客户端 -> 服务端）：收到即确认该客户端安装了 MapSyncer
+        CHANNEL.messageBuilder(ForgeContributionCompleteMessage.class, 6, NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ForgeContributionCompleteMessage::encode)
+            .decoder(ForgeContributionCompleteMessage::decode)
+            .consumerMainThread((msg, ctx) -> {
+                if (ctx.getSender() != null) {
+                    confirmPlayer(ctx.getSender().getUUID());
+                }
+                if (contributionCompleteHandler != null) {
+                    contributionCompleteHandler.accept(msg.getData(), new PayloadContext(ctx));
+                }
+            })
+            .add();
+
+        // 贡献结果（服务端 -> 客户端）
+        CHANNEL.messageBuilder(ForgeContributionResultMessage.class, 7, NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(ForgeContributionResultMessage::encode)
+            .decoder(ForgeContributionResultMessage::decode)
+            .consumerMainThread((msg, ctx) -> {
+                if (contributionResultHandler != null) {
+                    contributionResultHandler.accept(msg.getData(), new PayloadContext(ctx));
+                }
+            })
+            .add();
     }
 
     @Override
@@ -104,6 +166,16 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void sendToServer(SyncRequestPayload payload) {
         CHANNEL.send(new ForgeSyncRequestMessage(payload), PacketDistributor.SERVER.noArg());
+    }
+
+    @Override
+    public void sendToServer(ContributionDataPayload payload) {
+        CHANNEL.send(new ForgeContributionDataMessage(payload), PacketDistributor.SERVER.noArg());
+    }
+
+    @Override
+    public void sendToServer(ContributionCompletePayload payload) {
+        CHANNEL.send(new ForgeContributionCompleteMessage(payload), PacketDistributor.SERVER.noArg());
     }
 
     @Override
@@ -125,6 +197,18 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     }
 
     @Override
+    public void sendToPlayer(ServerPlayer player, ContributionRequestPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        CHANNEL.send(new ForgeContributionRequestMessage(payload), PacketDistributor.PLAYER.with(player));
+    }
+
+    @Override
+    public void sendToPlayer(ServerPlayer player, ContributionResultPayload payload) {
+        if (!confirmedPlayers.contains(player.getUUID())) return;
+        CHANNEL.send(new ForgeContributionResultMessage(payload), PacketDistributor.PLAYER.with(player));
+    }
+
+    @Override
     public void registerSyncResponseHandler(BiConsumer<SyncResponsePayload, PayloadContext> handler) {
         this.syncResponseHandler = handler;
     }
@@ -142,6 +226,26 @@ public class ForgeNetworkHandler implements NetworkHandler<ServerPlayer, Object>
     @Override
     public void registerSyncRequestHandler(BiConsumer<SyncRequestPayload, PayloadContext> handler) {
         this.syncRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionRequestHandler(BiConsumer<ContributionRequestPayload, PayloadContext> handler) {
+        this.contributionRequestHandler = handler;
+    }
+
+    @Override
+    public void registerContributionDataHandler(BiConsumer<ContributionDataPayload, PayloadContext> handler) {
+        this.contributionDataHandler = handler;
+    }
+
+    @Override
+    public void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler) {
+        this.contributionCompleteHandler = handler;
+    }
+
+    @Override
+    public void registerContributionResultHandler(BiConsumer<ContributionResultPayload, PayloadContext> handler) {
+        this.contributionResultHandler = handler;
     }
 
     @Override

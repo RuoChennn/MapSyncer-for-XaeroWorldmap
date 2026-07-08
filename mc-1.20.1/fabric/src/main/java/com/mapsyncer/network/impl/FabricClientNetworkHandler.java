@@ -2,6 +2,8 @@ package com.mapsyncer.network.impl;
 
 import com.mapsyncer.network.FabricPayloadAdapters;
 import com.mapsyncer.network.PayloadContext;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
@@ -66,6 +68,32 @@ public class FabricClientNetworkHandler {
                         var h = networkHandler.getServerInstalledHandler();
                         if (h != null) {
                             ServerInstalledPayload payload = FabricPayloadAdapters.readServerInstalled(buf);
+                            h.accept(payload, new PayloadContext(client));
+                        }
+                    }
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                FabricPayloadAdapters.CONTRIBUTION_REQUEST_ID,
+                (client, handler, buf, responseSender) -> {
+                    if (networkHandler != null) {
+                        var h = networkHandler.getContributionRequestHandler();
+                        if (h != null) {
+                            ContributionRequestPayload payload = FabricPayloadAdapters.readContributionRequest(buf);
+                            h.accept(payload, new PayloadContext(client));
+                        }
+                    }
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                FabricPayloadAdapters.CONTRIBUTION_RESULT_ID,
+                (client, handler, buf, responseSender) -> {
+                    if (networkHandler != null) {
+                        var h = networkHandler.getContributionResultHandler();
+                        if (h != null) {
+                            ContributionResultPayload payload = FabricPayloadAdapters.readContributionResult(buf);
                             h.accept(payload, new PayloadContext(client));
                         }
                     }

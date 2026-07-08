@@ -3,6 +3,11 @@ package com.mapsyncer.network;
 import com.mapsyncer.MapSyncer;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRegionMeta;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -32,6 +37,14 @@ public class FabricPayloadAdapters {
     public static final ResourceLocation SYNC_RESPONSE_ID = new ResourceLocation(MapSyncer.MOD_ID, "sync_response");
     public static final ResourceLocation SYNC_PROGRESS_ID = new ResourceLocation(MapSyncer.MOD_ID, "sync_progress");
     public static final ResourceLocation SERVER_INSTALLED_ID = new ResourceLocation(MapSyncer.MOD_ID, "server_installed");
+    public static final ResourceLocation CONTRIBUTION_REQUEST_ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_REQUEST_ID);
+    public static final ResourceLocation CONTRIBUTION_DATA_ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_DATA_ID);
+    public static final ResourceLocation CONTRIBUTION_COMPLETE_ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_COMPLETE_ID);
+    public static final ResourceLocation CONTRIBUTION_RESULT_ID =
+            new ResourceLocation(MapSyncer.MOD_ID, NetworkHandler.CONTRIBUTION_RESULT_ID);
 
     // ===== 同步请求 =====
 
@@ -118,6 +131,92 @@ public class FabricPayloadAdapters {
 
     public static ServerInstalledPayload readServerInstalled(FriendlyByteBuf buf) {
         return new ServerInstalledPayload(buf.readUtf(), buf.readLong(), buf.readInt());
+    }
+
+    // ===== 贡献请求 =====
+
+    public static void writeContributionRequest(FriendlyByteBuf buf, ContributionRequestPayload payload) {
+        buf.writeInt(payload.requestId());
+        buf.writeInt(payload.regions().size());
+        for (ContributionRegionMeta region : payload.regions()) {
+            buf.writeUtf(region.relativePath());
+            buf.writeInt(region.regionX());
+            buf.writeInt(region.regionZ());
+            buf.writeUtf(region.dimension());
+            buf.writeInt(region.caveLayer());
+            buf.writeLong(region.serverTimestampSeconds());
+            buf.writeUtf(region.serverHash());
+        }
+        buf.writeUtf(payload.status());
+    }
+
+    public static ContributionRequestPayload readContributionRequest(FriendlyByteBuf buf) {
+        int requestId = buf.readInt();
+        int size = buf.readInt();
+        List<ContributionRegionMeta> regions = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            regions.add(new ContributionRegionMeta(
+                    buf.readUtf(),
+                    buf.readInt(),
+                    buf.readInt(),
+                    buf.readUtf(),
+                    buf.readInt(),
+                    buf.readLong(),
+                    buf.readUtf()
+            ));
+        }
+        String status = buf.readUtf();
+        return new ContributionRequestPayload(requestId, regions, status);
+    }
+
+    // ===== 贡献数据 =====
+
+    public static void writeContributionData(FriendlyByteBuf buf, ContributionDataPayload payload) {
+        buf.writeInt(payload.requestId());
+        writeChunkMapData(buf, payload.chunk());
+        buf.writeUtf(payload.relativePath());
+        buf.writeLong(payload.observedServerTimestampSeconds());
+        buf.writeUtf(payload.observedServerHash());
+    }
+
+    public static ContributionDataPayload readContributionData(FriendlyByteBuf buf) {
+        int requestId = buf.readInt();
+        ChunkMapData chunk = readChunkMapData(buf);
+        String relativePath = buf.readUtf();
+        long observedServerTimestampSeconds = buf.readLong();
+        String observedServerHash = buf.readUtf();
+        return new ContributionDataPayload(
+                requestId,
+                chunk,
+                relativePath,
+                observedServerTimestampSeconds,
+                observedServerHash
+        );
+    }
+
+    // ===== 贡献完成 =====
+
+    public static void writeContributionComplete(FriendlyByteBuf buf, ContributionCompletePayload payload) {
+        buf.writeInt(payload.requestId());
+        buf.writeInt(payload.sentRegions());
+        buf.writeUtf(payload.status());
+    }
+
+    public static ContributionCompletePayload readContributionComplete(FriendlyByteBuf buf) {
+        return new ContributionCompletePayload(buf.readInt(), buf.readInt(), buf.readUtf());
+    }
+
+    // ===== 贡献结果 =====
+
+    public static void writeContributionResult(FriendlyByteBuf buf, ContributionResultPayload payload) {
+        buf.writeInt(payload.requestId());
+        buf.writeInt(payload.accepted());
+        buf.writeInt(payload.rejected());
+        buf.writeUtf(payload.status());
+    }
+
+    public static ContributionResultPayload readContributionResult(FriendlyByteBuf buf) {
+        return new ContributionResultPayload(buf.readInt(), buf.readInt(), buf.readInt(), buf.readUtf());
     }
 
     // ===== ChunkMapData 序列化 =====
