@@ -165,6 +165,27 @@ public interface Platform {
     int getMaxContributionQueueSize();
 
     /**
+     * 正常点击断开连接时，是否尝试在退出前上传本地 Xaero 地图贡献。
+     *
+     * <p>仅对 {@link ClientSyncMode#BIDIRECTIONAL} 客户端生效，且无法保护崩溃、
+     * 强制关闭进程或网络中断等异常退出路径。默认返回 {@code true}，各平台可在
+     * Task 6 中接入真实配置覆盖此默认值。</p>
+     */
+    default boolean isSyncBeforeDisconnect() {
+        return true;
+    }
+
+    /**
+     * 退出前贡献同步等待的最大秒数。
+     *
+     * <p>范围建议 0 - 60，0 表示禁用退出前等待（等同于关闭该能力）。默认返回 15，
+     * 各平台可在 Task 6 中接入真实配置覆盖此默认值。</p>
+     */
+    default int getDisconnectSyncTimeoutSeconds() {
+        return 15;
+    }
+
+    /**
      * 获取增量更新模式
      */
     UpdateMode getIncrementalUpdateMode();

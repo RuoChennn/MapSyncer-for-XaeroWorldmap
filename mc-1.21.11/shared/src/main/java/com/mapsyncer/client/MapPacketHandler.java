@@ -41,6 +41,9 @@ public class MapPacketHandler {
     /** 同步是否正在进行中，用于协调区块更新的禁用 */
     private static volatile boolean syncInProgress = false;
 
+    /** 贡献会话是否正在进行中（普通 sync 或退出前贡献），用于防止退出前贡献与普通贡献重叠。 */
+    private static volatile boolean contributionInProgress = false;
+
     /**
      * 检查同步是否正在进行中。
      *
@@ -48,6 +51,18 @@ public class MapPacketHandler {
      */
     public static boolean isSyncInProgress() {
         return syncInProgress;
+    }
+
+    /**
+     * 检查是否有贡献会话正在进行中。
+     *
+     * <p>普通 {@code /mapsyncer sync} 的贡献阶段和退出前贡献都会置位该标志。
+     * 退出前贡献同步在启动前会检查该标志，避免与普通贡献重叠。</p>
+     *
+     * @return true 表示有贡献会话正在进行
+     */
+    public static boolean isContributionInProgress() {
+        return contributionInProgress;
     }
 
     /** 服务端是否已安装 MapSyncer（加入服务器时检测） */
@@ -145,6 +160,7 @@ public class MapPacketHandler {
      */
     public static void clearSyncData() {
         syncInProgress = false;
+        contributionInProgress = false;
         lastMwDir = null;
         syncStartTime = 0;
         clearReceivedChunks();
@@ -458,6 +474,9 @@ public class MapPacketHandler {
 
     private static void handleContributionRequest(ContributionRequestPayload payload, PayloadContext context) {
         context.enqueueWork(() -> {
+            // 通知退出前贡献管理器：服务端已为某个请求创建了贡献会话（可能是退出前贡献）。
+            PreDisconnectContributionManager.handleContributionRequest(payload);
+
             ClientSyncMode mode = PlatformManager.getPlatform().getClientSyncMode();
             if (mode == null || !mode.allowsContribution()) {
                 NetworkManager.sendToServer(new ContributionCompletePayload(payload.requestId(), 0, "disabled"));
@@ -468,6 +487,10 @@ public class MapPacketHandler {
                 NetworkManager.sendToServer(new ContributionCompletePayload(payload.requestId(), 0, "no_server_dir"));
                 return;
             }
+
+            // 通过前置检查，确认本次会真正开始上传贡献，置位贡献进行中标志。
+            // 该标志只会在收到 terminal=true 的结果或断开清理时清除。
+            contributionInProgress = true;
 
             int sent = 0;
             for (var meta : payload.regions()) {
@@ -485,9 +508,17 @@ public class MapPacketHandler {
     }
 
     private static void handleContributionResult(ContributionResultPayload payload, PayloadContext context) {
-        context.enqueueWork(() -> LOGGER.debug(
-                "Contribution result request={}, accepted={}, rejected={}, status={}",
-                payload.requestId(), payload.accepted(), payload.rejected(), payload.status()));
+        context.enqueueWork(() -> {
+            // 通知退出前贡献管理器：匹配时更新状态或触发断开。
+            PreDisconnectContributionManager.handleContributionResult(payload);
+            // 终态结果清除贡献进行中标志；region 级中间状态（accepted 等）保持标志。
+            if (payload.terminal()) {
+                contributionInProgress = false;
+            }
+            LOGGER.debug(
+                "Contribution result request={}, accepted={}, rejected={}, status={}, terminal={}",
+                payload.requestId(), payload.accepted(), payload.rejected(), payload.status(), payload.terminal());
+        });
     }
 
     /**
