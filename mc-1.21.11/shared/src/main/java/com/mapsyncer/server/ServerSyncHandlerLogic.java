@@ -513,7 +513,7 @@ public class ServerSyncHandlerLogic {
         ResourceKey<Level> startDimension = playerSyncDimensions.get(playerId);
         if (startDimension != null && !player.level().dimension().equals(startDimension)) {
             LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
-                    playerId, startDimension.location(), player.level().dimension().location());
+                    playerId, startDimension.identifier(), player.level().dimension().identifier());
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
             return false;
@@ -780,7 +780,7 @@ public class ServerSyncHandlerLogic {
         // 在主线程预捕获玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
         int startBlockX = serverPlayer.getBlockX();
         int startBlockZ = serverPlayer.getBlockZ();
-        int viewDistanceChunks = serverPlayer.serverLevel().getServer().getPlayerList().getViewDistance() + 2;
+        int viewDistanceChunks = serverPlayer.level().getServer().getPlayerList().getViewDistance() + 2;
         int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;
 
         // Client metadata (timestamp + hash) - contains already received regions for resume
@@ -800,7 +800,7 @@ public class ServerSyncHandlerLogic {
      * 在主线程执行任务前检查版本号是否匹配（旧请求的入队任务自动丢弃）。
      */
     private static void enqueueIfCurrent(ServerPlayer serverPlayer, UUID playerId, int version, Runnable task) {
-        serverPlayer.serverLevel().getServer().execute(() -> {
+        serverPlayer.level().getServer().execute(() -> {
             if (playerSyncVersions.getOrDefault(playerId, 0) == version) {
                 task.run();
             }

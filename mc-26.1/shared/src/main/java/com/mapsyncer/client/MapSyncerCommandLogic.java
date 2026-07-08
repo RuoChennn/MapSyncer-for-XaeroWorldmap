@@ -228,7 +228,7 @@ public class MapSyncerCommandLogic {
     public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
         if (!PlatformManager.getPlatform().getClientSyncMode().allowsReceive()) {
             if (mc.player != null) {
-                mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.disabled"), false);
+                mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.disabled"));
             }
             return;
         }
