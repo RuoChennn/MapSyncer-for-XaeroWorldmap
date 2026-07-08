@@ -16,6 +16,7 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 repositories {
     mavenCentral()
     maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://libraries.minecraft.net/' }
     maven { url = 'https://maven.aliyun.com/repository/public' }
 }
 
@@ -49,6 +50,7 @@ sourceSets.main.java.srcDir '../shared/src/main/java'
 sourceSets.main.resources.srcDir '../shared/src/main/resources'
 sourceSets.main.java.srcDir "${rootProject.projectDir}/libs/common/src/main/java"
 sourceSets.main.resources.srcDir "${rootProject.projectDir}/libs/common/src/main/resources"
+sourceSets.main.resources.srcDir "${buildDir}/generated/resources/mixin"
 
 dependencies {
     // Minecraft Forge 1.21.11 (Forge 61.x)
@@ -66,8 +68,56 @@ dependencies {
     implementation project(':libs:platform-api')
 }
 
+tasks.register('createMixinMcpToSrg') {
+    dependsOn 'createMcpToSrg'
+    def tsrgFile = file("${buildDir}/createMcpToSrg/output.tsrg")
+    def srgFile = file("${buildDir}/createMcpToSrg/output.srg")
+    inputs.file(tsrgFile)
+    outputs.file(srgFile)
+    doLast {
+        String fromClass = null
+        String toClass = null
+        srgFile.parentFile.mkdirs()
+        srgFile.withWriter('UTF-8') { writer ->
+            tsrgFile.eachLine('UTF-8') { line ->
+                if (!line.trim()) {
+                    return
+                }
+                if (!line.startsWith('\t') && !line.startsWith(' ')) {
+                    def parts = line.trim().split(/\s+/)
+                    if (parts.length >= 2) {
+                        fromClass = parts[0]
+                        toClass = parts[1]
+                        writer.writeLine("CL: ${fromClass} ${toClass}")
+                    }
+                    return
+                }
+                if (fromClass == null || toClass == null) {
+                    return
+                }
+                def parts = line.trim().split(/\s+/)
+                if (parts.length == 2) {
+                    writer.writeLine("FD: ${fromClass}/${parts[0]} ${toClass}/${parts[1]}")
+                } else if (parts.length >= 3) {
+                    writer.writeLine("MD: ${fromClass}/${parts[0]} ${parts[1]} ${toClass}/${parts[2]} ${parts[1]}")
+                }
+            }
+        }
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    dependsOn 'createMixinMcpToSrg'
+    options.compilerArgs += [
+            "-AoutRefMapFile=${buildDir}/generated/resources/mixin/mapsyncer.refmap.json",
+            "-AreobfSrgFile=${buildDir}/createMcpToSrg/output.srg",
+            "-AdefaultObfuscationEnv=searge"
+    ]
+}
+
+tasks.named('processResources') {
+    dependsOn 'compileJava'
 }
 
 // 创建仅包含项目内部依赖的配置

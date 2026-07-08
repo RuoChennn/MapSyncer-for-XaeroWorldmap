@@ -133,7 +133,7 @@
 | 入队后会话用服务端 ID | 服务端成功入队后的最终结果 | ContributionResultPayload.requestId = 服务端会话 ID | ⬜ | |
 | 非终态结果仅更新 UI | 收到 accepted / stale_upload 等 region 级结果 | 状态文字更新，不执行断开 | ⬜ | terminal=false |
 | 崩溃/杀进程不同步 | 强制关闭游戏进程 | 无法保证同步，本功能不覆盖 | ⚠️ | 设计限制 |
-| Forge 模块编译验证 | Forge 1.20.1/1.21.1/1.21.11 Mixin 编译 | compileJava 通过 | ⬜ | 受 ForgeGradle 6.x 不兼容 Gradle 9.x 限制，需独立 Gradle 8.x 环境 |
+| Forge 模块编译验证 | Forge 1.20.1/1.21.1/1.21.11 Mixin 编译 | compileJava 通过 | ✅ | 2026-07-08 使用 Gradle 8.9 + JDK 21 独立 settings 构建通过，并生成 Forge refmap |
 
 ---
 
@@ -181,6 +181,16 @@
 ---
 
 ## 十一、测试总结
+
+### 2026-07-08 自动化验证记录
+
+| 验证项 | 覆盖范围 | 结果 | 备注 |
+|--------|----------|------|------|
+| 主 Gradle 构建 | libs、1.20.1 Fabric、1.21.1 Fabric、1.21.1 NeoForge、1.21.11 NeoForge、26.1 NeoForge | ✅ | `build -x test` 通过 |
+| Forge 独立构建 | 1.20.1 Forge、1.21.1 Forge、1.21.11 Forge | ✅ | 使用 Gradle 8.9 + `scripts/fastbuild/settings-forge.gradle` 临时 settings 构建通过 |
+| Fabric 隔离构建 | 1.21.11 Fabric、26.1 Fabric | ✅ | 使用对应 fastbuild settings 构建通过 |
+| Jar 产物烟测 | 4 个 Fabric、3 个 Forge、3 个 NeoForge 发布 jar | ✅ | 检查 loader 元数据、`mapsyncer.mixins.json`；Forge jar 额外检查 `mapsyncer.refmap.json` |
+| Dev-client 启动前烟测 | 默认 settings 下 `configureClientLaunch` / `prepareClientRun` | ⚠️ | 批量任务 120 秒无输出超时；单独 1.20.1 Fabric `configureClientLaunch` 60 秒无输出超时；`gradlew help` 正常，需后续真实客户端环境继续排查 |
 
 ### 测试环境信息
 

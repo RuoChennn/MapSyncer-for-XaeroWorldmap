@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PauseScreen.class)
 public class PauseScreenMixin {
 
-    @Inject(method = "lambda$createPauseMenu$7", at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"lambda$createPauseMenu$7", "m_414157_"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void mapsyncer$interceptDisconnect(CallbackInfo ci) {
         Runnable originalDisconnect = () ->
                 Minecraft.getInstance().disconnectFromWorld(ClientLevel.DEFAULT_QUIT_MESSAGE);
