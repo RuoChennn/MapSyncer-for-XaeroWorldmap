@@ -76,8 +76,8 @@ sequenceDiagram
 3. 如果客户端模式不是 `BIDIRECTIONAL`、服务端未安装 MapSyncer、已有同步进行中、或不在多人服务器，则直接执行原始断开。
 4. 打开 `PreDisconnectSyncScreen`，玩家不能移动或继续操作世界。
 5. 客户端扫描本地地图元数据，发送 `ContributionOnlyRequestPayload`。
-6. 服务端验证玩家是否允许贡献，并只返回贡献候选。
-7. 客户端沿用 `ClientContributionCollector` 上传候选 region。
+6. 服务端验证玩家是否允许贡献，并通过 `ContributionRequestPayload` 请求客户端上传候选 region；不发送 `SyncResponsePayload`，不执行服务端到客户端地图分发。
+7. 客户端沿用 `ClientContributionCollector` 上传服务端请求的 region。
 8. 服务端沿用 `ContributionCoordinator` 串行处理贡献。
 9. 收到结果或超时后，界面执行原始断开。
 
@@ -93,7 +93,7 @@ sequenceDiagram
 
 ### 服务端行为
 
-退出前贡献使用独立请求类型，不触发服务端分发。服务端仍使用现有白名单、OP、队列、冷却和二次基线校验。若队列满或贡献被拒绝，客户端显示简短状态后按超时或用户选择退出。
+退出前贡献使用独立请求类型，不触发服务端分发。服务端只通过 `ContributionRequestPayload` 请求客户端上传候选 region，并通过 `ContributionResultPayload` 报告贡献结果。服务端仍使用现有白名单、OP、队列、冷却和二次基线校验。若队列满或贡献被拒绝，客户端显示简短状态后按超时或用户选择退出。
 
 ### 配置项
 
@@ -121,4 +121,3 @@ sequenceDiagram
 - 贡献完成、失败、跳过、取消和超时路径都有明确状态。
 - 异常退出不承诺同步，文档中明确说明限制。
 - 现有普通 `/mapsyncer sync` 行为保持不变。
-
