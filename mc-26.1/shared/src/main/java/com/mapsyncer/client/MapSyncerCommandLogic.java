@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -225,6 +226,13 @@ public class MapSyncerCommandLogic {
      * 发送同步请求到服务端。
      */
     public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll) {
+        if (!PlatformManager.getPlatform().getClientSyncMode().allowsReceive()) {
+            if (mc.player != null) {
+                mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.disabled"), false);
+            }
+            return;
+        }
+
         if (MapPacketHandler.isSyncInProgress()) {
             if (mc.player != null) {
                 mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.in_progress"));

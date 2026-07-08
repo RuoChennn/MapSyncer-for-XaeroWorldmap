@@ -168,6 +168,7 @@ public class MapPacketHandler {
      */
     public static void onDisconnect() {
         AutoSyncManager.cancel();
+        BackgroundSyncManager.stop();
         resetServerStatus();
         clearSyncData();
         XaeroReflectionHelper.clearCache();
@@ -221,6 +222,11 @@ public class MapPacketHandler {
                         });
                     }, 5);
                 }
+                BackgroundSyncManager.start(() -> Minecraft.getInstance().execute(() -> {
+                    if (Minecraft.getInstance().player != null && !MapPacketHandler.isSyncInProgress()) {
+                        MapSyncerCommandLogic.executeSyncAll();
+                    }
+                }));
             });
         });
 
