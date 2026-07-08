@@ -1,6 +1,7 @@
 package com.mapsyncer.client;
 
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mapsyncer.config.ClientSyncMode;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ClientMeta;
@@ -240,6 +241,13 @@ public class MapSyncerCommandLogic {
             return;
         }
 
+        if (MapPacketHandler.isContributionInProgress() || PreDisconnectContributionManager.isActive()) {
+            if (mc.player != null) {
+                mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.in_progress"));
+            }
+            return;
+        }
+
         Map<String, ClientMeta> metaMap;
 
         Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
@@ -249,9 +257,11 @@ public class MapSyncerCommandLogic {
 
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         String xaeroDim = syncAll ? null : dimMapping.toXaeroDimension(dimensionId);
+        boolean reportLocalMetaForContribution = shouldReportLocalMetaForContribution();
 
         if (syncAll) {
-            if (serverDir != null && tsCache != null && tsCache.cacheFileExists()) {
+            if (serverDir != null && (reportLocalMetaForContribution
+                    || (tsCache != null && tsCache.cacheFileExists()))) {
                 metaMap = ClientHashManager.computeMetaForSync(serverDir);
                 LOGGER.debug("Sync all: {} cached entries", metaMap.size());
             } else {
@@ -269,6 +279,18 @@ public class MapSyncerCommandLogic {
                     metaMap = new java.util.HashMap<>();
                     metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
                     LOGGER.warn("Dimension {} has cache but no mw$ dir", dimensionId);
+                }
+            } else if (reportLocalMetaForContribution && serverDir != null) {
+                Path dimDir = serverDir.resolve(xaeroDim);
+                Path mwDir = findMwDir(dimDir);
+                if (mwDir != null) {
+                    metaMap = ClientHashManager.computeMetaForSync(mwDir);
+                    LOGGER.debug("First bidirectional sync for {}, reporting {} local entries",
+                            dimensionId, metaMap.size());
+                } else {
+                    metaMap = new java.util.HashMap<>();
+                    metaMap.put(xaeroDim + "/_placeholder_", new ClientMeta(0, "00000000"));
+                    LOGGER.debug("First sync for {} has no local mw$ dir", dimensionId);
                 }
             } else {
                 metaMap = new java.util.HashMap<>();
@@ -295,6 +317,11 @@ public class MapSyncerCommandLogic {
             NetworkManager.sendToServer(part);
         }
         SyncProgressTracker.startTracking();
+    }
+
+    private static boolean shouldReportLocalMetaForContribution() {
+        ClientSyncMode mode = PlatformManager.getPlatform().getClientSyncMode();
+        return mode != null && mode.allowsContribution();
     }
 
     /**

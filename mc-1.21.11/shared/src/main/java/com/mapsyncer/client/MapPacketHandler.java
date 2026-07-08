@@ -200,6 +200,7 @@ public class MapPacketHandler {
     public static void onDisconnect() {
         AutoSyncManager.cancel();
         BackgroundSyncManager.stop();
+        PreDisconnectContributionManager.cancel();
         resetServerStatus();
         clearSyncData();
         XaeroReflectionHelper.clearCache();
@@ -242,12 +243,14 @@ public class MapPacketHandler {
                     }
                 }
 
-                if (AutoSyncManager.shouldAutoSync(
-                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes())) {
+                boolean shouldAutoSync = AutoSyncManager.shouldAutoSync(
+                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes());
+                boolean shouldBootstrapContribution = shouldBootstrapContribution(
+                        payload.lastGenerationTimestamp(), payload.autoSyncIntervalMinutes());
+                if (shouldAutoSync || shouldBootstrapContribution) {
                     AutoSyncManager.schedule(() -> {
                         Minecraft.getInstance().execute(() -> {
-                            if (Minecraft.getInstance().player != null
-                                    && !MapPacketHandler.isSyncInProgress()) {
+                            if (canStartAutomaticSync()) {
                                 Minecraft.getInstance().player.displayClientMessage(
                                     ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")), false);
                                 AutoSyncManager.markStarted();
@@ -257,7 +260,7 @@ public class MapPacketHandler {
                     }, 5);
                 }
                 BackgroundSyncManager.start(() -> Minecraft.getInstance().execute(() -> {
-                    if (Minecraft.getInstance().player != null && !MapPacketHandler.isSyncInProgress()) {
+                    if (canStartAutomaticSync()) {
                         MapSyncerCommandLogic.executeSyncAll();
                     }
                 }));
@@ -285,6 +288,24 @@ public class MapPacketHandler {
      */
     public static boolean isServerInstalled() {
         return serverInstalled;
+    }
+
+    private static boolean shouldBootstrapContribution(long lastGenerationTimestamp, int autoSyncIntervalMinutes) {
+        try {
+            return autoSyncIntervalMinutes > 0
+                    && lastGenerationTimestamp <= 0
+                    && PlatformManager.getPlatform().getClientSyncMode() == ClientSyncMode.BIDIRECTIONAL;
+        } catch (IllegalStateException e) {
+            LOGGER.debug("Platform not ready, skipping bootstrap contribution auto-sync");
+            return false;
+        }
+    }
+
+    private static boolean canStartAutomaticSync() {
+        return Minecraft.getInstance().player != null
+                && !MapPacketHandler.isSyncInProgress()
+                && !MapPacketHandler.isContributionInProgress()
+                && !PreDisconnectContributionManager.isActive();
     }
 
     /**
@@ -340,6 +361,7 @@ public class MapPacketHandler {
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.cancelTracking();
+                AutoSyncManager.markComplete();
                 if (tsCache != null) {
                     tsCache.clearSyncState();
                 }
@@ -351,6 +373,7 @@ public class MapPacketHandler {
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.cancelTracking();
+                AutoSyncManager.markComplete();
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
                 }

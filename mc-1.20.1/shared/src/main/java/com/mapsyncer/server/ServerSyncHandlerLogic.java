@@ -230,6 +230,9 @@ public class ServerSyncHandlerLogic {
     /** 每个玩家当前的 contribution-only 请求版本，旧 worker 通过版本号静默自过滤。 */
     private static final Map<UUID, Integer> playerContributionOnlyVersions = new ConcurrentHashMap<>();
 
+    /** contribution-only 候选扫描线程引用，用于断线或新请求到来时立即中断。 */
+    private static final Map<UUID, Thread> contributionOnlyThreads = new ConcurrentHashMap<>();
+
     private record ContributionOnlyRequestAssembly(
             int requestId,
             int totalParts,
@@ -328,6 +331,8 @@ public class ServerSyncHandlerLogic {
             contributionOnlyRequestBuffers.remove(playerId);
             LOGGER.debug("Dropping invalid contribution-only part request={} part={}/{} from player {}",
                     payload.requestId(), payload.partIndex(), payload.totalParts(), playerId);
+            NetworkManager.sendToPlayer(onlinePlayer, new ContributionResultPayload(
+                    payload.requestId(), 0, 0, "invalid_request", true));
             return;
         }
 
@@ -423,37 +428,51 @@ public class ServerSyncHandlerLogic {
         Map<String, ClientMeta> clientMeta = Map.copyOf(payload.clientMeta());
 
         Thread worker = new Thread(() -> {
-            List<ContributionRegionMeta> candidates = collectContributionOnlyCandidates(clientMeta);
-            Runnable enqueue = () -> {
-                if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
+            try {
+                if (Thread.currentThread().isInterrupted()) {
                     return;
                 }
-                ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
-                if (onlinePlayer == null) {
+                List<ContributionRegionMeta> candidates = collectContributionOnlyCandidates(clientMeta);
+                if (Thread.currentThread().isInterrupted()) {
                     return;
                 }
-                if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
-                    NetworkManager.sendToPlayer(onlinePlayer,
-                            new ContributionResultPayload(clientRequestId, 0, clientMeta.size(), "not_allowed", true));
+                Runnable enqueue = () -> {
+                    if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
+                        return;
+                    }
+                    ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
+                    if (onlinePlayer == null) {
+                        return;
+                    }
+                    if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
+                        NetworkManager.sendToPlayer(onlinePlayer,
+                                new ContributionResultPayload(clientRequestId, 0, clientMeta.size(), "not_allowed", true));
+                        clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
+                        return;
+                    }
+                    if (candidates.isEmpty()) {
+                        NetworkManager.sendToPlayer(onlinePlayer,
+                                new ContributionResultPayload(clientRequestId, 0, 0, "no_candidates", true));
+                        clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
+                        return;
+                    }
+                    boolean queued = ContributionCoordinator.enqueueSession(onlinePlayer, candidates);
+                    if (!queued) {
+                        NetworkManager.sendToPlayer(onlinePlayer,
+                                new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full", true));
+                    }
                     clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
-                    return;
-                }
-                if (candidates.isEmpty()) {
-                    NetworkManager.sendToPlayer(onlinePlayer,
-                            new ContributionResultPayload(clientRequestId, 0, 0, "no_candidates", true));
-                    clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
-                    return;
-                }
-                boolean queued = ContributionCoordinator.enqueueSession(onlinePlayer, candidates);
-                if (!queued) {
-                    NetworkManager.sendToPlayer(onlinePlayer,
-                            new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full", true));
-                }
-                clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
-            };
-            server.execute(enqueue);
+                };
+                server.execute(enqueue);
+            } finally {
+                contributionOnlyThreads.remove(playerId, Thread.currentThread());
+            }
         }, "mapsyncer-contribution-only-" + playerId);
         worker.setDaemon(true);
+        Thread oldWorker = contributionOnlyThreads.put(playerId, worker);
+        if (oldWorker != null && oldWorker.isAlive()) {
+            oldWorker.interrupt();
+        }
         worker.start();
         LOGGER.debug("Started contribution-only candidate worker for player {} client request {} version {}",
                 playerId, clientRequestId, requestVersion);
@@ -674,6 +693,7 @@ public class ServerSyncHandlerLogic {
         requestTotalParts.remove(playerId);
         contributionOnlyRequestBuffers.remove(playerId);
         playerContributionOnlyVersions.remove(playerId);
+        interruptContributionOnlyWorker(playerId);
 
         // 清理线程引用并确保线程已停止
         Thread syncThread = syncThreads.remove(playerId);
@@ -694,6 +714,9 @@ public class ServerSyncHandlerLogic {
         playerSyncVersions.remove(playerId);
         requestPartBuffer.remove(playerId);
         requestTotalParts.remove(playerId);
+        contributionOnlyRequestBuffers.remove(playerId);
+        playerContributionOnlyVersions.remove(playerId);
+        interruptContributionOnlyWorker(playerId);
 
         Thread syncThread = syncThreads.remove(playerId);
         if (syncThread != null && syncThread.isAlive()) {
@@ -1217,6 +1240,9 @@ public class ServerSyncHandlerLogic {
         List<ContributionRegionMeta> candidates = new ArrayList<>();
         Set<String> addedPaths = new HashSet<>();
         for (Map.Entry<String, ClientMeta> entry : clientMeta.entrySet()) {
+            if (Thread.currentThread().isInterrupted()) {
+                return List.of();
+            }
             String normalizedPath = normalizeClientMetaPath(entry.getKey());
             if (normalizedPath == null || visitedServerPaths.contains(normalizedPath)
                     || normalizedPath.contains("_placeholder_") || !addedPaths.add(normalizedPath)) {
@@ -1238,6 +1264,9 @@ public class ServerSyncHandlerLogic {
         if (clientMeta == null || clientMeta.isEmpty()) {
             return List.of();
         }
+        if (Thread.currentThread().isInterrupted()) {
+            return List.of();
+        }
 
         Path cacheDir = ConversionOrchestrator.getCacheDir();
         if (!Files.exists(cacheDir)) {
@@ -1246,6 +1275,9 @@ public class ServerSyncHandlerLogic {
 
         Set<String> requestedDimensions = new HashSet<>();
         for (String key : clientMeta.keySet()) {
+            if (Thread.currentThread().isInterrupted()) {
+                return List.of();
+            }
             String[] parts = key.split("[/\\\\]");
             if (parts.length > 1) {
                 requestedDimensions.add(parts[0]);
@@ -1255,6 +1287,9 @@ public class ServerSyncHandlerLogic {
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         boolean hasValidDimension = false;
         for (String xaeroDim : requestedDimensions) {
+            if (Thread.currentThread().isInterrupted()) {
+                return List.of();
+            }
             Path dimCacheDir = cacheDir.resolve(xaeroDim);
             if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
                 try (Stream<Path> stream = Files.walk(dimCacheDir)) {
@@ -1284,6 +1319,9 @@ public class ServerSyncHandlerLogic {
         List<ContributionRegionMeta> contributionCandidates = new ArrayList<>();
         Set<String> visitedServerPaths = new HashSet<>();
         for (Path zipPath : allZipPaths) {
+            if (Thread.currentThread().isInterrupted()) {
+                return List.of();
+            }
             String relativePath = absCacheDir.relativize(zipPath).toString();
             String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
             normalizedPath = stripMwWorldId(normalizedPath);
@@ -1362,10 +1400,21 @@ public class ServerSyncHandlerLogic {
      * 在服务器停止时调用，防止内存泄漏。
      */
     public static void cleanup() {
+        for (Thread thread : syncThreads.values()) {
+            if (thread != null && thread.isAlive()) {
+                thread.interrupt();
+            }
+        }
+        for (Thread thread : contributionOnlyThreads.values()) {
+            if (thread != null && thread.isAlive()) {
+                thread.interrupt();
+            }
+        }
         syncingPlayers.clear();
         playerSyncDimensions.clear();
         playerSyncVersions.clear();
         syncThreads.clear();
+        contributionOnlyThreads.clear();
         speedLimitBytesSent.clear();
         speedLimitCycleStart.clear();
         requestPartBuffer.clear();
@@ -1419,6 +1468,11 @@ public class ServerSyncHandlerLogic {
                 toRemove.add(playerId);
             }
         }
+        for (UUID playerId : contributionOnlyThreads.keySet()) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
 
         // 清理离线玩家的状态
         for (UUID playerId : toRemove) {
@@ -1443,6 +1497,7 @@ public class ServerSyncHandlerLogic {
      */
     private static void cleanupCompletedThreads() {
         Set<UUID> completedThreads = new HashSet<>();
+        Set<UUID> completedContributionOnlyThreads = new HashSet<>();
 
         for (Map.Entry<UUID, Thread> entry : syncThreads.entrySet()) {
             Thread thread = entry.getValue();
@@ -1461,8 +1516,28 @@ public class ServerSyncHandlerLogic {
             clearSpeedLimitState(playerId);
         }
 
-        if (!completedThreads.isEmpty()) {
-            LOGGER.debug("Cleaned up {} completed thread references", completedThreads.size());
+        for (Map.Entry<UUID, Thread> entry : contributionOnlyThreads.entrySet()) {
+            Thread thread = entry.getValue();
+            if (thread == null || !thread.isAlive()) {
+                completedContributionOnlyThreads.add(entry.getKey());
+            }
+        }
+
+        for (UUID playerId : completedContributionOnlyThreads) {
+            LOGGER.debug("Cleaning up completed contribution-only thread for player {}", playerId);
+            contributionOnlyThreads.remove(playerId);
+        }
+
+        if (!completedThreads.isEmpty() || !completedContributionOnlyThreads.isEmpty()) {
+            LOGGER.debug("Cleaned up {} sync and {} contribution-only completed thread references",
+                    completedThreads.size(), completedContributionOnlyThreads.size());
+        }
+    }
+
+    private static void interruptContributionOnlyWorker(UUID playerId) {
+        Thread worker = contributionOnlyThreads.remove(playerId);
+        if (worker != null && worker.isAlive()) {
+            worker.interrupt();
         }
     }
 

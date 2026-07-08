@@ -41,8 +41,8 @@ public final class PreDisconnectContributionManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PreDisconnectContributionManager.class);
 
-    /** 退出前贡献请求的客户端相关 ID 起始值，避开服务端会话 ID 空间。 */
-    private static final AtomicInteger NEXT_REQUEST_ID = new AtomicInteger(10_000);
+    /** 退出前贡献请求的客户端相关 ID 起始值，使用高位区间避开服务端会话 ID 空间。 */
+    private static final AtomicInteger NEXT_REQUEST_ID = new AtomicInteger(1_000_000_000);
 
     /** 当前活跃的客户端请求 ID，-1 表示空闲。 */
     private static volatile int activeClientRequestId = -1;
@@ -94,8 +94,14 @@ public final class PreDisconnectContributionManager {
     public static void start(Path serverDir, Runnable originalDisconnectAction) {
         if (serverDir == null || originalDisconnectAction == null || !canStart()) {
             if (originalDisconnectAction != null) {
-                originalDisconnectAction.run();
+                runDisconnectOnClientThread(originalDisconnectAction);
             }
+            return;
+        }
+
+        if (!collecting.compareAndSet(false, true)) {
+            LOGGER.warn("Pre-disconnect meta collection already in progress, skipping duplicate start");
+            runDisconnectOnClientThread(originalDisconnectAction);
             return;
         }
 
@@ -108,12 +114,6 @@ public final class PreDisconnectContributionManager {
         statusKey = "mapsyncer.predisconnect.collecting";
         LOGGER.info("Starting pre-disconnect contribution sync (clientRequestId={}, timeout={}s)",
                 requestId, PlatformManager.getPlatform().getDisconnectSyncTimeoutSeconds());
-
-        if (!collecting.compareAndSet(false, true)) {
-            // 已有扫描在运行（理论上不会发生，防御性处理）：直接等待结果。
-            LOGGER.warn("Pre-disconnect meta collection already in progress, reusing existing worker");
-            return;
-        }
 
         Thread worker = new Thread(() -> {
             try {
@@ -243,6 +243,7 @@ public final class PreDisconnectContributionManager {
         activeClientRequestId = -1;
         activeServerSessionId = -1;
         disconnectAction = null;
+        collecting.set(false);
         statusKey = "mapsyncer.predisconnect.idle";
     }
 
@@ -254,6 +255,7 @@ public final class PreDisconnectContributionManager {
         activeClientRequestId = -1;
         activeServerSessionId = -1;
         disconnectAction = null;
+        collecting.set(false);
         if (action != null) {
             runDisconnectOnClientThread(action);
         }
