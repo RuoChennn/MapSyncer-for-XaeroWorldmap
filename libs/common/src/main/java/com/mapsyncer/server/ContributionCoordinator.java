@@ -92,11 +92,11 @@ public final class ContributionCoordinator {
         synchronized (LOCK) {
             session = activeSession;
             if (session == null || session.requestId() != payload.requestId()) {
-                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "inactive_request"));
+                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "inactive_request", true));
                 return;
             }
             if (!session.playerId().equals(player.getUUID())) {
-                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "wrong_player"));
+                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "wrong_player", true));
                 return;
             }
             expected = session.expectedRegion(payload.relativePath());
@@ -162,11 +162,11 @@ public final class ContributionCoordinator {
         synchronized (LOCK) {
             ContributionSession session = activeSession;
             if (session == null || session.requestId() != payload.requestId()) {
-                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "inactive_request"));
+                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "inactive_request", true));
                 return;
             }
             if (!session.playerId().equals(player.getUUID())) {
-                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "wrong_player"));
+                sendResult(player, new ContributionResultPayload(payload.requestId(), 0, 1, "wrong_player", true));
                 return;
             }
             ASSEMBLER.clearRequest(payload.requestId());
@@ -238,9 +238,7 @@ public final class ContributionCoordinator {
                 synchronized (LOCK) {
                     status = session.isComplete() ? session.completionStatus() : "timeout";
                     ASSEMBLER.clearRequest(session.requestId());
-                    if (!"shutdown".equals(status)) {
-                        sendSessionResult(session, status);
-                    }
+                    sendSessionResult(session, status, true);
                     activeSession = null;
                     LOCK.notifyAll();
                 }
@@ -304,11 +302,16 @@ public final class ContributionCoordinator {
     }
 
     private static void sendSessionResult(ContributionSession session, String status) {
+        sendSessionResult(session, status, false);
+    }
+
+    private static void sendSessionResult(ContributionSession session, String status, boolean terminal) {
         sendToPlayer(session.player(), new ContributionResultPayload(
                 session.requestId(),
                 session.accepted(),
                 session.rejected(),
-                status
+                status,
+                terminal
         ));
     }
 

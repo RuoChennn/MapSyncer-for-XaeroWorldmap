@@ -376,10 +376,11 @@ public class FabricPayloadAdapters {
         buf.writeInt(payload.accepted());
         buf.writeInt(payload.rejected());
         buf.writeUtf(payload.status());
+        buf.writeBoolean(payload.terminal());
     }
 
     private static ContributionResultPayload readContributionResult(RegistryFriendlyByteBuf buf) {
-        return new ContributionResultPayload(buf.readInt(), buf.readInt(), buf.readInt(), buf.readUtf());
+        return new ContributionResultPayload(buf.readInt(), buf.readInt(), buf.readInt(), buf.readUtf(), buf.readBoolean());
     }
 
     // ===== ChunkMapData 序列化 =====

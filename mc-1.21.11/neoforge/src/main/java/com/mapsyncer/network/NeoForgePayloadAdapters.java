@@ -357,6 +357,7 @@ public class NeoForgePayloadAdapters {
             buf.writeInt(payload.data.accepted());
             buf.writeInt(payload.data.rejected());
             buf.writeUtf(payload.data.status());
+            buf.writeBoolean(payload.data.terminal());
         }
 
         public static NeoForgeContributionResultPayload decode(RegistryFriendlyByteBuf buf) {
@@ -364,7 +365,8 @@ public class NeoForgePayloadAdapters {
                 buf.readInt(),
                 buf.readInt(),
                 buf.readInt(),
-                buf.readUtf()
+                buf.readUtf(),
+                buf.readBoolean()
             ));
         }
     }

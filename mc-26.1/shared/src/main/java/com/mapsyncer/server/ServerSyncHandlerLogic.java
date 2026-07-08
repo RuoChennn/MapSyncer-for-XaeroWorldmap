@@ -293,6 +293,19 @@ public class ServerSyncHandlerLogic {
         }
 
         UUID playerId = serverPlayer.getUUID();
+        var server = serverPlayer.level().getServer();
+        if (server == null) {
+            LOGGER.debug("Ignoring contribution-only request {} from player {} because server is unavailable",
+                    payload.requestId(), playerId);
+            return;
+        }
+        if (!isValidContributionOnlyPart(payload)) {
+            contributionOnlyRequestBuffers.remove(playerId);
+            LOGGER.debug("Dropping invalid contribution-only part request={} part={}/{} from player {}",
+                    payload.requestId(), payload.partIndex(), payload.totalParts(), playerId);
+            return;
+        }
+
         ContributionOnlyRequestPayload assembledPayload = assembleContributionOnlyRequest(payload, playerId);
         if (assembledPayload == null) {
             return;
@@ -301,7 +314,6 @@ public class ServerSyncHandlerLogic {
         int requestVersion = globalContributionOnlyVersion.incrementAndGet();
         playerContributionOnlyVersions.put(playerId, requestVersion);
 
-        var server = serverPlayer.level().getServer();
         Runnable startRequest = () -> {
             if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
                 return;
@@ -312,14 +324,20 @@ public class ServerSyncHandlerLogic {
             }
             if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
                 NetworkManager.sendToPlayer(onlinePlayer, new ContributionResultPayload(
-                        assembledPayload.requestId(), 0, assembledPayload.clientMeta().size(), "not_allowed"));
+                        assembledPayload.requestId(), 0, assembledPayload.clientMeta().size(), "not_allowed", true));
+                clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
                 return;
             }
             startContributionOnlyCandidateWorker(server, playerId, assembledPayload, requestVersion);
         };
-        if (server != null) {
-            server.execute(startRequest);
-        }
+        server.execute(startRequest);
+    }
+
+    private static boolean isValidContributionOnlyPart(ContributionOnlyRequestPayload payload) {
+        return payload != null
+                && payload.partIndex() >= 0
+                && payload.totalParts() > 0
+                && payload.partIndex() < payload.totalParts();
     }
 
     private static ContributionOnlyRequestPayload assembleContributionOnlyRequest(
@@ -334,6 +352,11 @@ public class ServerSyncHandlerLogic {
         ContributionOnlyRequestAssembly assembly = contributionOnlyRequestBuffers.get(playerId);
         if (assembly == null || assembly.requestId() != payload.requestId()
                 || assembly.totalParts() != payload.totalParts()) {
+            if (assembly != null) {
+                LOGGER.debug("Resetting contribution-only assembly for player {}: request {}/{} -> {}/{}",
+                        playerId, assembly.requestId(), assembly.totalParts(),
+                        payload.requestId(), payload.totalParts());
+            }
             assembly = new ContributionOnlyRequestAssembly(
                     payload.requestId(),
                     payload.totalParts(),
@@ -386,19 +409,22 @@ public class ServerSyncHandlerLogic {
                 }
                 if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
                     NetworkManager.sendToPlayer(onlinePlayer,
-                            new ContributionResultPayload(clientRequestId, 0, clientMeta.size(), "not_allowed"));
+                            new ContributionResultPayload(clientRequestId, 0, clientMeta.size(), "not_allowed", true));
+                    clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
                     return;
                 }
                 if (candidates.isEmpty()) {
                     NetworkManager.sendToPlayer(onlinePlayer,
-                            new ContributionResultPayload(clientRequestId, 0, 0, "no_candidates"));
+                            new ContributionResultPayload(clientRequestId, 0, 0, "no_candidates", true));
+                    clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
                     return;
                 }
                 boolean queued = ContributionCoordinator.enqueueSession(onlinePlayer, candidates);
                 if (!queued) {
                     NetworkManager.sendToPlayer(onlinePlayer,
-                            new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full"));
+                            new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full", true));
                 }
+                clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
             };
             server.execute(enqueue);
         }, "mapsyncer-contribution-only-" + playerId);
@@ -406,6 +432,10 @@ public class ServerSyncHandlerLogic {
         worker.start();
         LOGGER.debug("Started contribution-only candidate worker for player {} client request {} version {}",
                 playerId, clientRequestId, requestVersion);
+    }
+
+    private static void clearContributionOnlyVersionIfCurrent(UUID playerId, int requestVersion) {
+        playerContributionOnlyVersions.remove(playerId, requestVersion);
     }
 
     /**
@@ -628,7 +658,6 @@ public class ServerSyncHandlerLogic {
         requestTotalParts.remove(playerId);
         contributionOnlyRequestBuffers.remove(playerId);
         playerContributionOnlyVersions.remove(playerId);
-        ContributionCoordinator.cancelPlayer(playerId);
 
         // 清理线程引用并确保线程已停止
         Thread syncThread = syncThreads.remove(playerId);
@@ -637,6 +666,11 @@ public class ServerSyncHandlerLogic {
         }
 
         clearSpeedLimitState(playerId);
+    }
+
+    private static void cleanupPlayerState(UUID playerId) {
+        cleanupSyncState(playerId);
+        ContributionCoordinator.cancelPlayer(playerId);
     }
 
     private static void finishSyncState(UUID playerId) {
@@ -1357,7 +1391,7 @@ public class ServerSyncHandlerLogic {
         // 清理离线玩家的状态
         for (UUID playerId : toRemove) {
             LOGGER.debug("Cleaning up stale state for offline player {}", playerId);
-            cleanupSyncState(playerId);
+            cleanupPlayerState(playerId);
         }
 
         // 清理已结束但未移除的线程引用（防止内存泄漏）

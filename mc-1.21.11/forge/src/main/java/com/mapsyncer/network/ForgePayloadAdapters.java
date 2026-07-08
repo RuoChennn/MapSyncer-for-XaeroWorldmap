@@ -339,6 +339,7 @@ public class ForgePayloadAdapters {
             buf.writeInt(msg.data.accepted());
             buf.writeInt(msg.data.rejected());
             buf.writeUtf(msg.data.status());
+            buf.writeBoolean(msg.data.terminal());
         }
 
         public static ForgeContributionResultMessage decode(FriendlyByteBuf buf) {
@@ -346,7 +347,8 @@ public class ForgePayloadAdapters {
                     buf.readInt(),
                     buf.readInt(),
                     buf.readInt(),
-                    buf.readUtf()
+                    buf.readUtf(),
+                    buf.readBoolean()
             ));
         }
     }

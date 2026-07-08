@@ -23,7 +23,9 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ContributionPayloadContractTest {
     @BeforeEach
@@ -93,6 +95,14 @@ class ContributionPayloadContractTest {
         assertEquals(2, result.accepted());
         assertEquals(1, result.rejected());
         assertEquals("done", result.status());
+        assertFalse(result.terminal());
+
+        ContributionResultPayload terminalResult = new ContributionResultPayload(43, 0, 1, "timeout", true);
+        assertEquals(43, terminalResult.requestId());
+        assertEquals(0, terminalResult.accepted());
+        assertEquals(1, terminalResult.rejected());
+        assertEquals("timeout", terminalResult.status());
+        assertTrue(terminalResult.terminal());
 
         Map<String, ClientMeta> clientMeta = Map.of(
                 "DIM0/region/r.1.2.mca",
@@ -152,7 +162,7 @@ class ContributionPayloadContractTest {
         );
         ContributionCompletePayload complete = new ContributionCompletePayload(7, 1, "complete");
         ContributionRequestPayload request = new ContributionRequestPayload(7, List.of(), "request");
-        ContributionResultPayload result = new ContributionResultPayload(7, 1, 0, "ok");
+        ContributionResultPayload result = new ContributionResultPayload(7, 1, 0, "ok", true);
         ContributionOnlyRequestPayload contributionOnly = new ContributionOnlyRequestPayload(7, 0, 1, Map.of(), "exit");
 
         NetworkManager.sendToServer(data);
