@@ -195,6 +195,16 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
+    public boolean isSyncBeforeDisconnect() {
+        return ModConfig.CLIENT().isSyncBeforeDisconnect();
+    }
+
+    @Override
+    public int getDisconnectSyncTimeoutSeconds() {
+        return ModConfig.CLIENT().getDisconnectSyncTimeoutSeconds();
+    }
+
+    @Override
     public ContributionScope getContributionScope() {
         return ModConfig.SERVER().getContributionScope();
     }

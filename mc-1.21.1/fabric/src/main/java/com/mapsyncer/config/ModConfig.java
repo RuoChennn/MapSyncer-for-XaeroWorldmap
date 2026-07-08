@@ -170,6 +170,20 @@ public class ModConfig {
          */
         private volatile int backgroundSyncIntervalMinutes = 60;
 
+        /**
+         * 正常断开连接前是否尝试贡献本地地图。
+         *
+         * <p>仅对 BIDIRECTIONAL 客户端生效，无法保护崩溃、强制关闭进程或网络中断。</p>
+         */
+        private volatile boolean syncBeforeDisconnect = true;
+
+        /**
+         * 退出前贡献同步等待的最大秒数。
+         *
+         * <p>0 表示禁用退出前等待（等同关闭该能力）。范围 0 - 60。</p>
+         */
+        private volatile int disconnectSyncTimeoutSeconds = 15;
+
         /** 配置文件路径 */
         private final Path configFile;
 
@@ -208,9 +222,12 @@ public class ModConfig {
                 clientSyncMode = ClientSyncMode.fromConfig(props.getProperty("clientSyncMode"), ClientSyncMode.RECEIVE_ONLY);
                 backgroundSyncIntervalMinutes = parseIntInRange(props, "backgroundSyncIntervalMinutes",
                         backgroundSyncIntervalMinutes, 0, 1440);
+                syncBeforeDisconnect = Boolean.parseBoolean(props.getProperty("syncBeforeDisconnect", "true"));
+                disconnectSyncTimeoutSeconds = parseIntInRange(props, "disconnectSyncTimeoutSeconds",
+                        disconnectSyncTimeoutSeconds, 0, 60);
 
-                LOGGER.info("Loaded client config from: {} (hashThreads={}, clientSyncMode={}, backgroundSyncIntervalMinutes={})",
-                        configFile, hashThreads, clientSyncMode, backgroundSyncIntervalMinutes);
+                LOGGER.info("Loaded client config from: {} (hashThreads={}, clientSyncMode={}, backgroundSyncIntervalMinutes={}, syncBeforeDisconnect={}, disconnectSyncTimeoutSeconds={})",
+                        configFile, hashThreads, clientSyncMode, backgroundSyncIntervalMinutes, syncBeforeDisconnect, disconnectSyncTimeoutSeconds);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load client config, using defaults: {}", e.getMessage());
             }
@@ -273,11 +290,25 @@ public class ModConfig {
                 sb.append("# 默认：60 分钟，在保持地图新鲜的同时避免过于频繁的网络检查。\n");
                 sb.append("# Range: 0 - 1440 / 范围：0 - 1440\n");
                 sb.append("backgroundSyncIntervalMinutes=" + backgroundSyncIntervalMinutes + "\n");
+                sb.append("\n");
+                sb.append("# Whether the client should try to upload local Xaero map contributions before a normal disconnect.\n");
+                sb.append("# 正常断开连接前是否尝试上传本地 Xaero 地图贡献。\n");
+                sb.append("# This only runs for BIDIRECTIONAL clients and cannot protect crashes, force closes, or network loss.\n");
+                sb.append("# 仅对 BIDIRECTIONAL 客户端生效，无法保护崩溃、强制关闭进程或网络中断等异常退出。\n");
+                sb.append("# Default: true / 默认：开启\n");
+                sb.append("syncBeforeDisconnect=" + syncBeforeDisconnect + "\n");
+                sb.append("\n");
+                sb.append("# Maximum seconds to wait on the pre-disconnect contribution screen.\n");
+                sb.append("# 退出前贡献同步等待界面的最大秒数。\n");
+                sb.append("# Set to 0 to disable the waiting flow (equivalent to syncBeforeDisconnect=false).\n");
+                sb.append("# 设为 0 会禁用退出前等待（等同于 syncBeforeDisconnect=false）。\n");
+                sb.append("# Default: 15 seconds, Range: 0 - 60 / 默认：15 秒，范围：0 - 60\n");
+                sb.append("disconnectSyncTimeoutSeconds=" + disconnectSyncTimeoutSeconds + "\n");
 
                 Files.writeString(configFile, sb.toString());
 
-                LOGGER.info("Saved client config to: {} (hashThreads={}, clientSyncMode={}, backgroundSyncIntervalMinutes={})",
-                        configFile, hashThreads, clientSyncMode, backgroundSyncIntervalMinutes);
+                LOGGER.info("Saved client config to: {} (hashThreads={}, clientSyncMode={}, backgroundSyncIntervalMinutes={}, syncBeforeDisconnect={}, disconnectSyncTimeoutSeconds={})",
+                        configFile, hashThreads, clientSyncMode, backgroundSyncIntervalMinutes, syncBeforeDisconnect, disconnectSyncTimeoutSeconds);
             } catch (Exception e) {
                 LOGGER.error("Failed to save client config: {}", e.getMessage());
             }
@@ -336,6 +367,34 @@ public class ModConfig {
          */
         public void setBackgroundSyncIntervalMinutes(int value) {
             backgroundSyncIntervalMinutes = Math.max(0, Math.min(1440, value));
+        }
+
+        /**
+         * 是否在正常断开前尝试贡献本地地图。
+         */
+        public boolean isSyncBeforeDisconnect() {
+            return syncBeforeDisconnect;
+        }
+
+        /**
+         * 设置是否在正常断开前尝试贡献本地地图。
+         */
+        public void setSyncBeforeDisconnect(boolean value) {
+            syncBeforeDisconnect = value;
+        }
+
+        /**
+         * 获取退出前贡献同步等待的最大秒数。
+         */
+        public int getDisconnectSyncTimeoutSeconds() {
+            return disconnectSyncTimeoutSeconds;
+        }
+
+        /**
+         * 设置退出前贡献同步等待的最大秒数。
+         */
+        public void setDisconnectSyncTimeoutSeconds(int value) {
+            disconnectSyncTimeoutSeconds = Math.max(0, Math.min(60, value));
         }
     }
 

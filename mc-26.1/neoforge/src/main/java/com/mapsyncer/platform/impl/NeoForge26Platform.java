@@ -184,6 +184,16 @@ public class NeoForge26Platform implements Platform {
     }
 
     @Override
+    public boolean isSyncBeforeDisconnect() {
+        return ModConfig.CLIENT.syncBeforeDisconnect.get();
+    }
+
+    @Override
+    public int getDisconnectSyncTimeoutSeconds() {
+        return ModConfig.CLIENT.disconnectSyncTimeoutSeconds.get();
+    }
+
+    @Override
     public ContributionScope getContributionScope() {
         return ModConfig.SERVER.contributionScope.get();
     }

@@ -117,6 +117,20 @@ public class ModConfig {
         public final IntValue backgroundSyncIntervalMinutes;
 
         /**
+         * 退出前是否尝试同步本地贡献
+         *
+         * <p>仅对 BIDIRECTIONAL 客户端生效，无法保护崩溃、强制关闭进程或网络中断等异常退出。</p>
+         */
+        public final BooleanValue syncBeforeDisconnect;
+
+        /**
+         * 退出前贡献同步等待界面的超时秒数
+         *
+         * <p>设为 0 会禁用退出前等待（等同于 syncBeforeDisconnect=false）。</p>
+         */
+        public final IntValue disconnectSyncTimeoutSeconds;
+
+        /**
          * 构造客户端配置
          *
          * <p>定义所有配置选项及其默认值、范围和注释</p>
@@ -178,6 +192,24 @@ public class ModConfig {
                              "Range: 0 - 1440",
                              "范围：0 - 1440")
                     .defineInRange("backgroundSyncIntervalMinutes", 60, 0, 1440);
+
+            syncBeforeDisconnect = builder
+                    .comment("Whether the client should try to upload local Xaero map contributions before a normal disconnect.",
+                             "正常断开连接前是否尝试上传本地 Xaero 地图贡献。",
+                             "This only runs for BIDIRECTIONAL clients and cannot protect crashes, force closes, or network loss.",
+                             "仅对 BIDIRECTIONAL 客户端生效，无法保护崩溃、强制关闭进程或网络中断等异常退出。",
+                             "Default: true",
+                             "默认：开启")
+                    .define("syncBeforeDisconnect", true);
+
+            disconnectSyncTimeoutSeconds = builder
+                    .comment("Maximum seconds to wait on the pre-disconnect contribution screen.",
+                             "退出前贡献同步等待界面的最大秒数。",
+                             "Set to 0 to disable the waiting flow (equivalent to syncBeforeDisconnect=false).",
+                             "设为 0 会禁用退出前等待（等同于 syncBeforeDisconnect=false）。",
+                             "Default: 15 seconds, Range: 0 - 60",
+                             "默认：15 秒，范围：0 - 60")
+                    .defineInRange("disconnectSyncTimeoutSeconds", 15, 0, 60);
 
             builder.pop();
         }

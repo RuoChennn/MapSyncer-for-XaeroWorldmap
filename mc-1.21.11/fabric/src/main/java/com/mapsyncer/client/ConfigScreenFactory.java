@@ -56,6 +56,21 @@ public class ConfigScreenFactory {
             .setSaveConsumer(config::setBackgroundSyncIntervalMinutes)
             .build());
 
+        client.addEntry(entryBuilder.startBooleanToggle(
+                Component.translatable("option.mapsyncer.sync_before_disconnect"), config.isSyncBeforeDisconnect())
+            .setDefaultValue(true)
+            .setTooltip(Component.translatable("option.mapsyncer.sync_before_disconnect.tooltip"))
+            .setSaveConsumer(config::setSyncBeforeDisconnect)
+            .build());
+
+        client.addEntry(entryBuilder.startIntSlider(
+                Component.translatable("option.mapsyncer.disconnect_sync_timeout_seconds"),
+                config.getDisconnectSyncTimeoutSeconds(), 0, 60)
+            .setDefaultValue(15)
+            .setTooltip(Component.translatable("option.mapsyncer.disconnect_sync_timeout_seconds.tooltip"))
+            .setSaveConsumer(config::setDisconnectSyncTimeoutSeconds)
+            .build());
+
         builder.setSavingRunnable(config::save);
         return builder.build();
     }
