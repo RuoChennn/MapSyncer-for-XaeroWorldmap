@@ -3,6 +3,9 @@
 build/
 out/
 
+# Local git worktrees
+.worktrees/
+
 # Build outputs
 output/
 
