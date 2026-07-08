@@ -49,10 +49,6 @@ public final class ContributionCoordinator {
         return enqueueSessionInternal(player, candidates, NEXT_REQUEST_ID.getAndIncrement());
     }
 
-    public static boolean enqueueSession(ServerPlayer player, List<ContributionRegionMeta> candidates, int requestId) {
-        return enqueueSessionInternal(player, candidates, requestId);
-    }
-
     private static boolean enqueueSessionInternal(
             ServerPlayer player,
             List<ContributionRegionMeta> candidates,

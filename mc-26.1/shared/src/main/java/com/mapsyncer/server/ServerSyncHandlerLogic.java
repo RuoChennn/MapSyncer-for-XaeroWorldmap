@@ -218,6 +218,12 @@ public class ServerSyncHandlerLogic {
     /** ContributionOnlyRequestPayload 独立分片组装缓冲区。 */
     private static final Map<UUID, ContributionOnlyRequestAssembly> contributionOnlyRequestBuffers = new ConcurrentHashMap<>();
 
+    /** 全局递增版本号，用于标记每次完整的 contribution-only 请求。 */
+    private static final AtomicInteger globalContributionOnlyVersion = new AtomicInteger(0);
+
+    /** 每个玩家当前的 contribution-only 请求版本，旧 worker 通过版本号静默自过滤。 */
+    private static final Map<UUID, Integer> playerContributionOnlyVersions = new ConcurrentHashMap<>();
+
     private record ContributionOnlyRequestAssembly(
             int requestId,
             int totalParts,
@@ -292,19 +298,27 @@ public class ServerSyncHandlerLogic {
             return;
         }
 
+        int requestVersion = globalContributionOnlyVersion.incrementAndGet();
+        playerContributionOnlyVersions.put(playerId, requestVersion);
+
         var server = serverPlayer.level().getServer();
         Runnable startRequest = () -> {
-            if (!ContributionWhitelistBridge.isContributionAllowed(serverPlayer)) {
-                NetworkManager.sendToPlayer(serverPlayer, new ContributionResultPayload(
+            if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
+                return;
+            }
+            ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
+            if (onlinePlayer == null) {
+                return;
+            }
+            if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
+                NetworkManager.sendToPlayer(onlinePlayer, new ContributionResultPayload(
                         assembledPayload.requestId(), 0, assembledPayload.clientMeta().size(), "not_allowed"));
                 return;
             }
-            startContributionOnlyCandidateWorker(serverPlayer, assembledPayload);
+            startContributionOnlyCandidateWorker(server, playerId, assembledPayload, requestVersion);
         };
         if (server != null) {
             server.execute(startRequest);
-        } else {
-            startRequest.run();
         }
     }
 
@@ -352,40 +366,46 @@ public class ServerSyncHandlerLogic {
     }
 
     private static void startContributionOnlyCandidateWorker(
-            ServerPlayer serverPlayer,
-            ContributionOnlyRequestPayload payload
+            net.minecraft.server.MinecraftServer server,
+            UUID playerId,
+            ContributionOnlyRequestPayload payload,
+            int requestVersion
     ) {
-        UUID playerId = serverPlayer.getUUID();
-        int requestId = payload.requestId();
+        int clientRequestId = payload.requestId();
         Map<String, ClientMeta> clientMeta = Map.copyOf(payload.clientMeta());
-        String reason = payload.reason();
-        var server = serverPlayer.level().getServer();
 
         Thread worker = new Thread(() -> {
             List<ContributionRegionMeta> candidates = collectContributionOnlyCandidates(clientMeta);
             Runnable enqueue = () -> {
-                if (!ContributionWhitelistBridge.isContributionAllowed(serverPlayer)) {
-                    NetworkManager.sendToPlayer(serverPlayer,
-                            new ContributionResultPayload(requestId, 0, clientMeta.size(), "not_allowed"));
+                if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
+                    return;
+                }
+                ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
+                if (onlinePlayer == null) {
+                    return;
+                }
+                if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
+                    NetworkManager.sendToPlayer(onlinePlayer,
+                            new ContributionResultPayload(clientRequestId, 0, clientMeta.size(), "not_allowed"));
                     return;
                 }
                 if (candidates.isEmpty()) {
-                    NetworkManager.sendToPlayer(serverPlayer,
-                            new ContributionResultPayload(requestId, 0, 0, "no_candidates"));
+                    NetworkManager.sendToPlayer(onlinePlayer,
+                            new ContributionResultPayload(clientRequestId, 0, 0, "no_candidates"));
                     return;
                 }
-                maybeQueueContributionSession(serverPlayer, requestId, candidates);
+                boolean queued = ContributionCoordinator.enqueueSession(onlinePlayer, candidates);
+                if (!queued) {
+                    NetworkManager.sendToPlayer(onlinePlayer,
+                            new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full"));
+                }
             };
-            if (server != null) {
-                server.execute(enqueue);
-            } else {
-                enqueue.run();
-            }
+            server.execute(enqueue);
         }, "mapsyncer-contribution-only-" + playerId);
         worker.setDaemon(true);
         worker.start();
-        LOGGER.debug("Started contribution-only candidate worker for player {} request {} reason {}",
-                serverPlayer.getName().getString(), requestId, reason);
+        LOGGER.debug("Started contribution-only candidate worker for player {} client request {} version {}",
+                playerId, clientRequestId, requestVersion);
     }
 
     /**
@@ -401,6 +421,8 @@ public class ServerSyncHandlerLogic {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
         contributionOnlyRequestBuffers.remove(playerId);
+        playerContributionOnlyVersions.remove(playerId);
+        ContributionCoordinator.cancelPlayer(playerId);
 
         // 清理限速状态
         clearSpeedLimitState(playerId);
@@ -436,7 +458,7 @@ public class ServerSyncHandlerLogic {
         ResourceKey<Level> startDimension = playerSyncDimensions.get(playerId);
         if (startDimension != null && !player.level().dimension().equals(startDimension)) {
             LOGGER.info("Player {} changed dimension from {} to {}, aborting sync",
-                    playerId, startDimension.identifier(), player.level().dimension().identifier());
+                    playerId, startDimension.location(), player.level().dimension().location());
             syncingPlayers.remove(playerId);
             playerSyncDimensions.remove(playerId);
             return false;
@@ -605,8 +627,25 @@ public class ServerSyncHandlerLogic {
         requestPartBuffer.remove(playerId);
         requestTotalParts.remove(playerId);
         contributionOnlyRequestBuffers.remove(playerId);
+        playerContributionOnlyVersions.remove(playerId);
+        ContributionCoordinator.cancelPlayer(playerId);
 
         // 清理线程引用并确保线程已停止
+        Thread syncThread = syncThreads.remove(playerId);
+        if (syncThread != null && syncThread.isAlive()) {
+            syncThread.interrupt();
+        }
+
+        clearSpeedLimitState(playerId);
+    }
+
+    private static void finishSyncState(UUID playerId) {
+        syncingPlayers.remove(playerId);
+        playerSyncDimensions.remove(playerId);
+        playerSyncVersions.remove(playerId);
+        requestPartBuffer.remove(playerId);
+        requestTotalParts.remove(playerId);
+
         Thread syncThread = syncThreads.remove(playerId);
         if (syncThread != null && syncThread.isAlive()) {
             syncThread.interrupt();
@@ -636,6 +675,7 @@ public class ServerSyncHandlerLogic {
         if (payload.totalParts() > 1) {
             Integer existingTotal = requestTotalParts.get(playerId);
             if (existingTotal != null && existingTotal != payload.totalParts()) {
+                // 新请求的分片数不同于旧请求，丢弃旧缓冲区（用户快速重复请求）
                 requestPartBuffer.remove(playerId);
                 LOGGER.debug("SyncRequest totalParts changed {}→{}, resetting buffer for player {}",
                         existingTotal, payload.totalParts(), playerId);
@@ -682,7 +722,7 @@ public class ServerSyncHandlerLogic {
         // 在主线程预捕获玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
         int startBlockX = serverPlayer.getBlockX();
         int startBlockZ = serverPlayer.getBlockZ();
-        int viewDistanceChunks = serverPlayer.level().getServer().getPlayerList().getViewDistance() + 2;
+        int viewDistanceChunks = serverPlayer.serverLevel().getServer().getPlayerList().getViewDistance() + 2;
         int viewDistanceRegions = (viewDistanceChunks >> 5) + 1;
 
         // Client metadata (timestamp + hash) - contains already received regions for resume
@@ -702,7 +742,7 @@ public class ServerSyncHandlerLogic {
      * 在主线程执行任务前检查版本号是否匹配（旧请求的入队任务自动丢弃）。
      */
     private static void enqueueIfCurrent(ServerPlayer serverPlayer, UUID playerId, int version, Runnable task) {
-        serverPlayer.level().getServer().execute(() -> {
+        serverPlayer.serverLevel().getServer().execute(() -> {
             if (playerSyncVersions.getOrDefault(playerId, 0) == version) {
                 task.run();
             }
@@ -736,13 +776,12 @@ public class ServerSyncHandlerLogic {
         if (!Files.exists(cacheDir)) {
             final List<ContributionRegionMeta> finalContributionCandidates =
                     collectClientOnlyContributionCandidates(clientMeta, Set.of());
-            // 在主线程发送消息和数据包
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
                 maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
-                cleanupSyncState(playerId);
+                finishSyncState(playerId);
             });
             return;
         }
@@ -801,12 +840,11 @@ public class ServerSyncHandlerLogic {
             LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
             final List<ContributionRegionMeta> finalContributionCandidates =
                     collectClientOnlyContributionCandidates(clientMeta, Set.of());
-            // 在主线程发送数据包
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
                 maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
-                cleanupSyncState(playerId);
+                finishSyncState(playerId);
             });
             return;
         }
@@ -916,7 +954,7 @@ public class ServerSyncHandlerLogic {
         final int finalTimestampSkipCount = timestampSkipCount;
         final List<ContributionRegionMeta> finalContributionCandidates = List.copyOf(contributionCandidates);
 
-        LOGGER.debug("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
+        LOGGER.info("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
                 serverPlayer.getName().getString(), total, finalHashMatchCount, finalTimestampSkipCount);
 
         if (total == 0) {
@@ -925,7 +963,7 @@ public class ServerSyncHandlerLogic {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
                 maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
-                cleanupSyncState(playerId);
+                finishSyncState(playerId);
             });
             return;
         }
@@ -1015,7 +1053,7 @@ public class ServerSyncHandlerLogic {
                             new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                     serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
                     maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
-                    cleanupSyncState(playerId);
+                    finishSyncState(playerId);
                 });
             } else {
                 List<ChunkMapData> currentChunk = new ArrayList<>();
@@ -1052,7 +1090,7 @@ public class ServerSyncHandlerLogic {
                                 new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                         serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
                         maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
-                        cleanupSyncState(playerId);
+                        finishSyncState(playerId);
                     });
                 }
             }
@@ -1062,7 +1100,7 @@ public class ServerSyncHandlerLogic {
                         new SyncProgressPayload(total, total, "completed"));
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
                 maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
-                cleanupSyncState(playerId);
+                finishSyncState(playerId);
             });
         }
 
@@ -1251,18 +1289,6 @@ public class ServerSyncHandlerLogic {
         }
     }
 
-    private static void maybeQueueContributionSession(
-            ServerPlayer player,
-            int requestId,
-            List<ContributionRegionMeta> candidates
-    ) {
-        boolean queued = ContributionCoordinator.enqueueSession(player, candidates, requestId);
-        if (!queued) {
-            NetworkManager.sendToPlayer(player,
-                    new ContributionResultPayload(requestId, 0, candidates.size(), "queue_full"));
-        }
-    }
-
     /**
      * 读取单个 region 的数据。
      * 流式处理中按需读取，避免一次性加载所有数据。
@@ -1293,6 +1319,11 @@ public class ServerSyncHandlerLogic {
         syncThreads.clear();
         speedLimitBytesSent.clear();
         speedLimitCycleStart.clear();
+        requestPartBuffer.clear();
+        requestTotalParts.clear();
+        contributionOnlyRequestBuffers.clear();
+        playerContributionOnlyVersions.clear();
+        ContributionCoordinator.shutdown();
         LOGGER.debug("ServerSyncHandler tracking data cleared");
     }
 
@@ -1308,6 +1339,16 @@ public class ServerSyncHandlerLogic {
         // 检查syncingPlayers中的玩家是否仍然在线
         Set<UUID> toRemove = new HashSet<>();
         for (UUID playerId : syncingPlayers) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+        for (UUID playerId : contributionOnlyRequestBuffers.keySet()) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+        for (UUID playerId : playerContributionOnlyVersions.keySet()) {
             if (!onlinePlayerIds.contains(playerId)) {
                 toRemove.add(playerId);
             }
@@ -1370,9 +1411,7 @@ public class ServerSyncHandlerLogic {
      * </ul>
      *
      * @param regions 待同步的region信息列表
-     * @param startBlockX 主线程预捕获的玩家 BlockX 坐标
-     * @param startBlockZ 主线程预捕获的玩家 BlockZ 坐标
-     * @param viewDistanceRegions 视距换算的区域数
+     * @param player 服务端玩家实例
      */
     private static void sortByViewDistancePriority(List<RegionSyncInfo> regions, int startBlockX, int startBlockZ, int viewDistanceRegions) {
         // 使用主线程预捕获的玩家坐标，避免后台线程读取非线程安全的 ServerPlayer 字段
