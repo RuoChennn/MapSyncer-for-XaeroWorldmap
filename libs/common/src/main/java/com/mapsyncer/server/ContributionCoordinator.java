@@ -1,6 +1,5 @@
 package com.mapsyncer.server;
 
-import com.mapsyncer.config.ContributionScope;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
@@ -95,7 +94,7 @@ public final class ContributionCoordinator {
                 sendSessionResult(session, "unexpected_region");
                 return;
             }
-            if (!isContributionStillEnabled()) {
+            if (!ContributionWhitelistBridge.isContributionAllowed(player)) {
                 session.markRejected();
                 sendSessionResult(session, "permission_changed");
                 return;
@@ -322,11 +321,6 @@ public final class ContributionCoordinator {
         } else {
             NetworkManager.sendToPlayer(player, payload);
         }
-    }
-
-    private static boolean isContributionStillEnabled() {
-        return PlatformManager.isInitialized()
-                && PlatformManager.getPlatform().getContributionScope() != ContributionScope.DISABLED;
     }
 
     private static boolean matchesObservedServerState(ContributionRegionMeta expected, ContributionDataPayload payload) {

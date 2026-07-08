@@ -4,10 +4,16 @@ import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRegionMeta;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.sync.RegionFreshnessDecision;
+import com.mapsyncer.sync.RegionFreshnessDecider;
 import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -236,6 +242,29 @@ public class ServerSyncHandlerLogic {
         NetworkManager.getHandler().registerSyncRequestHandler(
             (payload, context) -> handleSyncRequest(payload, context)
         );
+        NetworkManager.getHandler().registerContributionDataHandler(
+            (payload, context) -> handleContributionData(payload, context)
+        );
+        NetworkManager.getHandler().registerContributionCompleteHandler(
+            (payload, context) -> handleContributionComplete(payload, context)
+        );
+    }
+
+    private static void handleContributionData(ContributionDataPayload payload, PayloadContext context) {
+        Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+        Path cacheDir = ConversionOrchestrator.getCacheDir();
+        GenerationCache cache = GenerationCache.getInstance(cacheDir);
+        ContributionCoordinator.handleData(serverPlayer, payload, cacheDir, cache);
+    }
+
+    private static void handleContributionComplete(ContributionCompletePayload payload, PayloadContext context) {
+        Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
+        if (player instanceof ServerPlayer serverPlayer) {
+            ContributionCoordinator.handleComplete(serverPlayer, payload);
+        }
     }
 
     /**
@@ -582,10 +611,13 @@ public class ServerSyncHandlerLogic {
         Path cacheDir = ConversionOrchestrator.getCacheDir();
 
         if (!Files.exists(cacheDir)) {
+            final List<ContributionRegionMeta> finalContributionCandidates =
+                    collectClientOnlyContributionCandidates(clientMeta, Set.of());
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 serverPlayer.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
+                maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
                 cleanupSyncState(playerId);
             });
             return;
@@ -643,9 +675,12 @@ public class ServerSyncHandlerLogic {
 
         if (!hasValidDimension) {
             LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
+            final List<ContributionRegionMeta> finalContributionCandidates =
+                    collectClientOnlyContributionCandidates(clientMeta, Set.of());
             enqueueIfCurrent(serverPlayer, playerId, syncVersion, () -> {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
+                maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
                 cleanupSyncState(playerId);
             });
             return;
@@ -655,6 +690,8 @@ public class ServerSyncHandlerLogic {
         // 先收集所有 zip 路径再遍历，避免 Files.walk lazy stream 在遍历过程中
         // relativize 路径时因目录树仍在迭代导致路径表示不一致（同一文件出现两次）
         List<RegionSyncInfo> regionsToSync = new ArrayList<>();
+        List<ContributionRegionMeta> contributionCandidates = new ArrayList<>();
+        Set<String> visitedServerPaths = new HashSet<>();
 
         Path absCacheDir = cacheDir.toAbsolutePath().normalize();
         List<Path> allZipPaths;
@@ -686,6 +723,7 @@ public class ServerSyncHandlerLogic {
                             }
                             return;
                         }
+                        visitedServerPaths.add(normalizedPath);
 
                         TimestampHashEntry serverMeta = serverCache.get(normalizedPath);
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
@@ -718,6 +756,14 @@ public class ServerSyncHandlerLogic {
                             }
                         }
 
+                        RegionFreshnessDecision decision = RegionFreshnessDecider.decide(serverMeta, clientMetaEntry);
+                        if (serverMeta != null && decision.shouldRequestContribution()) {
+                            RegionSyncInfo parsed = parseRegionInfo(zipPath, normalizedPath, serverMeta.timestampSeconds());
+                            if (parsed != null) {
+                                contributionCandidates.add(toContributionMeta(parsed, serverMeta));
+                            }
+                        }
+
                         if (shouldSync) {
                             // 解析路径信息，但不读取数据
                             RegionSyncInfo info = parseRegionInfo(zipPath, normalizedPath, timestamp);
@@ -726,6 +772,8 @@ public class ServerSyncHandlerLogic {
                             }
                         }
                     });
+
+        contributionCandidates.addAll(collectClientOnlyContributionCandidates(clientMeta, visitedServerPaths));
 
         // Count hash matches and timestamp skips
         for (Map.Entry<String, TimestampHashEntry> entry : serverCache.entrySet()) {
@@ -741,6 +789,7 @@ public class ServerSyncHandlerLogic {
         // 创建 final 变量供 lambda 使用
         final int finalHashMatchCount = hashMatchCount;
         final int finalTimestampSkipCount = timestampSkipCount;
+        final List<ContributionRegionMeta> finalContributionCandidates = List.copyOf(contributionCandidates);
 
         LOGGER.info("Sync request from {}: {} regions to sync, {} hash match, {} timestamp skip",
                 serverPlayer.getName().getString(), total, finalHashMatchCount, finalTimestampSkipCount);
@@ -750,6 +799,7 @@ public class ServerSyncHandlerLogic {
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.map_uptodate", finalHashMatchCount, finalTimestampSkipCount));
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncResponsePayload(List.of(), true, worldId, "uptodate"));
+                maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
                 cleanupSyncState(playerId);
             });
             return;
@@ -839,6 +889,7 @@ public class ServerSyncHandlerLogic {
                     NetworkManager.sendToPlayer(serverPlayer,
                             new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                     serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                    maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
                     cleanupSyncState(playerId);
                 });
             } else {
@@ -875,6 +926,7 @@ public class ServerSyncHandlerLogic {
                         NetworkManager.sendToPlayer(serverPlayer,
                                 new SyncProgressPayload(finalTotal, finalTotal, "completed"));
                         serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", finalTotal));
+                        maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
                         cleanupSyncState(playerId);
                     });
                 }
@@ -884,6 +936,7 @@ public class ServerSyncHandlerLogic {
                 NetworkManager.sendToPlayer(serverPlayer,
                         new SyncProgressPayload(total, total, "completed"));
                 serverPlayer.sendSystemMessage(ChatUtils.success("mapsyncer.server.sync_complete", total));
+                maybeQueueContributionSession(serverPlayer, finalContributionCandidates);
                 cleanupSyncState(playerId);
             });
         }
@@ -903,28 +956,91 @@ public class ServerSyncHandlerLogic {
     private static RegionSyncInfo parseRegionInfo(Path zipPath, String normalizedPath, long timestampSeconds) {
         try {
             String[] parts = normalizedPath.split("[/\\\\]");
+            if (parts.length < 2) {
+                return null;
+            }
 
             String dimension;
             int caveLayer = Integer.MAX_VALUE;
             String fileName;
 
-            if (parts.length >= 4 && parts[1].equals("caves")) {
+            if (parts.length == 4 && parts[1].equals("caves")) {
                 dimension = parts[0];
                 caveLayer = Integer.parseInt(parts[2]);
                 fileName = parts[3];
-            } else {
+            } else if (parts.length == 2) {
                 dimension = parts[0];
-                fileName = parts[parts.length - 1];
+                fileName = parts[1];
+            } else {
+                return null;
             }
 
             String[] coords = fileName.split("_");
+            if (coords.length < 2) {
+                return null;
+            }
             int regionX = Integer.parseInt(coords[0]);
             int regionZ = Integer.parseInt(coords[1]);
 
             return new RegionSyncInfo(zipPath, normalizedPath, timestampSeconds, regionX, regionZ, dimension, caveLayer);
-        } catch (NumberFormatException e) {
-            LOGGER.error("Failed to parse path: {}", normalizedPath, e);
+        } catch (RuntimeException e) {
+            LOGGER.debug("Failed to parse path: {}", normalizedPath, e);
             return null;
+        }
+    }
+
+    private static String normalizeClientMetaPath(String rawPath) {
+        if (rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        return stripMwWorldId(rawPath.replace(".zip", "").replace("\\", "/"));
+    }
+
+    private static List<ContributionRegionMeta> collectClientOnlyContributionCandidates(
+            Map<String, ClientMeta> clientMeta,
+            Set<String> visitedServerPaths) {
+        if (clientMeta == null || clientMeta.isEmpty()) {
+            return List.of();
+        }
+        List<ContributionRegionMeta> candidates = new ArrayList<>();
+        Set<String> addedPaths = new HashSet<>();
+        for (Map.Entry<String, ClientMeta> entry : clientMeta.entrySet()) {
+            String normalizedPath = normalizeClientMetaPath(entry.getKey());
+            if (normalizedPath == null || visitedServerPaths.contains(normalizedPath)
+                    || normalizedPath.contains("_placeholder_") || !addedPaths.add(normalizedPath)) {
+                continue;
+            }
+            RegionFreshnessDecision decision = RegionFreshnessDecider.decide(null, entry.getValue());
+            if (!decision.shouldRequestContribution()) {
+                continue;
+            }
+            RegionSyncInfo parsed = parseRegionInfo(null, normalizedPath, entry.getValue().timestampSeconds());
+            if (parsed != null) {
+                candidates.add(toContributionMeta(parsed, null));
+            }
+        }
+        return candidates;
+    }
+
+    private static ContributionRegionMeta toContributionMeta(RegionSyncInfo parsed, TimestampHashEntry serverMeta) {
+        return new ContributionRegionMeta(
+                parsed.normalizedPath(),
+                parsed.regionX(),
+                parsed.regionZ(),
+                parsed.dimension(),
+                parsed.caveLayer(),
+                serverMeta != null ? serverMeta.timestampSeconds() : 0,
+                serverMeta != null ? serverMeta.hash() : HashUtils.DEFAULT_HASH
+        );
+    }
+
+    private static void maybeQueueContributionSession(ServerPlayer player, List<ContributionRegionMeta> candidates) {
+        if (candidates.isEmpty() || !ContributionWhitelistBridge.isContributionAllowed(player)) {
+            return;
+        }
+        boolean queued = ContributionCoordinator.enqueueSession(player, candidates);
+        if (!queued) {
+            NetworkManager.sendToPlayer(player, new ContributionResultPayload(0, 0, candidates.size(), "queue_full"));
         }
     }
 
