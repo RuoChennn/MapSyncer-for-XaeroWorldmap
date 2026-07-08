@@ -1,10 +1,16 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.config.ClientSyncMode;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncResponsePayload;
+import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.platform.XaeroReflectionHelper;
 import com.mapsyncer.util.ChatUtils;
@@ -230,6 +236,9 @@ public class MapPacketHandler {
                 updatedRegionCoords.clear();
             });
         });
+
+        handler.registerContributionRequestHandler(MapPacketHandler::handleContributionRequest);
+        handler.registerContributionResultHandler(MapPacketHandler::handleContributionResult);
     }
 
     /**
@@ -439,6 +448,40 @@ public class MapPacketHandler {
             lastProgressTime = now;
             SyncProgressTracker.update(processed, total, payload.status());
         });
+    }
+
+    private static void handleContributionRequest(ContributionRequestPayload payload, PayloadContext context) {
+        context.enqueueWork(() -> {
+            ClientSyncMode mode = PlatformManager.getPlatform().getClientSyncMode();
+            if (mode == null || !mode.allowsContribution()) {
+                NetworkManager.sendToServer(new ContributionCompletePayload(payload.requestId(), 0, "disabled"));
+                return;
+            }
+            Path serverDir = XaeroMapIntegrator.getCurrentServerDirectory();
+            if (serverDir == null) {
+                NetworkManager.sendToServer(new ContributionCompletePayload(payload.requestId(), 0, "no_server_dir"));
+                return;
+            }
+
+            int sent = 0;
+            for (var meta : payload.regions()) {
+                List<ContributionDataPayload> contributions =
+                        ClientContributionCollector.collect(payload.requestId(), meta, serverDir);
+                if (!contributions.isEmpty()) {
+                    sent++;
+                }
+                for (ContributionDataPayload contribution : contributions) {
+                    NetworkManager.sendToServer(contribution);
+                }
+            }
+            NetworkManager.sendToServer(new ContributionCompletePayload(payload.requestId(), sent, "done"));
+        });
+    }
+
+    private static void handleContributionResult(ContributionResultPayload payload, PayloadContext context) {
+        context.enqueueWork(() -> LOGGER.debug(
+                "Contribution result request={}, accepted={}, rejected={}, status={}",
+                payload.requestId(), payload.accepted(), payload.rejected(), payload.status()));
     }
 
     /**
