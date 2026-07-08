@@ -14,13 +14,16 @@ The following amendments supersede the first-draft snippets below wherever they 
 
 - `ContributionOnlyRequestPayload` must support the same metadata fragmentation pattern as `SyncRequestPayload`: `partIndex`, `totalParts`, `split(requestId, meta, reason)`, and server-side per-player assembly before candidate comparison.
 - Task 2 must extend both `NetworkHandler` and `NetworkManager`; later code must use `PayloadContext` or the real handler APIs for player lookup and work scheduling, not invented `NetworkManager` static helpers.
-- Contribution-only sessions must preserve the request id supplied by the client. Add an overload such as `ContributionCoordinator.enqueueSession(player, candidates, requestId)` for this path; ordinary sync keeps the existing generated id path.
-- `PreDisconnectContributionManager` may disconnect only on terminal result statuses (`done`, `timeout`, `queue_full`, `no_candidates`, `not_allowed`, `inactive_request`, `wrong_player`, `permission_changed`, `write_failed`). Intermediate statuses such as per-region `accepted` must update UI only.
+- `ContributionOnlyRequestPayload.requestId` is only the client-side correlation id for the contribution-only request. Direct terminal results before queue entry (`not_allowed`, `no_candidates`, `queue_full`) must use that client id. Successful queue entry must use the existing server-generated `ContributionCoordinator` session id from `ContributionRequestPayload`; client uploads, completion, and final results use that server id.
+- `ContributionResultPayload` must carry an explicit `terminal` flag. `PreDisconnectContributionManager` may disconnect only for `terminal=true` results matching the active client request id or active server session id. Per-region statuses such as `accepted`, `stale_upload`, `write_failed`, `same_hash`, and `not_newer` must update UI only when `terminal=false`.
 - Candidate collection must run off the server thread. Main-thread work is limited to player/context validation and final enqueue/send calls.
+- Contribution-only candidate workers must be version-gated per player. A newer assembled contribution-only request invalidates older workers; stale workers must not enqueue sessions or send terminal results.
+- Contribution-only background workers must not retain stale `ServerPlayer` objects. Capture UUID and immutable request data, then re-resolve the player on the server thread before whitelist checks, result sends, or queue enqueue.
 - Do not replace ordinary `/mapsyncer sync` semantics with a broad new full-cache helper. Extract only the existing contribution-candidate logic while preserving requested-dimension filtering, skipped-dimension behavior, visited server paths, and existing `regionsToSync` construction.
 - Fabric 1.20.1 uses the legacy `ResourceLocation` + `FriendlyByteBuf` networking style; Fabric 1.21+ uses `CustomPacketPayload` / `RegistryFriendlyByteBuf`.
 - Add client contribution-in-progress tracking so pre-disconnect sync does not overlap with the contribution phase of an ordinary sync.
 - `Cancel disconnect` means returning to the game. If a contribution-only session has already been queued, the UI text must make clear that the queued contribution may continue; implementing true server-side cancellation is out of scope for this plan.
+- Client metadata scanning for pre-disconnect sync must run off the render/menu callback thread so the waiting screen and timeout can tick while local Xaero metadata is collected.
 
 ---
 
@@ -29,6 +32,7 @@ The following amendments supersede the first-draft snippets below wherever they 
 - Modify: `libs/common/src/main/java/com/mapsyncer/client/ClientHashManager.java` — hash-aware timestamp selection.
 - Test: `mc-1.21.1/fabric/src/test/java/com/mapsyncer/client/ClientHashManagerTest.java` — regression tests for timestamp source selection.
 - Create: `libs/platform-api/src/main/java/com/mapsyncer/network/payload/ContributionOnlyRequestPayload.java` — client-to-server request for contribution candidates only.
+- Modify: `libs/platform-api/src/main/java/com/mapsyncer/network/payload/ContributionResultPayload.java` — add explicit terminal marker for contribution UI flow.
 - Modify: `libs/platform-api/src/main/java/com/mapsyncer/network/NetworkHandler.java` — new send/register methods and payload ID.
 - Modify: `libs/platform-api/src/main/java/com/mapsyncer/network/NetworkManager.java` — static send/register helpers for the new payload.
 - Modify: `libs/platform-api/src/test/java/com/mapsyncer/network/ContributionPayloadContractTest.java` — DTO and handler contract coverage.
@@ -44,6 +48,7 @@ The following amendments supersede the first-draft snippets below wherever they 
   - `mc-1.21.11/neoforge/src/main/java/com/mapsyncer/network/NeoForgePayloadAdapters.java`
   - `mc-26.1/neoforge/src/main/java/com/mapsyncer/network/NeoForgePayloadAdapters.java`
 - Modify platform network handlers in every Fabric/Forge/NeoForge module — register and send `ContributionOnlyRequestPayload`.
+- Modify platform payload adapters in every Fabric/Forge/NeoForge module — encode/decode `ContributionResultPayload.terminal`.
 - Modify: every `mc-*/shared/src/main/java/com/mapsyncer/server/ServerSyncHandlerLogic.java` — register and handle contribution-only request.
 - Modify: every `mc-*/shared/src/main/java/com/mapsyncer/client/MapPacketHandler.java` — notify pre-disconnect manager when contribution result arrives.
 - Create: `libs/common/src/main/java/com/mapsyncer/client/PreDisconnectContributionManager.java` — shared state machine.
@@ -495,19 +500,11 @@ private static ContributionSelection collectContributionSelection(
 
 After adding this helper, update ordinary sync to call it with `includeServerDistribution=true`, then keep its outgoing `SyncResponsePayload` behavior unchanged. The contribution-only handler calls it with `includeServerDistribution=false` and must never send `SyncResponsePayload`.
 
-- [ ] **Step 3: Add request assembly and requestId bridge**
+- [ ] **Step 3: Add request assembly and id boundary**
 
 Add a per-player contribution-only request assembler in each `ServerSyncHandlerLogic` or as a shared helper. It must collect `ContributionOnlyRequestPayload` parts by `(player UUID, requestId)`, validate `partIndex/totalParts`, discard stale incomplete requests, and call the handler only after all parts arrive.
 
-Add an overload to `ContributionCoordinator`:
-
-```java
-public static boolean enqueueSession(ServerPlayer player, List<ContributionRegionMeta> candidates, int requestId) {
-    return enqueueSessionInternal(player, candidates, requestId);
-}
-```
-
-Refactor the existing generated-id method to call the same private helper:
+Do not add or use a `ContributionCoordinator.enqueueSession(player, candidates, requestId)` overload. Contribution-only success uses the existing server-generated id path:
 
 ```java
 public static boolean enqueueSession(ServerPlayer player, List<ContributionRegionMeta> candidates) {
@@ -515,7 +512,29 @@ public static boolean enqueueSession(ServerPlayer player, List<ContributionRegio
 }
 ```
 
-The contribution-only path must pass the assembled payload `requestId` into the overload so the server's `ContributionRequestPayload`, client uploads, and final `ContributionResultPayload` all use the same id that `PreDisconnectContributionManager` tracks.
+The contribution-only client request id is only used for direct terminal responses before queue entry:
+
+```java
+new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full", true)
+```
+
+After queue entry, `ContributionCoordinator` sends `ContributionRequestPayload` with a server-generated session id. The client must use that id for `ContributionDataPayload`, `ContributionCompletePayload`, and final `ContributionResultPayload`.
+
+Add per-player contribution-only request generations:
+
+```java
+private static final AtomicInteger globalContributionOnlyVersion = new AtomicInteger(0);
+private static final Map<UUID, Integer> playerContributionOnlyVersions = new ConcurrentHashMap<>();
+```
+
+When a full contribution-only request is assembled, increment and store the player's version. Pass that version to the worker. Before the worker sends direct results or enqueues a session, check that the player is still online and `playerContributionOnlyVersions.get(playerId)` still matches. Older workers must silently stop.
+
+Clean contribution-only state wherever player sync state is cleaned:
+
+- `onPlayerDisconnect(UUID)` removes contribution-only assemblies and versions, then calls `ContributionCoordinator.cancelPlayer(playerId)`.
+- `cleanupSyncState(UUID)` removes contribution-only assemblies and versions, then calls `ContributionCoordinator.cancelPlayer(playerId)`.
+- `cleanup()` clears `requestPartBuffer`, `requestTotalParts`, `contributionOnlyRequestBuffers`, and `playerContributionOnlyVersions`, then calls `ContributionCoordinator.shutdown()`.
+- `cleanupOfflinePlayers(Set<UUID>)` must scan contribution-only buffers/version keys in addition to `syncingPlayers`, because a player can have a contribution-only half-request without being in ordinary sync state.
 
 - [ ] **Step 4: Add handler**
 
@@ -529,41 +548,51 @@ private static void handleContributionOnlyRequest(ContributionOnlyRequestPayload
     context.enqueueWork(() -> {
         if (!ContributionWhitelistBridge.isContributionAllowed(player)) {
             NetworkManager.sendToPlayer(player,
-                    new ContributionResultPayload(payload.requestId(), 0, payload.clientMeta().size(), "not_allowed"));
+                    new ContributionResultPayload(payload.requestId(), 0, payload.clientMeta().size(), "not_allowed", true));
             return;
         }
-        startContributionOnlyCandidateWorker(player, payload);
+        int requestVersion = playerContributionOnlyVersions.compute(
+                player.getUUID(), (id, ignored) -> globalContributionOnlyVersion.incrementAndGet());
+        startContributionOnlyCandidateWorker(player, payload, requestVersion);
     });
 }
 
-private static void startContributionOnlyCandidateWorker(ServerPlayer player, ContributionOnlyRequestPayload payload) {
+private static void startContributionOnlyCandidateWorker(ServerPlayer player, ContributionOnlyRequestPayload payload, int requestVersion) {
+    UUID playerId = player.getUUID();
+    int clientRequestId = payload.requestId();
+    Map<String, ClientMeta> clientMeta = Map.copyOf(payload.clientMeta());
+    var server = player.level().getServer();
+
     Thread worker = new Thread(() -> {
-        Path cacheDir = ConversionOrchestrator.getCacheDir();
-        GenerationCache cache = GenerationCache.getInstance(cacheDir);
         List<ContributionRegionMeta> candidates =
-                collectContributionSelection(payload.clientMeta(), cache, cacheDir, false).contributionCandidates();
+                collectContributionSelection(clientMeta, GenerationCache.getInstance(ConversionOrchestrator.getCacheDir()),
+                        ConversionOrchestrator.getCacheDir(), false).contributionCandidates();
         Runnable enqueue = () -> {
-            if (!ContributionWhitelistBridge.isContributionAllowed(player)) {
-                NetworkManager.sendToPlayer(player,
-                        new ContributionResultPayload(payload.requestId(), 0, payload.clientMeta().size(), "not_allowed"));
+            if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
+                return;
+            }
+            ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
+            if (onlinePlayer == null) {
+                return;
+            }
+            if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
+                NetworkManager.sendToPlayer(onlinePlayer,
+                        new ContributionResultPayload(clientRequestId, 0, clientMeta.size(), "not_allowed", true));
                 return;
             }
             if (candidates.isEmpty()) {
-                NetworkManager.sendToPlayer(player,
-                        new ContributionResultPayload(payload.requestId(), 0, 0, "no_candidates"));
+                NetworkManager.sendToPlayer(onlinePlayer,
+                        new ContributionResultPayload(clientRequestId, 0, 0, "no_candidates", true));
                 return;
             }
-            boolean queued = ContributionCoordinator.enqueueSession(player, candidates, payload.requestId());
+            boolean queued = ContributionCoordinator.enqueueSession(onlinePlayer, candidates);
             if (!queued) {
-                NetworkManager.sendToPlayer(player,
-                        new ContributionResultPayload(payload.requestId(), 0, candidates.size(), "queue_full"));
+                NetworkManager.sendToPlayer(onlinePlayer,
+                        new ContributionResultPayload(clientRequestId, 0, candidates.size(), "queue_full", true));
             }
         };
-        var server = player.level().getServer();
         if (server != null) {
             server.execute(enqueue);
-        } else {
-            enqueue.run();
         }
     });
     worker.setDaemon(true);
@@ -581,7 +610,10 @@ Add focused tests or a FakeNetworkHandler integration test for contribution-only
 - `no_candidates` uses the original request id
 - `queue_full` uses the original request id
 - success path does not send `SyncResponsePayload`
-- success path enqueues a contribution session with the original request id
+- success path enqueues a contribution session with a server-generated id
+- a newer assembled contribution-only request invalidates older candidate workers
+- a disconnected player is re-resolved as offline and is not queued by a late worker
+- `cleanup()`, `cleanupSyncState()`, and `cleanupOfflinePlayers()` clear contribution-only buffers and version state
 
 - [ ] **Step 6: Compile representative shared consumers**
 
@@ -622,7 +654,29 @@ default int getDisconnectSyncTimeoutSeconds() {
 }
 ```
 
-- [ ] **Step 2: Add manager**
+- [ ] **Step 2: Add terminal marker to contribution results**
+
+Extend `ContributionResultPayload` with an explicit terminal marker:
+
+```java
+public record ContributionResultPayload(int requestId, int accepted, int rejected, String status, boolean terminal) {
+    public static final String ID = NetworkHandler.CONTRIBUTION_RESULT_ID;
+
+    public ContributionResultPayload(int requestId, int accepted, int rejected, String status) {
+        this(requestId, accepted, rejected, status, false);
+    }
+}
+```
+
+Update all Fabric/Forge/NeoForge payload adapters to encode/decode `terminal` after `status`. Server sends:
+
+- `terminal=true` for direct contribution-only results before queue entry: `not_allowed`, `no_candidates`, `queue_full`
+- `terminal=true` for final queue results from `ContributionCoordinator` after complete/timeout/cancel/shutdown status selection
+- `terminal=false` for region-level progress or rejection statuses such as `accepted`, `stale_upload`, `write_failed`, `same_hash`, `not_newer`, `invalid_part`, and `duplicate_part`
+
+Split `ContributionCoordinator` result helpers if needed so region-level result sends and final session result sends cannot accidentally share the same terminal flag.
+
+- [ ] **Step 3: Add manager**
 
 Create `PreDisconnectContributionManager`:
 
@@ -632,20 +686,24 @@ package com.mapsyncer.client;
 import com.mapsyncer.config.ClientSyncMode;
 import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ClientMeta;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.platform.PlatformManager;
 
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class PreDisconnectContributionManager {
     private static final AtomicInteger NEXT_REQUEST_ID = new AtomicInteger(10_000);
-    private static volatile int activeRequestId = -1;
+    private static volatile int activeClientRequestId = -1;
+    private static volatile int activeServerSessionId = -1;
     private static volatile Runnable disconnectAction;
     private static volatile long deadlineMillis;
     private static volatile String statusKey = "mapsyncer.predisconnect.idle";
+    private static final AtomicBoolean collecting = new AtomicBoolean(false);
 
     private PreDisconnectContributionManager() {
     }
@@ -667,22 +725,35 @@ public final class PreDisconnectContributionManager {
             return;
         }
         int requestId = NEXT_REQUEST_ID.incrementAndGet();
-        activeRequestId = requestId;
+        activeClientRequestId = requestId;
+        activeServerSessionId = -1;
         disconnectAction = originalDisconnectAction;
         deadlineMillis = System.currentTimeMillis()
                 + PlatformManager.getPlatform().getDisconnectSyncTimeoutSeconds() * 1000L;
         statusKey = "mapsyncer.predisconnect.collecting";
 
-        Map<String, ClientMeta> meta = ClientHashManager.computeMetaForSync(serverDir);
-        statusKey = "mapsyncer.predisconnect.uploading";
-        for (ContributionOnlyRequestPayload part
-                : ContributionOnlyRequestPayload.split(requestId, meta, "pre_disconnect")) {
-            NetworkManager.sendToServer(part);
-        }
+        collecting.set(true);
+        Thread worker = new Thread(() -> {
+            try {
+                Map<String, ClientMeta> meta = ClientHashManager.computeMetaForSync(serverDir);
+                if (activeClientRequestId != requestId) {
+                    return;
+                }
+                statusKey = "mapsyncer.predisconnect.uploading";
+                for (ContributionOnlyRequestPayload part
+                        : ContributionOnlyRequestPayload.split(requestId, meta, "pre_disconnect")) {
+                    NetworkManager.sendToServer(part);
+                }
+            } finally {
+                collecting.set(false);
+            }
+        }, "MapSyncer-PreDisconnectMeta");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     public static boolean isActive() {
-        return activeRequestId >= 0;
+        return activeClientRequestId >= 0;
     }
 
     public static String getStatusKey() {
@@ -693,25 +764,26 @@ public final class PreDisconnectContributionManager {
         return isActive() && System.currentTimeMillis() >= deadlineMillis;
     }
 
-    public static void handleContributionResult(ContributionResultPayload payload) {
-        if (payload.requestId() == activeRequestId) {
-            statusKey = "mapsyncer.predisconnect.status." + payload.status();
-            if (isTerminalStatus(payload.status())) {
-                finish();
-            }
+    public static void handleContributionRequest(ContributionRequestPayload payload) {
+        if (isActive() && payload != null) {
+            activeServerSessionId = payload.requestId();
+            statusKey = "mapsyncer.predisconnect.uploading";
         }
     }
 
-    private static boolean isTerminalStatus(String status) {
-        return "done".equals(status)
-                || "timeout".equals(status)
-                || "queue_full".equals(status)
-                || "no_candidates".equals(status)
-                || "not_allowed".equals(status)
-                || "inactive_request".equals(status)
-                || "wrong_player".equals(status)
-                || "permission_changed".equals(status)
-                || "write_failed".equals(status);
+    public static void handleContributionResult(ContributionResultPayload payload) {
+        if (payload == null || !isActive()) {
+            return;
+        }
+        boolean matchesClientRequest = activeServerSessionId < 0 && payload.requestId() == activeClientRequestId;
+        boolean matchesServerSession = activeServerSessionId >= 0 && payload.requestId() == activeServerSessionId;
+        if (!matchesClientRequest && !matchesServerSession) {
+            return;
+        }
+        statusKey = "mapsyncer.predisconnect.status." + payload.status();
+        if (payload.terminal()) {
+            finish();
+        }
     }
 
     public static void skipAndDisconnect() {
@@ -720,14 +792,16 @@ public final class PreDisconnectContributionManager {
     }
 
     public static void cancel() {
-        activeRequestId = -1;
+        activeClientRequestId = -1;
+        activeServerSessionId = -1;
         disconnectAction = null;
         statusKey = "mapsyncer.predisconnect.idle";
     }
 
     public static void finish() {
         Runnable action = disconnectAction;
-        activeRequestId = -1;
+        activeClientRequestId = -1;
+        activeServerSessionId = -1;
         disconnectAction = null;
         if (action != null) {
             action.run();
@@ -736,14 +810,20 @@ public final class PreDisconnectContributionManager {
 }
 ```
 
-- [ ] **Step 3: Notify manager from contribution result handler**
+- [ ] **Step 4: Notify manager from contribution handlers**
 
-In every `MapPacketHandler`, add client contribution state tracking. Set `contributionInProgress=true` when handling `ContributionRequestPayload`; clear it after sending `ContributionCompletePayload` or after receiving a terminal `ContributionResultPayload`. Expose:
+In every `MapPacketHandler`, add client contribution state tracking. Set `contributionInProgress=true` when handling `ContributionRequestPayload`; clear it only after receiving a terminal `ContributionResultPayload`, disconnect cleanup, or a local pre-check determines that no contribution session will start. Do not clear it immediately after sending `ContributionCompletePayload`, because the server may still be finalizing the queued session. Expose:
 
 ```java
 public static boolean isContributionInProgress() {
     return contributionInProgress;
 }
+```
+
+In every `MapPacketHandler.handleContributionRequest`, add before collecting/uploading:
+
+```java
+PreDisconnectContributionManager.handleContributionRequest(payload);
 ```
 
 In every `MapPacketHandler.handleContributionResult`, add before debug logging:
@@ -752,7 +832,7 @@ In every `MapPacketHandler.handleContributionResult`, add before debug logging:
 PreDisconnectContributionManager.handleContributionResult(payload);
 ```
 
-- [ ] **Step 4: Add waiting screen**
+- [ ] **Step 5: Add waiting screen**
 
 Create `PreDisconnectSyncScreen` in each shared source set with version-compatible UI imports. Use `Screen`, `Button`, and `Component` only.
 
@@ -796,7 +876,7 @@ addRenderableWidget(Button.builder(
 
 `return_to_game` deliberately cancels only the pending disconnect action. If the server has already queued a contribution session, that contribution may continue in the background.
 
-- [ ] **Step 5: Add language keys**
+- [ ] **Step 6: Add language keys**
 
 Add English:
 
@@ -826,13 +906,13 @@ Add Chinese:
 "mapsyncer.predisconnect.status.timeout": "贡献同步已超时。"
 ```
 
-- [ ] **Step 6: Compile**
+- [ ] **Step 7: Compile**
 
 Run:
 
 `.\gradlew :mc-1.21.1:fabric:compileJava :mc-1.21.1:neoforge:compileJava :mc-1.21.11:neoforge:compileJava`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add libs/platform-api/src/main/java/com/mapsyncer/platform/Platform.java libs/common/src/main/java/com/mapsyncer/client/PreDisconnectContributionManager.java mc-1.20.1/shared mc-1.21.1/shared mc-1.21.11/shared mc-26.1/shared libs/common/src/main/resources/assets/mapsyncer/lang
@@ -952,11 +1032,11 @@ Inspect `net.minecraft.client.gui.screens.PauseScreen` for the method that handl
 Record the chosen method name in the implementation commit message and in the task summary. Maintain a short implementation table while working:
 
 ```text
-MC version | loader(s) | target method/callback | vanilla action used | multiplayer Disconnect covered | single-player Return to Title untouched
-1.20.1    | Fabric/Forge | ... | ... | yes/no | yes/no
-1.21.1    | Fabric/Forge/NeoForge | ... | ... | yes/no | yes/no
-1.21.11   | Fabric/Forge/NeoForge | ... | ... | yes/no | yes/no
-26.1      | Fabric/NeoForge | ... | ... | yes/no | yes/no
+MC version | loader(s) | target method/callback | vanilla action used | integrated-server API | multiplayer Disconnect covered | single-player Return to Title untouched
+1.20.1    | Fabric/Forge | ... | ... | ... | yes/no | yes/no
+1.21.1    | Fabric/Forge/NeoForge | ... | ... | ... | yes/no | yes/no
+1.21.11   | Fabric/Forge/NeoForge | ... | ... | ... | yes/no | yes/no
+26.1      | Fabric/NeoForge | ... | ... | ... | yes/no | yes/no
 ```
 
 - [ ] **Step 2: Add intercept helper**
@@ -1023,12 +1103,14 @@ In dev client:
 3. Press Esc → Disconnect.
 4. Expected: pre-disconnect screen appears instead of immediate disconnect.
 5. Click `Cancel disconnect`.
-6. Expected: screen closes and player remains connected.
+6. Expected: screen closes and player remains connected. If a contribution has already been queued, the UI text explains that it may continue server-side.
 7. Press Disconnect again, click `Skip and disconnect`.
-8. Expected: vanilla disconnect proceeds.
+8. Expected: vanilla disconnect proceeds immediately. This stops waiting, but does not send a server-side cancellation; any already-started contribution may fail, time out, or finish according to existing server behavior.
 9. Set client mode `DISABLED` and `RECEIVE_ONLY`; expected: vanilla disconnect proceeds immediately with no pre-disconnect screen and no `ContributionOnlyRequestPayload`.
 10. During the pre-disconnect screen, press WASD, Esc, inventory, and chat; expected: no player command/input UI action proceeds through the screen. Server-side world/entity ticking is not frozen.
 11. In single-player or local integrated-server flow, press Return to Title; expected: pre-disconnect flow does not start.
+12. While an ordinary `/mapsyncer sync` contribution phase is active or waiting for a final server result, press Disconnect; expected: pre-disconnect flow does not start.
+13. Receive `accepted` or a non-terminal region rejection while waiting; expected: status text updates but disconnect does not proceed until a `terminal=true` result or timeout.
 
 - [ ] **Step 5: Commit**
 
@@ -1066,6 +1148,13 @@ Add manual tests to `docs/test-notes.md` using the document's existing table sty
 - crash/kill process remains unsupported
 - `DISABLED` and `RECEIVE_ONLY` disconnect immediately without pre-disconnect sync
 - waiting screen blocks normal input while server/entity ticking is not frozen
+- ordinary sync contribution-in-progress prevents pre-disconnect sync from starting
+- direct terminal statuses `queue_full`, `no_candidates`, and `not_allowed` use the client request id
+- queued contribution sessions use server-generated session ids from `ContributionRequestPayload`
+- non-terminal region statuses update UI but do not disconnect
+- repeated contribution-only requests discard older worker results
+- disconnected players are not queued by late contribution-only workers
+- cleanup/offline cleanup clears contribution-only buffers and version state
 
 - [ ] **Step 2: Run verification**
 

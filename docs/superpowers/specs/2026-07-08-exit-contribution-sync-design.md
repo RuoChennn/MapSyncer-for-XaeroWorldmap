@@ -81,6 +81,12 @@ sequenceDiagram
 8. 服务端沿用 `ContributionCoordinator` 串行处理贡献。
 9. 收到结果或超时后，界面执行原始断开。
 
+ID 边界：
+
+- `ContributionOnlyRequestPayload.requestId` 是客户端发起“仅贡献”请求的相关 ID，只用于服务端直接拒绝、无候选、队列满等未进入贡献队列的结果。
+- 一旦成功进入 `ContributionCoordinator`，贡献会话 ID 必须由服务端生成，并通过 `ContributionRequestPayload.requestId` 下发。后续 `ContributionDataPayload`、`ContributionCompletePayload`、`ContributionResultPayload` 都使用该服务端会话 ID。
+- `ContributionResultPayload` 必须携带明确的终态标记。客户端只能在 `terminal=true` 的结果或本地超时后继续断开；region 级 `accepted`、`stale_upload`、`write_failed` 等中间状态只能更新界面状态。
+
 ### 玩家状态
 
 等待期间客户端仍连接到服务器，服务端仍认为玩家在线。界面应阻止继续移动、打开背包、发送命令等操作，降低“等待期间又产生新地图数据”的概率。服务器不会暂停，玩家实体仍可能受到环境影响，因此默认超时不应过长。
@@ -93,7 +99,7 @@ sequenceDiagram
 
 ### 服务端行为
 
-退出前贡献使用独立请求类型，不触发服务端分发。服务端只通过 `ContributionRequestPayload` 请求客户端上传候选 region，并通过 `ContributionResultPayload` 报告贡献结果。服务端仍使用现有白名单、OP、队列、冷却和二次基线校验。若队列满或贡献被拒绝，客户端显示简短状态后按超时或用户选择退出。
+退出前贡献使用独立请求类型，不触发服务端分发。服务端只通过 `ContributionRequestPayload` 请求客户端上传候选 region，并通过 `ContributionResultPayload` 报告贡献结果。服务端仍使用现有白名单、OP、队列、冷却和二次基线校验。若队列满、无候选或贡献被拒绝，服务端返回带客户端请求 ID 的终态结果；若已进入贡献队列，最终结果使用服务端会话 ID。
 
 ### 配置项
 
