@@ -55,6 +55,7 @@ public class PlayerJoinHandlerLogic {
      */
     public static void onPlayerLeave(UUID playerId) {
         ServerSyncHandlerLogic.onPlayerDisconnect(playerId);
+        ContributionCoordinator.cancelPlayer(playerId);
     }
 
     /**
@@ -65,6 +66,7 @@ public class PlayerJoinHandlerLogic {
 
         // Shutdown conversion thread pool first
         ConversionOrchestrator.shutdownExecutor();
+        ContributionCoordinator.shutdown();
 
         // Reset singleton instances to release memory
         GenerationCache.resetInstance();
