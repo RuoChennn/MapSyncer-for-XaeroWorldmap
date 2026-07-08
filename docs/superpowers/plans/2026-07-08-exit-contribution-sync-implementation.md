@@ -462,7 +462,7 @@ git commit -m "feat: 接入退出前贡献请求网络适配" -m "为 Fabric、F
 - Modify: `libs/common/src/main/java/com/mapsyncer/server/ContributionCoordinator.java`
 - Add or modify tests covering contribution-only request assembly and handler behavior.
 
-- [ ] **Step 1: Register handler**
+- [x] **Step 1: Register handler**
 
 In `registerHandlers`, add:
 
@@ -472,7 +472,7 @@ handler.registerContributionOnlyRequestHandler(
 );
 ```
 
-- [ ] **Step 2: Extract candidate collection**
+- [x] **Step 2: Extract candidate collection**
 
 Create helpers near existing sync comparison code. The helper must be extracted from the current ordinary sync contribution-candidate code rather than copied as a new broad full-cache scan. Preserve these ordinary sync semantics exactly:
 
@@ -500,7 +500,9 @@ private static ContributionSelection collectContributionSelection(
 
 After adding this helper, update ordinary sync to call it with `includeServerDistribution=true`, then keep its outgoing `SyncResponsePayload` behavior unchanged. The contribution-only handler calls it with `includeServerDistribution=false` and must never send `SyncResponsePayload`.
 
-- [ ] **Step 3: Add request assembly and id boundary**
+Implementation note: the final patch kept ordinary `/mapsyncer sync` comparison flow intact and added a dedicated contribution-only candidate collector that mirrors the existing filtering. A broader shared helper extraction was deferred to avoid changing ordinary sync behavior while resolving the concurrency bug.
+
+- [x] **Step 3: Add request assembly and id boundary**
 
 Add a per-player contribution-only request assembler in each `ServerSyncHandlerLogic` or as a shared helper. It must collect `ContributionOnlyRequestPayload` parts by `(player UUID, requestId)`, validate `partIndex/totalParts`, discard stale incomplete requests, and call the handler only after all parts arrive.
 
@@ -532,11 +534,14 @@ When a full contribution-only request is assembled, increment and store the play
 Clean contribution-only state wherever player sync state is cleaned:
 
 - `onPlayerDisconnect(UUID)` removes contribution-only assemblies and versions, then calls `ContributionCoordinator.cancelPlayer(playerId)`.
-- `cleanupSyncState(UUID)` removes contribution-only assemblies and versions, then calls `ContributionCoordinator.cancelPlayer(playerId)`.
+- `cleanupSyncState(UUID)` removes ordinary sync state and pending contribution-only assemblies/versions, but does not call `ContributionCoordinator.cancelPlayer(playerId)`; otherwise ordinary sync aborts could cancel an already queued contribution session.
+- `cleanupPlayerState(UUID)` or equivalent offline/disconnect cleanup calls `ContributionCoordinator.cancelPlayer(playerId)`.
 - `cleanup()` clears `requestPartBuffer`, `requestTotalParts`, `contributionOnlyRequestBuffers`, and `playerContributionOnlyVersions`, then calls `ContributionCoordinator.shutdown()`.
-- `cleanupOfflinePlayers(Set<UUID>)` must scan contribution-only buffers/version keys in addition to `syncingPlayers`, because a player can have a contribution-only half-request without being in ordinary sync state.
+- `cleanupOfflinePlayers(Set<UUID>)` must scan contribution-only buffers/version keys in addition to `syncingPlayers`, because a player can have a contribution-only half-request without being in ordinary sync state. It also calls `ContributionCoordinator.cleanupOfflinePlayers(...)` so queued/active contribution sessions for missed disconnects do not block the queue until timeout.
 
-- [ ] **Step 4: Add handler**
+Final implementation also moves contribution-only assembly onto the server thread, enforces a 256-part maximum, and expires incomplete assemblies after 120 seconds.
+
+- [x] **Step 4: Add handler**
 
 ```java
 private static void handleContributionOnlyRequest(ContributionOnlyRequestPayload payload, PayloadContext context) {
@@ -615,13 +620,17 @@ Add focused tests or a FakeNetworkHandler integration test for contribution-only
 - a disconnected player is re-resolved as offline and is not queued by a late worker
 - `cleanup()`, `cleanupSyncState()`, and `cleanupOfflinePlayers()` clear contribution-only buffers and version state
 
+Implementation note: no direct server-handler test harness exists for `ServerPlayer` and server-thread behavior in the current project. `ContributionResultPayload` terminal contract coverage was added in `ContributionPayloadContractTest`; server behavior was validated by focused static reviews.
+
 - [ ] **Step 6: Compile representative shared consumers**
 
 Run:
 
 `.\gradlew :mc-1.21.1:fabric:compileJava :mc-1.21.1:neoforge:compileJava :mc-1.21.11:neoforge:compileJava`
 
-- [ ] **Step 7: Commit**
+Attempted verification is currently blocked before compilation because `gradle.properties` points `org.gradle.java.home` at unavailable `C:/Program Files/Eclipse Adoptium/jdk-25.0.3.9-hotspot`. Do not commit a local path fix for this file.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add libs/common/src/main/java/com/mapsyncer/server/ContributionCoordinator.java mc-1.20.1/shared mc-1.21.1/shared mc-1.21.11/shared mc-26.1/shared
@@ -654,7 +663,7 @@ default int getDisconnectSyncTimeoutSeconds() {
 }
 ```
 
-- [ ] **Step 2: Add terminal marker to contribution results**
+- [x] **Step 2: Add terminal marker to contribution results**
 
 Extend `ContributionResultPayload` with an explicit terminal marker:
 
