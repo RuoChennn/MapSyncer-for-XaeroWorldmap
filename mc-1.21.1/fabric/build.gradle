@@ -52,6 +52,7 @@ dependencies {
     implementation project(':libs:platform-api')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // include 会将依赖打包到 JAR 中
     include project(':libs:core')
     include project(':libs:platform-api')

@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 生成缓存 - 缓存每个region的生成时间戳和CRC32哈希值
@@ -43,7 +44,7 @@ public class GenerationCache {
     private final Path cacheFile;
 
     /** 缓存数据：relativePath -> TimestampHashEntry */
-    private final Map<String, TimestampHashEntry> cache = new HashMap<>();
+    private final Map<String, TimestampHashEntry> cache = new ConcurrentHashMap<>();
 
     private GenerationCache(Path cacheDir) {
         this.cacheFile = cacheDir.resolve("generation_cache.properties");
@@ -136,6 +137,7 @@ public class GenerationCache {
         String hash = HashUtils.computeFileHash(filePath);
         cache.put(relativePath, new TimestampHashEntry(timestampSeconds, hash));
         LOGGER.debug("Updated cache for {}: ts={}, hash={}", relativePath, timestampSeconds, hash);
+        trimIfOverLimit();
     }
 
     /**
@@ -151,13 +153,13 @@ public class GenerationCache {
     /**
      * 获取所有缓存数据
      *
-     * <p>返回不可修改视图，避免创建完整副本浪费内存。</p>
+     * <p>返回当前缓存快照，避免异步同步线程遍历时与写入线程共享底层 Map 视图。</p>
      * <p>如果需要修改数据，请使用 update() 方法。</p>
      *
-     * @return 缓存数据的不可修改视图
+     * @return 缓存数据的不可修改快照
      */
     public Map<String, TimestampHashEntry> getAll() {
-        return Collections.unmodifiableMap(cache);
+        return Collections.unmodifiableMap(new HashMap<>(cache));
     }
 
     /**

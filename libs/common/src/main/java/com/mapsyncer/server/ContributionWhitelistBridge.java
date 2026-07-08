@@ -8,8 +8,11 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.lang.reflect.Method;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -17,6 +20,12 @@ import java.util.UUID;
  */
 public final class ContributionWhitelistBridge {
     private static final String FILE_NAME = "mapsyncer-contributors.json";
+    private static final Object WHITELIST_CACHE_LOCK = new Object();
+
+    private static Path cachedWhitelistPath;
+    private static long cachedWhitelistModifiedMillis = Long.MIN_VALUE;
+    private static long cachedWhitelistSize = Long.MIN_VALUE;
+    private static UuidWhitelistFile cachedWhitelist = new UuidWhitelistFile(Set.of());
 
     private ContributionWhitelistBridge() {
     }
@@ -36,7 +45,7 @@ public final class ContributionWhitelistBridge {
         Path whitelistPath = server.getWorldPath(LevelResource.ROOT)
                 .resolve("serverconfig")
                 .resolve(FILE_NAME);
-        return UuidWhitelistFile.loadOrCreate(whitelistPath).contains(uuid);
+        return loadCachedWhitelist(whitelistPath).contains(uuid);
     }
 
     public static boolean isContributionAllowed(ServerPlayer player) {
@@ -66,6 +75,41 @@ public final class ContributionWhitelistBridge {
             return null;
         }
         return player.level().getServer();
+    }
+
+    private static UuidWhitelistFile loadCachedWhitelist(Path whitelistPath) {
+        synchronized (WHITELIST_CACHE_LOCK) {
+            long modifiedMillis = fileModifiedMillis(whitelistPath);
+            long size = fileSize(whitelistPath);
+            if (whitelistPath.equals(cachedWhitelistPath)
+                    && modifiedMillis == cachedWhitelistModifiedMillis
+                    && size == cachedWhitelistSize) {
+                return cachedWhitelist;
+            }
+
+            UuidWhitelistFile loaded = UuidWhitelistFile.loadOrCreate(whitelistPath);
+            cachedWhitelistPath = whitelistPath;
+            cachedWhitelistModifiedMillis = fileModifiedMillis(whitelistPath);
+            cachedWhitelistSize = fileSize(whitelistPath);
+            cachedWhitelist = loaded;
+            return cachedWhitelist;
+        }
+    }
+
+    private static long fileModifiedMillis(Path file) {
+        try {
+            return Files.exists(file) ? Files.getLastModifiedTime(file).toMillis() : Long.MIN_VALUE;
+        } catch (IOException e) {
+            return Long.MIN_VALUE;
+        }
+    }
+
+    private static long fileSize(Path file) {
+        try {
+            return Files.exists(file) ? Files.size(file) : Long.MIN_VALUE;
+        } catch (IOException e) {
+            return Long.MIN_VALUE;
+        }
     }
 
     private static boolean isOp(MinecraftServer server, ServerPlayer player) {

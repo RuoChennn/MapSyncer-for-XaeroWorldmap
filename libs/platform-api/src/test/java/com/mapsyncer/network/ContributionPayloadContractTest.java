@@ -25,6 +25,7 @@ import java.util.function.BiConsumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ContributionPayloadContractTest {
@@ -121,6 +122,24 @@ class ContributionPayloadContractTest {
         assertEquals(1, contributionOnly.totalParts());
         assertEquals(clientMeta, contributionOnly.clientMeta());
         assertEquals("client_exit", contributionOnly.reason());
+    }
+
+    @Test
+    void contributionPayloadsRejectNullContractFields() {
+        ContributionRegionMeta meta = new ContributionRegionMeta(
+                "null/1_2", 1, 2, "null", Integer.MAX_VALUE, 10, "server-hash");
+        ChunkMapData chunk = new ChunkMapData(1, 2, "null", new byte[] {1});
+
+        assertThrows(NullPointerException.class,
+                () -> new ContributionRequestPayload(1, null, "request"));
+        assertThrows(NullPointerException.class,
+                () -> new ContributionRequestPayload(1, List.of(meta), null));
+        assertThrows(NullPointerException.class,
+                () -> new ContributionDataPayload(1, null, "null/1_2", 10, "hash"));
+        assertThrows(NullPointerException.class,
+                () -> new ContributionDataPayload(1, chunk, null, 10, "hash"));
+        assertThrows(NullPointerException.class,
+                () -> new ContributionDataPayload(1, chunk, "null/1_2", 10, null));
     }
 
     @Test

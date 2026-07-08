@@ -6,6 +6,7 @@ import com.mapsyncer.network.PayloadContext;
 import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
@@ -29,6 +30,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 客户端断开连接时的统一清理入口。
@@ -43,6 +48,16 @@ public class MapPacketHandler {
 
     /** 贡献会话是否正在进行中（普通 sync 或退出前贡献），用于防止退出前贡献与普通贡献重叠。 */
     private static volatile boolean contributionInProgress = false;
+
+    private static final AtomicInteger CONTRIBUTION_WORKER_ID = new AtomicInteger(1);
+    private static final ExecutorService CONTRIBUTION_EXECUTOR = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "MapSyncer-ContributionUploader-" + CONTRIBUTION_WORKER_ID.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
 
     /**
      * 检查同步是否正在进行中。
@@ -217,12 +232,14 @@ public class MapPacketHandler {
                 // 显示自动同步状态
                 Object[] statusKey = AutoSyncManager.getStatusKey(payload.autoSyncIntervalMinutes());
                 String key = (String) statusKey[0];
-                if (statusKey.length > 1) {
-                    Minecraft.getInstance().player.displayClientMessage(
-                        ChatUtils.prefix().append(ChatUtils.desc(key, statusKey[1])), false);
-                } else {
-                    Minecraft.getInstance().player.displayClientMessage(
-                        ChatUtils.prefix().append(ChatUtils.desc(key)), false);
+                if (Minecraft.getInstance().player != null) {
+                    if (statusKey.length > 1) {
+                        Minecraft.getInstance().player.displayClientMessage(
+                            ChatUtils.prefix().append(ChatUtils.desc(key, statusKey[1])), false);
+                    } else {
+                        Minecraft.getInstance().player.displayClientMessage(
+                            ChatUtils.prefix().append(ChatUtils.desc(key)), false);
+                    }
                 }
 
                 if (AutoSyncManager.shouldAutoSync(
@@ -492,19 +509,34 @@ public class MapPacketHandler {
             // 该标志只会在收到 terminal=true 的结果或断开清理时清除。
             contributionInProgress = true;
 
-            int sent = 0;
-            for (var meta : payload.regions()) {
+            int requestId = payload.requestId();
+            List<ContributionRegionMeta> regions = List.copyOf(payload.regions());
+            CONTRIBUTION_EXECUTOR.execute(() -> uploadContributionRequest(requestId, regions, serverDir));
+        });
+    }
+
+    private static void uploadContributionRequest(int requestId, List<ContributionRegionMeta> regions, Path serverDir) {
+        int sent = 0;
+        try {
+            for (var meta : regions) {
                 List<ContributionDataPayload> contributions =
-                        ClientContributionCollector.collect(payload.requestId(), meta, serverDir);
+                        ClientContributionCollector.collect(requestId, meta, serverDir);
                 if (!contributions.isEmpty()) {
                     sent++;
                 }
                 for (ContributionDataPayload contribution : contributions) {
-                    NetworkManager.sendToServer(contribution);
+                    Minecraft.getInstance().execute(() -> NetworkManager.sendToServer(contribution));
                 }
             }
-            NetworkManager.sendToServer(new ContributionCompletePayload(payload.requestId(), sent, "done"));
-        });
+            int sentRegions = sent;
+            Minecraft.getInstance().execute(() ->
+                    NetworkManager.sendToServer(new ContributionCompletePayload(requestId, sentRegions, "done")));
+        } catch (RuntimeException e) {
+            LOGGER.warn("Failed to upload contribution request {}", requestId, e);
+            int sentRegions = sent;
+            Minecraft.getInstance().execute(() ->
+                    NetworkManager.sendToServer(new ContributionCompletePayload(requestId, sentRegions, "client_error")));
+        }
     }
 
     private static void handleContributionResult(ContributionResultPayload payload, PayloadContext context) {

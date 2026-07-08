@@ -473,21 +473,12 @@ public class ServerSyncHandlerLogic {
      * @param playerId 玩家UUID
      */
     public static void onPlayerDisconnect(UUID playerId) {
-        syncingPlayers.remove(playerId);
-        playerSyncDimensions.remove(playerId);
-        contributionOnlyRequestBuffers.remove(playerId);
-        playerContributionOnlyVersions.remove(playerId);
-        ContributionCoordinator.cancelPlayer(playerId);
-
-        // 清理限速状态
-        clearSpeedLimitState(playerId);
-
-        // 立即中断同步线程
-        Thread syncThread = syncThreads.remove(playerId);
-        if (syncThread != null && syncThread.isAlive()) {
-            syncThread.interrupt();
-            LOGGER.info("Player {} disconnected, sync thread interrupted", playerId);
+        if (playerId == null) {
+            return;
         }
+        cleanupSyncState(playerId);
+        ContributionCoordinator.cancelPlayer(playerId);
+        LOGGER.debug("Player {} disconnected, sync state cleared", playerId);
     }
 
     /**
@@ -1404,6 +1395,21 @@ public class ServerSyncHandlerLogic {
             }
         }
         for (UUID playerId : contributionOnlyRequestBuffers.keySet()) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+        for (UUID playerId : requestPartBuffer.keySet()) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+        for (UUID playerId : requestTotalParts.keySet()) {
+            if (!onlinePlayerIds.contains(playerId)) {
+                toRemove.add(playerId);
+            }
+        }
+        for (UUID playerId : playerSyncVersions.keySet()) {
             if (!onlinePlayerIds.contains(playerId)) {
                 toRemove.add(playerId);
             }

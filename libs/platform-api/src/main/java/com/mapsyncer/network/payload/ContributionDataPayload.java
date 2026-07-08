@@ -2,6 +2,8 @@ package com.mapsyncer.network.payload;
 
 import com.mapsyncer.network.NetworkHandler;
 
+import java.util.Objects;
+
 /**
  * 贡献数据包 - 客户端上传单个 region 地图数据。
  *
@@ -19,4 +21,10 @@ public record ContributionDataPayload(
         String observedServerHash
 ) {
     public static final String ID = NetworkHandler.CONTRIBUTION_DATA_ID;
+
+    public ContributionDataPayload {
+        chunk = Objects.requireNonNull(chunk, "chunk");
+        relativePath = Objects.requireNonNull(relativePath, "relativePath");
+        observedServerHash = Objects.requireNonNull(observedServerHash, "observedServerHash");
+    }
 }

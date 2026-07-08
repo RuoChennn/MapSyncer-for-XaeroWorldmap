@@ -88,8 +88,10 @@ public final class ContributionCoordinator {
             return;
         }
 
+        boolean contributionAllowed = ContributionWhitelistBridge.isContributionAllowed(player);
         ContributionSession session;
         ContributionRegionMeta expected;
+        ContributionUploadAssembler.Result assembled;
         synchronized (LOCK) {
             session = activeSession;
             if (session == null || session.requestId() != payload.requestId()) {
@@ -102,58 +104,71 @@ public final class ContributionCoordinator {
             }
             expected = session.expectedRegion(payload.relativePath());
             if (expected == null) {
-                session.markRejected();
-                sendSessionResult(session, "unexpected_region");
+                rejectAndCompleteLocked(session, payload, "unexpected_region");
                 return;
             }
-            if (!ContributionWhitelistBridge.isContributionAllowed(player)) {
-                session.markRejected();
-                sendSessionResult(session, "permission_changed");
+            if (!contributionAllowed) {
+                rejectAndCompleteLocked(session, payload, "permission_changed");
                 return;
             }
             if (!matchesObservedServerState(expected, payload) || !matchesExpectedChunk(expected, payload.chunk())) {
-                ASSEMBLER.clear(payload);
-                session.markRejected();
-                sendSessionResult(session, "stale_upload");
+                rejectAndCompleteLocked(session, payload, "stale_upload");
                 return;
             }
 
-            ContributionUploadAssembler.Result assembled = ASSEMBLER.accept(payload);
+            assembled = ASSEMBLER.accept(payload);
             if (assembled.rejected()) {
-                session.markRejected();
-                sendSessionResult(session, assembled.rejectionReason());
+                rejectAndCompleteLocked(session, payload, assembled.rejectionReason());
                 return;
             }
             if (!assembled.complete()) {
                 return;
             }
+        }
 
-            ContributionValidator.Result validation = ContributionValidator.validate(
-                    expected,
-                    assembled.fullData(),
-                    payload.chunk().timestampSeconds,
-                    cache,
-                    cacheDir
-            );
-            if (!validation.accepted()) {
-                session.markRejected();
-                sendSessionResult(session, validation.reason());
-                return;
+        ContributionValidator.Result validation = ContributionValidator.validate(
+                expected,
+                assembled.fullData(),
+                payload.chunk().timestampSeconds,
+                cache,
+                cacheDir
+        );
+        if (!validation.accepted()) {
+            synchronized (LOCK) {
+                if (activeSession == session && !session.isComplete()) {
+                    rejectAndCompleteLocked(session, payload, validation.reason());
+                }
             }
+            return;
+        }
 
-            try {
-                writeAcceptedRegion(cacheDir, expected.relativePath(), assembled.fullData());
-                String acceptedHash = HashUtils.computeHash(assembled.fullData());
-                cache.update(expected.relativePath(), validation.acceptedTimestampSeconds(), acceptedHash);
-                cache.save();
+        try {
+            writeAcceptedRegion(cacheDir, expected.relativePath(), assembled.fullData());
+            String acceptedHash = HashUtils.computeHash(assembled.fullData());
+            cache.update(expected.relativePath(), validation.acceptedTimestampSeconds(), acceptedHash);
+            cache.save();
+            synchronized (LOCK) {
+                if (activeSession != session || session.isComplete()) {
+                    return;
+                }
                 session.markAccepted();
                 sendSessionResult(session, "accepted");
-            } catch (IOException e) {
-                LOGGER.warn("Failed to write contribution {} from {}", expected.relativePath(), session.playerName(), e);
-                session.markRejected();
-                sendSessionResult(session, "write_failed");
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Failed to write contribution {} from {}", expected.relativePath(), session.playerName(), e);
+            synchronized (LOCK) {
+                if (activeSession == session && !session.isComplete()) {
+                    rejectAndCompleteLocked(session, payload, "write_failed");
+                }
             }
         }
+    }
+
+    private static void rejectAndCompleteLocked(ContributionSession session, ContributionDataPayload payload, String status) {
+        ASSEMBLER.clear(payload);
+        session.markRejected();
+        session.markComplete(status);
+        LOCK.notifyAll();
     }
 
     public static void handleComplete(ServerPlayer player, ContributionCompletePayload payload) {
@@ -371,11 +386,15 @@ public final class ContributionCoordinator {
         }
         Files.createDirectories(target.getParent());
         Path temp = target.resolveSibling(target.getFileName() + ".uploading");
-        Files.write(temp, data);
         try {
-            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            Files.write(temp, data);
+            try {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
         }
     }
 }

@@ -5,6 +5,8 @@ import com.mapsyncer.network.payload.ContributionDataPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.util.HashUtils;
 import com.mapsyncer.util.PropertiesCacheIO.TimestampHashEntry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ClientContributionCollector {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClientContributionCollector.class);
+
     private ClientContributionCollector() {
     }
 
@@ -56,6 +60,7 @@ public final class ClientContributionCollector {
             }
             return payloads;
         } catch (Exception e) {
+            LOGGER.warn("Failed to collect contribution for region {} at {}", meta.relativePath(), file, e);
             return List.of();
         }
     }
@@ -86,6 +91,7 @@ public final class ClientContributionCollector {
                     .findFirst()
                     .orElse(null);
         } catch (Exception e) {
+            LOGGER.warn("Failed to scan Xaero mw directory {}", dimDir, e);
             return null;
         }
     }

@@ -12,6 +12,8 @@ import java.util.Map;
  * Assembles contribution fragments for a request and region path.
  */
 public final class ContributionUploadAssembler {
+    public static final int MAX_PARTS = 256;
+
     private final Map<Key, Assembly> assemblies = new HashMap<>();
 
     public Result accept(ContributionDataPayload payload) {
@@ -26,6 +28,10 @@ public final class ContributionUploadAssembler {
 
         int totalParts = chunk.totalParts <= 1 ? 1 : chunk.totalParts;
         int partIndex = totalParts == 1 ? 0 : chunk.partIndex;
+        if (totalParts > MAX_PARTS) {
+            clear(payload);
+            return Result.rejected("too_many_parts");
+        }
         if (partIndex < 0 || partIndex >= totalParts) {
             clear(payload);
             return Result.rejected("invalid_part");
