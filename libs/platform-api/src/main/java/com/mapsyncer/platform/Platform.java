@@ -1,5 +1,7 @@
 package com.mapsyncer.platform;
 
+import com.mapsyncer.config.ClientSyncMode;
+import com.mapsyncer.config.ContributionScope;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
 import org.slf4j.Logger;
@@ -132,6 +134,35 @@ public interface Platform {
      * @return 线程数
      */
     int getClientHashThreads();
+
+    /**
+     * 获取客户端同步模式。
+     */
+    ClientSyncMode getClientSyncMode();
+
+    /**
+     * 获取客户端后台元数据巡检间隔（分钟）。
+     * 0 表示关闭后台巡检，建议范围 0 - 1440。
+     */
+    int getBackgroundSyncIntervalMinutes();
+
+    /**
+     * 获取服务端接受客户端贡献的权限范围。
+     * 默认使用白名单模式。
+     */
+    ContributionScope getContributionScope();
+
+    /**
+     * 获取贡献队列任务间冷却期（秒）。
+     * 建议范围 0 - 3600。
+     */
+    int getContributionQueueCooldownSeconds();
+
+    /**
+     * 获取最大贡献任务排队数量。
+     * 建议范围 1 - 1024。
+     */
+    int getMaxContributionQueueSize();
 
     /**
      * 获取增量更新模式
