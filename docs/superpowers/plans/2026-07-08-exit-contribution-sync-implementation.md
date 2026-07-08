@@ -188,7 +188,7 @@ git commit -m "fix: 修复客户端元数据时间戳判新" -m "仅当缓存哈
 - Modify: `libs/platform-api/src/main/java/com/mapsyncer/network/NetworkManager.java`
 - Modify: `libs/platform-api/src/test/java/com/mapsyncer/network/ContributionPayloadContractTest.java`
 
-- [ ] **Step 1: Add failing payload contract test**
+- [x] **Step 1: Add failing payload contract test**
 
 Append to `ContributionPayloadContractTest`:
 
@@ -217,13 +217,13 @@ import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import java.util.Map;
 ```
 
-- [ ] **Step 2: Run platform-api tests and verify RED**
+- [x] **Step 2: Run platform-api tests and verify RED**
 
 Run: `.\gradlew :libs:platform-api:test`
 
 Expected: compile fails because `ContributionOnlyRequestPayload` and `CONTRIBUTION_ONLY_REQUEST_ID` do not exist.
 
-- [ ] **Step 3: Create payload DTO**
+- [x] **Step 3: Create payload DTO**
 
 Create `ContributionOnlyRequestPayload.java`:
 
@@ -277,7 +277,7 @@ public record ContributionOnlyRequestPayload(
 }
 ```
 
-- [ ] **Step 4: Extend NetworkHandler**
+- [x] **Step 4: Extend NetworkHandler**
 
 Add import:
 
@@ -315,13 +315,13 @@ public static void registerContributionOnlyRequestHandler(
 
 Update `ContributionPayloadContractTest.FakeNetworkHandler` to store the sent `ContributionOnlyRequestPayload` and registered handler, then assert both static `NetworkManager` helpers delegate correctly.
 
-- [ ] **Step 5: Run platform-api tests**
+- [x] **Step 5: Run platform-api tests**
 
 Run: `.\gradlew :libs:platform-api:test`
 
 Expected: tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add libs/platform-api/src/main/java/com/mapsyncer/network/NetworkHandler.java libs/platform-api/src/main/java/com/mapsyncer/network/NetworkManager.java libs/platform-api/src/main/java/com/mapsyncer/network/payload/ContributionOnlyRequestPayload.java libs/platform-api/src/test/java/com/mapsyncer/network/ContributionPayloadContractTest.java
