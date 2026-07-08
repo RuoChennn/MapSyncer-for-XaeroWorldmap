@@ -2,6 +2,7 @@ package com.mapsyncer.network;
 
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -46,6 +47,8 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
     String SERVER_INSTALLED_ID = "server_installed";
     /** 贡献请求包 ID */
     String CONTRIBUTION_REQUEST_ID = "contribution_request";
+    /** 仅贡献请求包 ID */
+    String CONTRIBUTION_ONLY_REQUEST_ID = "contribution_only_request";
     /** 贡献数据包 ID */
     String CONTRIBUTION_DATA_ID = "contribution_data";
     /** 贡献完成包 ID */
@@ -86,6 +89,13 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      * @param payload 贡献完成包
      */
     void sendToServer(ContributionCompletePayload payload);
+
+    /**
+     * 发送仅贡献请求到服务端（客户端调用）
+     *
+     * @param payload 仅贡献请求包
+     */
+    void sendToServer(ContributionOnlyRequestPayload payload);
 
     /**
      * 发送同步响应到指定玩家（服务端调用）
@@ -156,6 +166,15 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      * @param handler 处理函数
      */
     void registerSyncRequestHandler(BiConsumer<SyncRequestPayload, PayloadContext> handler);
+
+    /**
+     * 注册仅贡献请求处理器（服务端）
+     *
+     * @param handler 处理函数
+     */
+    void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    );
 
     /**
      * 注册贡献请求处理器（客户端）

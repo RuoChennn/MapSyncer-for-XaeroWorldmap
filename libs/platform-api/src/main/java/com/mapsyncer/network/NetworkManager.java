@@ -2,6 +2,7 @@ package com.mapsyncer.network;
 
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
@@ -90,6 +91,13 @@ public final class NetworkManager {
     }
 
     /**
+     * 发送仅贡献请求到服务端
+     */
+    public static void sendToServer(ContributionOnlyRequestPayload payload) {
+        getHandler().sendToServer(payload);
+    }
+
+    /**
      * 发送同步响应到玩家
      *
      * <p>类型安全由具体实现类保证</p>
@@ -162,6 +170,17 @@ public final class NetworkManager {
             BiConsumer<ContributionRequestPayload, PayloadContext> handler
     ) {
         getHandler().registerContributionRequestHandler(handler);
+    }
+
+    /**
+     * 注册仅贡献请求处理器
+     *
+     * @param handler 处理函数
+     */
+    public static void registerContributionOnlyRequestHandler(
+            BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+    ) {
+        getHandler().registerContributionOnlyRequestHandler(handler);
     }
 
     /**

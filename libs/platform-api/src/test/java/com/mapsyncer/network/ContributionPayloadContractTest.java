@@ -1,8 +1,10 @@
 package com.mapsyncer.network;
 
 import com.mapsyncer.network.payload.ChunkMapData;
+import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionRequestPayload;
 import com.mapsyncer.network.payload.ContributionResultPayload;
@@ -15,7 +17,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,6 +40,7 @@ class ContributionPayloadContractTest {
         assertEquals("contribution_data", NetworkHandler.CONTRIBUTION_DATA_ID);
         assertEquals("contribution_complete", NetworkHandler.CONTRIBUTION_COMPLETE_ID);
         assertEquals("contribution_result", NetworkHandler.CONTRIBUTION_RESULT_ID);
+        assertEquals("contribution_only_request", NetworkHandler.CONTRIBUTION_ONLY_REQUEST_ID);
 
         ContributionRegionMeta meta = new ContributionRegionMeta(
                 "DIM0/region/r.1.2.mca",
@@ -88,6 +93,49 @@ class ContributionPayloadContractTest {
         assertEquals(2, result.accepted());
         assertEquals(1, result.rejected());
         assertEquals("done", result.status());
+
+        Map<String, ClientMeta> clientMeta = Map.of(
+                "DIM0/region/r.1.2.mca",
+                new ClientMeta(123456790L, "client-hash")
+        );
+        ContributionOnlyRequestPayload contributionOnly = new ContributionOnlyRequestPayload(
+                42,
+                0,
+                1,
+                clientMeta,
+                "client_exit"
+        );
+        assertEquals(NetworkHandler.CONTRIBUTION_ONLY_REQUEST_ID, ContributionOnlyRequestPayload.ID);
+        assertEquals(42, contributionOnly.requestId());
+        assertEquals(0, contributionOnly.partIndex());
+        assertEquals(1, contributionOnly.totalParts());
+        assertEquals(clientMeta, contributionOnly.clientMeta());
+        assertEquals("client_exit", contributionOnly.reason());
+    }
+
+    @Test
+    void contributionOnlyRequestSplitReusesSyncRequestMetadataParts() {
+        Map<String, ClientMeta> clientMeta = new LinkedHashMap<>();
+        for (int index = 0; index < 300; index++) {
+            clientMeta.put(
+                    "DIM0/region/r." + index + "." + (index + 1) + ".mca",
+                    new ClientMeta(index, "hash-" + index)
+            );
+        }
+
+        SyncRequestPayload[] syncParts = SyncRequestPayload.split(clientMeta);
+        List<ContributionOnlyRequestPayload> contributionOnlyParts =
+                ContributionOnlyRequestPayload.split(99, clientMeta, "client_exit");
+
+        assertEquals(syncParts.length, contributionOnlyParts.size());
+        for (int index = 0; index < syncParts.length; index++) {
+            ContributionOnlyRequestPayload contributionOnly = contributionOnlyParts.get(index);
+            assertEquals(99, contributionOnly.requestId());
+            assertEquals(syncParts[index].partIndex(), contributionOnly.partIndex());
+            assertEquals(syncParts[index].totalParts(), contributionOnly.totalParts());
+            assertEquals(syncParts[index].clientMeta(), contributionOnly.clientMeta());
+            assertEquals("client_exit", contributionOnly.reason());
+        }
     }
 
     @Test
@@ -105,14 +153,17 @@ class ContributionPayloadContractTest {
         ContributionCompletePayload complete = new ContributionCompletePayload(7, 1, "complete");
         ContributionRequestPayload request = new ContributionRequestPayload(7, List.of(), "request");
         ContributionResultPayload result = new ContributionResultPayload(7, 1, 0, "ok");
+        ContributionOnlyRequestPayload contributionOnly = new ContributionOnlyRequestPayload(7, 0, 1, Map.of(), "exit");
 
         NetworkManager.sendToServer(data);
         NetworkManager.sendToServer(complete);
+        NetworkManager.sendToServer(contributionOnly);
         NetworkManager.sendToPlayer("player-a", request);
         NetworkManager.sendToPlayer("player-b", result);
 
         assertSame(data, handler.sentContributionData);
         assertSame(complete, handler.sentContributionComplete);
+        assertSame(contributionOnly, handler.sentContributionOnlyRequest);
         assertEquals("player-a", handler.contributionRequestPlayer);
         assertSame(request, handler.sentContributionRequest);
         assertEquals("player-b", handler.contributionResultPlayer);
@@ -128,21 +179,25 @@ class ContributionPayloadContractTest {
         BiConsumer<ContributionDataPayload, PayloadContext> dataHandler = (payload, context) -> {};
         BiConsumer<ContributionCompletePayload, PayloadContext> completeHandler = (payload, context) -> {};
         BiConsumer<ContributionResultPayload, PayloadContext> resultHandler = (payload, context) -> {};
+        BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyHandler = (payload, context) -> {};
 
         NetworkManager.registerContributionRequestHandler(requestHandler);
         NetworkManager.registerContributionDataHandler(dataHandler);
         NetworkManager.registerContributionCompleteHandler(completeHandler);
         NetworkManager.registerContributionResultHandler(resultHandler);
+        NetworkManager.registerContributionOnlyRequestHandler(contributionOnlyHandler);
 
         assertSame(requestHandler, handler.contributionRequestHandler);
         assertSame(dataHandler, handler.contributionDataHandler);
         assertSame(completeHandler, handler.contributionCompleteHandler);
         assertSame(resultHandler, handler.contributionResultHandler);
+        assertSame(contributionOnlyHandler, handler.contributionOnlyRequestHandler);
     }
 
     private static final class FakeNetworkHandler implements NetworkHandler<Object, Object> {
         private ContributionDataPayload sentContributionData;
         private ContributionCompletePayload sentContributionComplete;
+        private ContributionOnlyRequestPayload sentContributionOnlyRequest;
         private Object contributionRequestPlayer;
         private ContributionRequestPayload sentContributionRequest;
         private Object contributionResultPlayer;
@@ -151,6 +206,7 @@ class ContributionPayloadContractTest {
         private BiConsumer<ContributionDataPayload, PayloadContext> contributionDataHandler;
         private BiConsumer<ContributionCompletePayload, PayloadContext> contributionCompleteHandler;
         private BiConsumer<ContributionResultPayload, PayloadContext> contributionResultHandler;
+        private BiConsumer<ContributionOnlyRequestPayload, PayloadContext> contributionOnlyRequestHandler;
 
         @Override
         public void registerHandlers(Object event) {
@@ -168,6 +224,11 @@ class ContributionPayloadContractTest {
         @Override
         public void sendToServer(ContributionCompletePayload payload) {
             sentContributionComplete = payload;
+        }
+
+        @Override
+        public void sendToServer(ContributionOnlyRequestPayload payload) {
+            sentContributionOnlyRequest = payload;
         }
 
         @Override
@@ -232,6 +293,13 @@ class ContributionPayloadContractTest {
         @Override
         public void registerContributionResultHandler(BiConsumer<ContributionResultPayload, PayloadContext> handler) {
             contributionResultHandler = handler;
+        }
+
+        @Override
+        public void registerContributionOnlyRequestHandler(
+                BiConsumer<ContributionOnlyRequestPayload, PayloadContext> handler
+        ) {
+            contributionOnlyRequestHandler = handler;
         }
 
         @Override
