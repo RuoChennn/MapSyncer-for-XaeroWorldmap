@@ -6,6 +6,7 @@ import com.mapsyncer.network.payload.ChunkMapData;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.ContributionCompletePayload;
 import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionOnlyRequestPayload;
 import com.mapsyncer.network.payload.ContributionRegionMeta;
 import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
@@ -214,6 +215,15 @@ public class ServerSyncHandlerLogic {
     private static final Map<UUID, Map<Integer, SyncRequestPayload>> requestPartBuffer = new ConcurrentHashMap<>();
     /** 记录每个玩家当前组装请求的总分片数（用于判断是否到齐） */
     private static final Map<UUID, Integer> requestTotalParts = new ConcurrentHashMap<>();
+    /** ContributionOnlyRequestPayload 独立分片组装缓冲区。 */
+    private static final Map<UUID, ContributionOnlyRequestAssembly> contributionOnlyRequestBuffers = new ConcurrentHashMap<>();
+
+    private record ContributionOnlyRequestAssembly(
+            int requestId,
+            int totalParts,
+            Map<Integer, ContributionOnlyRequestPayload> parts
+    ) {
+    }
 
     /**
      * 轻量级的 region 同步信息。
@@ -242,6 +252,9 @@ public class ServerSyncHandlerLogic {
         NetworkManager.getHandler().registerSyncRequestHandler(
             (payload, context) -> handleSyncRequest(payload, context)
         );
+        NetworkManager.getHandler().registerContributionOnlyRequestHandler(
+            (payload, context) -> handleContributionOnlyRequest(payload, context)
+        );
         NetworkManager.getHandler().registerContributionDataHandler(
             (payload, context) -> handleContributionData(payload, context)
         );
@@ -267,6 +280,114 @@ public class ServerSyncHandlerLogic {
         }
     }
 
+    private static void handleContributionOnlyRequest(ContributionOnlyRequestPayload payload, PayloadContext context) {
+        Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+
+        UUID playerId = serverPlayer.getUUID();
+        ContributionOnlyRequestPayload assembledPayload = assembleContributionOnlyRequest(payload, playerId);
+        if (assembledPayload == null) {
+            return;
+        }
+
+        var server = serverPlayer.level().getServer();
+        Runnable startRequest = () -> {
+            if (!ContributionWhitelistBridge.isContributionAllowed(serverPlayer)) {
+                NetworkManager.sendToPlayer(serverPlayer, new ContributionResultPayload(
+                        assembledPayload.requestId(), 0, assembledPayload.clientMeta().size(), "not_allowed"));
+                return;
+            }
+            startContributionOnlyCandidateWorker(serverPlayer, assembledPayload);
+        };
+        if (server != null) {
+            server.execute(startRequest);
+        } else {
+            startRequest.run();
+        }
+    }
+
+    private static ContributionOnlyRequestPayload assembleContributionOnlyRequest(
+            ContributionOnlyRequestPayload payload,
+            UUID playerId
+    ) {
+        if (payload.totalParts() <= 1) {
+            contributionOnlyRequestBuffers.remove(playerId);
+            return payload;
+        }
+
+        ContributionOnlyRequestAssembly assembly = contributionOnlyRequestBuffers.get(playerId);
+        if (assembly == null || assembly.requestId() != payload.requestId()
+                || assembly.totalParts() != payload.totalParts()) {
+            assembly = new ContributionOnlyRequestAssembly(
+                    payload.requestId(),
+                    payload.totalParts(),
+                    new ConcurrentHashMap<>()
+            );
+            contributionOnlyRequestBuffers.put(playerId, assembly);
+        }
+
+        assembly.parts().put(payload.partIndex(), payload);
+        if (assembly.parts().size() < payload.totalParts()) {
+            LOGGER.debug("Contribution-only request part {}/{} from player {} request {}",
+                    payload.partIndex() + 1, payload.totalParts(), playerId, payload.requestId());
+            return null;
+        }
+
+        Map<String, ClientMeta> merged = new HashMap<>();
+        String reason = payload.reason();
+        for (int partIndex = 0; partIndex < payload.totalParts(); partIndex++) {
+            ContributionOnlyRequestPayload part = assembly.parts().get(partIndex);
+            if (part == null) {
+                return null;
+            }
+            merged.putAll(part.clientMeta());
+            reason = part.reason();
+        }
+        contributionOnlyRequestBuffers.remove(playerId);
+        LOGGER.debug("Contribution-only request {} assembled from {} parts, {} entries total",
+                payload.requestId(), payload.totalParts(), merged.size());
+        return new ContributionOnlyRequestPayload(payload.requestId(), 0, 1, merged, reason);
+    }
+
+    private static void startContributionOnlyCandidateWorker(
+            ServerPlayer serverPlayer,
+            ContributionOnlyRequestPayload payload
+    ) {
+        UUID playerId = serverPlayer.getUUID();
+        int requestId = payload.requestId();
+        Map<String, ClientMeta> clientMeta = Map.copyOf(payload.clientMeta());
+        String reason = payload.reason();
+        var server = serverPlayer.level().getServer();
+
+        Thread worker = new Thread(() -> {
+            List<ContributionRegionMeta> candidates = collectContributionOnlyCandidates(clientMeta);
+            Runnable enqueue = () -> {
+                if (!ContributionWhitelistBridge.isContributionAllowed(serverPlayer)) {
+                    NetworkManager.sendToPlayer(serverPlayer,
+                            new ContributionResultPayload(requestId, 0, clientMeta.size(), "not_allowed"));
+                    return;
+                }
+                if (candidates.isEmpty()) {
+                    NetworkManager.sendToPlayer(serverPlayer,
+                            new ContributionResultPayload(requestId, 0, 0, "no_candidates"));
+                    return;
+                }
+                maybeQueueContributionSession(serverPlayer, requestId, candidates);
+            };
+            if (server != null) {
+                server.execute(enqueue);
+            } else {
+                enqueue.run();
+            }
+        }, "mapsyncer-contribution-only-" + playerId);
+        worker.setDaemon(true);
+        worker.start();
+        LOGGER.debug("Started contribution-only candidate worker for player {} request {} reason {}",
+                serverPlayer.getName().getString(), requestId, reason);
+    }
+
     /**
      * 玩家断线事件处理
      *
@@ -279,6 +400,7 @@ public class ServerSyncHandlerLogic {
     public static void onPlayerDisconnect(UUID playerId) {
         syncingPlayers.remove(playerId);
         playerSyncDimensions.remove(playerId);
+        contributionOnlyRequestBuffers.remove(playerId);
 
         // 清理限速状态
         clearSpeedLimitState(playerId);
@@ -482,6 +604,7 @@ public class ServerSyncHandlerLogic {
         playerSyncVersions.remove(playerId);
         requestPartBuffer.remove(playerId);
         requestTotalParts.remove(playerId);
+        contributionOnlyRequestBuffers.remove(playerId);
 
         // 清理线程引用并确保线程已停止
         Thread syncThread = syncThreads.remove(playerId);
@@ -1023,6 +1146,88 @@ public class ServerSyncHandlerLogic {
         return candidates;
     }
 
+    private static List<ContributionRegionMeta> collectContributionOnlyCandidates(Map<String, ClientMeta> clientMeta) {
+        if (clientMeta == null || clientMeta.isEmpty()) {
+            return List.of();
+        }
+
+        Path cacheDir = ConversionOrchestrator.getCacheDir();
+        if (!Files.exists(cacheDir)) {
+            return collectClientOnlyContributionCandidates(clientMeta, Set.of());
+        }
+
+        Set<String> requestedDimensions = new HashSet<>();
+        for (String key : clientMeta.keySet()) {
+            String[] parts = key.split("[/\\\\]");
+            if (parts.length > 1) {
+                requestedDimensions.add(parts[0]);
+            }
+        }
+
+        DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
+        boolean hasValidDimension = false;
+        for (String xaeroDim : requestedDimensions) {
+            Path dimCacheDir = cacheDir.resolve(xaeroDim);
+            if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
+                try (Stream<Path> stream = Files.walk(dimCacheDir)) {
+                    if (stream.anyMatch(p -> p.toString().endsWith(".zip"))) {
+                        hasValidDimension = true;
+                    }
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to check contribution-only dimension {} cache directory", xaeroDim, e);
+                }
+            }
+        }
+        if (!hasValidDimension) {
+            return collectClientOnlyContributionCandidates(clientMeta, Set.of());
+        }
+
+        GenerationCache genCache = GenerationCache.getInstance(cacheDir);
+        Map<String, TimestampHashEntry> serverCache = genCache.getAll();
+        Path absCacheDir = cacheDir.toAbsolutePath().normalize();
+        List<Path> allZipPaths;
+        try (Stream<Path> stream = Files.walk(absCacheDir)) {
+            allZipPaths = stream.filter(p -> p.toString().endsWith(".zip")).toList();
+        } catch (IOException e) {
+            LOGGER.error("Failed to walk cache directory for contribution-only request", e);
+            allZipPaths = List.of();
+        }
+
+        List<ContributionRegionMeta> contributionCandidates = new ArrayList<>();
+        Set<String> visitedServerPaths = new HashSet<>();
+        for (Path zipPath : allZipPaths) {
+            String relativePath = absCacheDir.relativize(zipPath).toString();
+            String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
+            normalizedPath = stripMwWorldId(normalizedPath);
+
+            String[] parts = normalizedPath.split("[/\\\\]");
+            String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
+
+            String normalizedXaeroDim = dimMapping.toXaeroDimension(xaeroDimName);
+            if (!normalizedXaeroDim.equals(xaeroDimName)) {
+                normalizedPath = normalizedXaeroDim + normalizedPath.substring(xaeroDimName.length());
+            }
+
+            if (!requestedDimensions.contains(normalizedXaeroDim)) {
+                continue;
+            }
+            visitedServerPaths.add(normalizedPath);
+
+            TimestampHashEntry serverMeta = serverCache.get(normalizedPath);
+            ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
+            RegionFreshnessDecision decision = RegionFreshnessDecider.decide(serverMeta, clientMetaEntry);
+            if (serverMeta != null && decision.shouldRequestContribution()) {
+                RegionSyncInfo parsed = parseRegionInfo(zipPath, normalizedPath, serverMeta.timestampSeconds());
+                if (parsed != null) {
+                    contributionCandidates.add(toContributionMeta(parsed, serverMeta));
+                }
+            }
+        }
+
+        contributionCandidates.addAll(collectClientOnlyContributionCandidates(clientMeta, visitedServerPaths));
+        return List.copyOf(contributionCandidates);
+    }
+
     private static ContributionRegionMeta toContributionMeta(RegionSyncInfo parsed, TimestampHashEntry serverMeta) {
         return new ContributionRegionMeta(
                 parsed.normalizedPath(),
@@ -1042,6 +1247,18 @@ public class ServerSyncHandlerLogic {
         boolean queued = ContributionCoordinator.enqueueSession(player, candidates);
         if (!queued) {
             NetworkManager.sendToPlayer(player, new ContributionResultPayload(0, 0, candidates.size(), "queue_full"));
+        }
+    }
+
+    private static void maybeQueueContributionSession(
+            ServerPlayer player,
+            int requestId,
+            List<ContributionRegionMeta> candidates
+    ) {
+        boolean queued = ContributionCoordinator.enqueueSession(player, candidates, requestId);
+        if (!queued) {
+            NetworkManager.sendToPlayer(player,
+                    new ContributionResultPayload(requestId, 0, candidates.size(), "queue_full"));
         }
     }
 

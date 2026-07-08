@@ -46,6 +46,21 @@ public final class ContributionCoordinator {
         if (player == null || candidates == null || candidates.isEmpty()) {
             return false;
         }
+        return enqueueSessionInternal(player, candidates, NEXT_REQUEST_ID.getAndIncrement());
+    }
+
+    public static boolean enqueueSession(ServerPlayer player, List<ContributionRegionMeta> candidates, int requestId) {
+        return enqueueSessionInternal(player, candidates, requestId);
+    }
+
+    private static boolean enqueueSessionInternal(
+            ServerPlayer player,
+            List<ContributionRegionMeta> candidates,
+            int requestId
+    ) {
+        if (player == null || candidates == null || candidates.isEmpty()) {
+            return false;
+        }
         synchronized (LOCK) {
             if (shutdown) {
                 shutdown = false;
@@ -55,7 +70,7 @@ public final class ContributionCoordinator {
                 return false;
             }
             ContributionSession session = new ContributionSession(
-                    NEXT_REQUEST_ID.getAndIncrement(),
+                    requestId,
                     player,
                     candidates
             );
