@@ -1,5 +1,7 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.ClientSyncMode;
+import com.mapsyncer.config.ContributionScope;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
@@ -174,6 +176,31 @@ public class FabricPlatform implements Platform {
     @Override
     public int getClientHashThreads() {
         return ModConfig.CLIENT().getHashThreads();
+    }
+
+    @Override
+    public ClientSyncMode getClientSyncMode() {
+        return ModConfig.CLIENT().getClientSyncMode();
+    }
+
+    @Override
+    public int getBackgroundSyncIntervalMinutes() {
+        return ModConfig.CLIENT().getBackgroundSyncIntervalMinutes();
+    }
+
+    @Override
+    public ContributionScope getContributionScope() {
+        return ModConfig.SERVER().getContributionScope();
+    }
+
+    @Override
+    public int getContributionQueueCooldownSeconds() {
+        return ModConfig.SERVER().getContributionQueueCooldownSeconds();
+    }
+
+    @Override
+    public int getMaxContributionQueueSize() {
+        return ModConfig.SERVER().getMaxContributionQueueSize();
     }
 
     @Override

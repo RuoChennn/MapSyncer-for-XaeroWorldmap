@@ -1,5 +1,7 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.ClientSyncMode;
+import com.mapsyncer.config.ContributionScope;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
@@ -173,6 +175,31 @@ public class ForgeLegacyPlatform implements Platform {
     @Override
     public int getClientHashThreads() {
         return ModConfig.CLIENT.getHashThreads();
+    }
+
+    @Override
+    public ClientSyncMode getClientSyncMode() {
+        return ModConfig.CLIENT.clientSyncMode.get();
+    }
+
+    @Override
+    public int getBackgroundSyncIntervalMinutes() {
+        return ModConfig.CLIENT.backgroundSyncIntervalMinutes.get();
+    }
+
+    @Override
+    public ContributionScope getContributionScope() {
+        return ModConfig.SERVER.contributionScope.get();
+    }
+
+    @Override
+    public int getContributionQueueCooldownSeconds() {
+        return ModConfig.SERVER.contributionQueueCooldownSeconds.get();
+    }
+
+    @Override
+    public int getMaxContributionQueueSize() {
+        return ModConfig.SERVER.maxContributionQueueSize.get();
     }
 
     @Override

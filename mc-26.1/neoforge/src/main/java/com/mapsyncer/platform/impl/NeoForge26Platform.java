@@ -5,6 +5,8 @@ import com.mapsyncer.platform.BlockProperties;
 import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
+import com.mapsyncer.config.ClientSyncMode;
+import com.mapsyncer.config.ContributionScope;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.server.BlockPropertyResolver;
@@ -169,6 +171,31 @@ public class NeoForge26Platform implements Platform {
     @Override
     public int getClientHashThreads() {
         return ModConfig.CLIENT.getHashThreads();
+    }
+
+    @Override
+    public ClientSyncMode getClientSyncMode() {
+        return ModConfig.CLIENT.clientSyncMode.get();
+    }
+
+    @Override
+    public int getBackgroundSyncIntervalMinutes() {
+        return ModConfig.CLIENT.backgroundSyncIntervalMinutes.get();
+    }
+
+    @Override
+    public ContributionScope getContributionScope() {
+        return ModConfig.SERVER.contributionScope.get();
+    }
+
+    @Override
+    public int getContributionQueueCooldownSeconds() {
+        return ModConfig.SERVER.contributionQueueCooldownSeconds.get();
+    }
+
+    @Override
+    public int getMaxContributionQueueSize() {
+        return ModConfig.SERVER.maxContributionQueueSize.get();
     }
 
     @Override

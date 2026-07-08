@@ -1,5 +1,7 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.config.ClientSyncMode;
+import com.mapsyncer.config.ContributionScope;
 import com.mapsyncer.config.ModConfig;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
@@ -35,6 +37,23 @@ public class ConfigScreenFactory {
             .setDefaultValue(defaultThreads)
             .setTooltip(Component.translatable("option.mapsyncer.hash_threads.tooltip"))
             .setSaveConsumer(config::setHashThreads)
+            .build());
+
+        client.addEntry(entryBuilder.startSelector(
+                Component.translatable("option.mapsyncer.client_sync_mode"),
+                ClientSyncMode.values(),
+                config.getClientSyncMode())
+            .setDefaultValue(ClientSyncMode.RECEIVE_ONLY)
+            .setTooltip(Component.translatable("option.mapsyncer.client_sync_mode.tooltip"))
+            .setSaveConsumer(config::setClientSyncMode)
+            .build());
+
+        client.addEntry(entryBuilder.startIntSlider(
+                Component.translatable("option.mapsyncer.background_sync_interval"),
+                config.getBackgroundSyncIntervalMinutes(), 0, 1440)
+            .setDefaultValue(60)
+            .setTooltip(Component.translatable("option.mapsyncer.background_sync_interval.tooltip"))
+            .setSaveConsumer(config::setBackgroundSyncIntervalMinutes)
             .build());
 
         builder.setSavingRunnable(config::save);
@@ -113,6 +132,35 @@ public class ConfigScreenFactory {
             .setDefaultValue(0)
             .setTooltip(Component.translatable("option.mapsyncer.scheduled_minute.tooltip"))
             .setSaveConsumer(config::setScheduledUpdateMinute)
+            .build());
+
+        ConfigCategory contribution = builder.getOrCreateCategory(Component.translatable("category.mapsyncer.contribution"));
+
+        contribution.addEntry(entryBuilder.startSelector(
+                Component.translatable("option.mapsyncer.contribution_scope"),
+                ContributionScope.values(),
+                config.getContributionScope())
+            .setDefaultValue(ContributionScope.WHITELIST)
+            .setTooltip(Component.translatable("option.mapsyncer.contribution_scope.tooltip"))
+            .setSaveConsumer(config::setContributionScope)
+            .build());
+
+        contribution.addEntry(entryBuilder.startIntField(
+                Component.translatable("option.mapsyncer.contribution_cooldown"), config.getContributionQueueCooldownSeconds())
+            .setDefaultValue(10)
+            .setMin(0)
+            .setMax(3600)
+            .setTooltip(Component.translatable("option.mapsyncer.contribution_cooldown.tooltip"))
+            .setSaveConsumer(config::setContributionQueueCooldownSeconds)
+            .build());
+
+        contribution.addEntry(entryBuilder.startIntField(
+                Component.translatable("option.mapsyncer.contribution_queue_size"), config.getMaxContributionQueueSize())
+            .setDefaultValue(32)
+            .setMin(1)
+            .setMax(1024)
+            .setTooltip(Component.translatable("option.mapsyncer.contribution_queue_size.tooltip"))
+            .setSaveConsumer(config::setMaxContributionQueueSize)
             .build());
 
         builder.setSavingRunnable(config::save);

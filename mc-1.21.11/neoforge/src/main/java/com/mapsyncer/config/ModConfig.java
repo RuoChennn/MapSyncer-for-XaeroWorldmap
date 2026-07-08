@@ -107,6 +107,16 @@ public class ModConfig {
         public final IntValue hashThreads;
 
         /**
+         * 客户端同步模式
+         */
+        public final EnumValue<ClientSyncMode> clientSyncMode;
+
+        /**
+         * 后台元数据巡检间隔（分钟）
+         */
+        public final IntValue backgroundSyncIntervalMinutes;
+
+        /**
          * 构造客户端配置
          *
          * <p>定义所有配置选项及其默认值、范围和注释</p>
@@ -142,6 +152,32 @@ public class ModConfig {
                              "Range: 1 - " + maxThreads,
                              "范围：1 - " + maxThreads)
                     .defineInRange("hashThreads", defaultThreads, 1, maxThreads);
+
+            clientSyncMode = builder
+                    .comment("Client sync mode.",
+                             "客户端同步模式。",
+                             "DISABLED disables automatic sync, background checks, manual receive sync, and upload contributions on this client.",
+                             "DISABLED 会禁用此客户端的自动同步、后台巡检、手动接收同步和上传贡献。",
+                             "RECEIVE_ONLY receives newer authoritative regions from the server but never uploads local regions.",
+                             "RECEIVE_ONLY 只接收服务端较新的权威 region，不上传本地 region。",
+                             "BIDIRECTIONAL receives server updates and uploads newer local regions when the server allows contributions.",
+                             "BIDIRECTIONAL 会接收服务端更新，并在服务端允许时上传本地较新的 region。",
+                             "Allowed values: DISABLED, RECEIVE_ONLY, BIDIRECTIONAL",
+                             "可选值：DISABLED、RECEIVE_ONLY、BIDIRECTIONAL",
+                             "Default: RECEIVE_ONLY. This is safe for public servers because clients do not contribute unless they opt in.",
+                             "默认：RECEIVE_ONLY。这个默认值适合公开服务器，因为客户端不会在未主动开启时贡献数据。")
+                    .defineEnum("clientSyncMode", ClientSyncMode.RECEIVE_ONLY);
+
+            backgroundSyncIntervalMinutes = builder
+                    .comment("Background metadata check interval in minutes.",
+                             "后台元数据巡检间隔（分钟）。",
+                             "0 disables periodic checks. Positive values periodically run metadata negotiation.",
+                             "0 表示关闭周期巡检；正数表示周期执行元数据协商流程。",
+                             "Default: 60 minutes to keep maps fresh without frequent network checks.",
+                             "默认：60 分钟，在保持地图新鲜的同时避免过于频繁的网络检查。",
+                             "Range: 0 - 1440",
+                             "范围：0 - 1440")
+                    .defineInRange("backgroundSyncIntervalMinutes", 60, 0, 1440);
 
             builder.pop();
         }
@@ -205,6 +241,23 @@ public class ModConfig {
          * SCHEDULED 模式的更新时间（分钟）
          */
         public final IntValue scheduledUpdateMinute;
+
+        // ========== 客户端贡献设置 ==========
+
+        /**
+         * 服务端接受客户端贡献的权限范围
+         */
+        public final EnumValue<ContributionScope> contributionScope;
+
+        /**
+         * 每个贡献会话完成后的冷却期（秒）
+         */
+        public final IntValue contributionQueueCooldownSeconds;
+
+        /**
+         * 最大贡献会话排队数量
+         */
+        public final IntValue maxContributionQueueSize;
 
         // ========== 维度扫描配置 ==========
 
@@ -309,6 +362,49 @@ public class ModConfig {
                     .comment("Minute of hour for SCHEDULED mode (0-59)",
                              "SCHEDULED 模式的更新时间（分钟，0-59）")
                     .defineInRange("scheduledUpdateMinute", 0, 0, 59);
+
+            builder.pop();
+
+
+            builder.push("contribution");
+            builder.comment("Client contribution settings / 客户端贡献设置");
+
+            contributionScope = builder
+                    .comment("Server contribution permission scope.",
+                             "服务端接受客户端贡献的权限范围。",
+                             "DISABLED refuses all client uploads.",
+                             "DISABLED 拒绝所有客户端上传。",
+                             "OPS allows server operators to contribute.",
+                             "OPS 允许服务器管理员贡献。",
+                             "WHITELIST allows UUIDs listed in <world>/serverconfig/mapsyncer-contributors.json.",
+                             "WHITELIST 允许 <world>/serverconfig/mapsyncer-contributors.json 中记录的 UUID 贡献。",
+                             "OPS_AND_WHITELIST allows either operators or whitelisted UUIDs.",
+                             "OPS_AND_WHITELIST 允许管理员或白名单 UUID 贡献。",
+                             "ALL allows every player to contribute. Use only on trusted servers.",
+                             "ALL 允许所有玩家贡献。仅建议在可信服务器使用。",
+                             "Allowed values: DISABLED, OPS, WHITELIST, OPS_AND_WHITELIST, ALL",
+                             "可选值：DISABLED、OPS、WHITELIST、OPS_AND_WHITELIST、ALL",
+                             "Default: WHITELIST. This keeps contribution opt-in and world-specific.",
+                             "默认：WHITELIST。该默认值使贡献保持显式授权且按世界隔离。")
+                    .defineEnum("contributionScope", ContributionScope.WHITELIST);
+
+            contributionQueueCooldownSeconds = builder
+                    .comment("Cooldown in seconds between completed contribution sessions.",
+                             "每个贡献会话完成后的冷却期（秒）。",
+                             "This serializes bursts from multiple players and reduces cache write contention.",
+                             "用于串行化多玩家同时贡献，降低缓存写入竞争。",
+                             "Default: 10 seconds, Range: 0 - 3600",
+                             "默认：10 秒，范围：0 - 3600")
+                    .defineInRange("contributionQueueCooldownSeconds", 10, 0, 3600);
+
+            maxContributionQueueSize = builder
+                    .comment("Maximum number of queued contribution sessions.",
+                             "最大贡献会话排队数量。",
+                             "New contribution requests are rejected with queue_full when this limit is reached.",
+                             "达到该限制后，新贡献请求会以 queue_full 拒绝。",
+                             "Default: 32 queued sessions, Range: 1 - 1024",
+                             "默认：32 个排队会话，范围：1 - 1024")
+                    .defineInRange("maxContributionQueueSize", 32, 1, 1024);
 
             builder.pop();
 

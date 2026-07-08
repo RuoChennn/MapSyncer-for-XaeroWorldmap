@@ -126,6 +126,21 @@ public class ModConfig {
         return clientInstance;
     }
 
+    private static int parseIntInRange(Properties props, String key, int defaultValue, int min, int max) {
+        String rawValue = props.getProperty(key);
+        if (rawValue == null) {
+            return defaultValue;
+        }
+
+        try {
+            int parsedValue = Integer.parseInt(rawValue.trim());
+            return Math.max(min, Math.min(max, parsedValue));
+        } catch (NumberFormatException e) {
+            LOGGER.warn("Invalid integer value for {}='{}', using default {}", key, rawValue, defaultValue);
+            return defaultValue;
+        }
+    }
+
     /**
      * 客户端配置类
      *
@@ -140,6 +155,20 @@ public class ModConfig {
          * <p>默认值使用 JVM 可用处理器数的一半，避免阻塞游戏主线程。</p>
          */
         private volatile int hashThreads;
+
+        /**
+         * 客户端同步模式
+         *
+         * <p>控制客户端是否关闭同步、仅接收服务端地图，或参与双向贡献。</p>
+         */
+        private volatile ClientSyncMode clientSyncMode = ClientSyncMode.RECEIVE_ONLY;
+
+        /**
+         * 后台元数据巡检间隔（分钟）
+         *
+         * <p>0 表示关闭后台巡检，默认 60 分钟以避免频繁网络协商。</p>
+         */
+        private volatile int backgroundSyncIntervalMinutes = 60;
 
         /** 配置文件路径 */
         private final Path configFile;
@@ -175,11 +204,13 @@ public class ModConfig {
                 props.load(is);
 
                 int maxThreads = Runtime.getRuntime().availableProcessors();
-                int loadedThreads = Integer.parseInt(props.getProperty("hashThreads", String.valueOf(hashThreads)));
-                // 确保线程数在有效范围内
-                hashThreads = Math.max(1, Math.min(maxThreads, loadedThreads));
+                hashThreads = parseIntInRange(props, "hashThreads", hashThreads, 1, maxThreads);
+                clientSyncMode = ClientSyncMode.fromConfig(props.getProperty("clientSyncMode"), ClientSyncMode.RECEIVE_ONLY);
+                backgroundSyncIntervalMinutes = parseIntInRange(props, "backgroundSyncIntervalMinutes",
+                        backgroundSyncIntervalMinutes, 0, 1440);
 
-                LOGGER.info("Loaded client config from: {} (hashThreads={})", configFile, hashThreads);
+                LOGGER.info("Loaded client config from: {} (hashThreads={}, clientSyncMode={}, backgroundSyncIntervalMinutes={})",
+                        configFile, hashThreads, clientSyncMode, backgroundSyncIntervalMinutes);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load client config, using defaults: {}", e.getMessage());
             }
@@ -219,10 +250,34 @@ public class ModConfig {
                 sb.append("# Range: 1 - " + maxThreads + "\n");
                 sb.append("# 范围：1 - " + maxThreads + "\n");
                 sb.append("hashThreads=" + hashThreads + "\n");
+                sb.append("\n");
+                sb.append("# Client sync mode.\n");
+                sb.append("# 客户端同步模式。\n");
+                sb.append("# DISABLED disables automatic sync, background checks, manual receive sync, and upload contributions on this client.\n");
+                sb.append("# DISABLED 会禁用此客户端的自动同步、后台巡检、手动接收同步和上传贡献。\n");
+                sb.append("# RECEIVE_ONLY receives newer authoritative regions from the server but never uploads local regions.\n");
+                sb.append("# RECEIVE_ONLY 只接收服务端较新的权威 region，不上传本地 region。\n");
+                sb.append("# BIDIRECTIONAL receives server updates and uploads newer local regions when the server allows contributions.\n");
+                sb.append("# BIDIRECTIONAL 会接收服务端更新，并在服务端允许时上传本地较新的 region。\n");
+                sb.append("# Allowed values: DISABLED, RECEIVE_ONLY, BIDIRECTIONAL\n");
+                sb.append("# 可选值：DISABLED、RECEIVE_ONLY、BIDIRECTIONAL\n");
+                sb.append("# Default: RECEIVE_ONLY. Safe for public servers because clients do not contribute unless they opt in.\n");
+                sb.append("# 默认：RECEIVE_ONLY。这个默认值适合公开服务器，因为客户端不会在未主动开启时贡献数据。\n");
+                sb.append("clientSyncMode=" + clientSyncMode.name() + "\n");
+                sb.append("\n");
+                sb.append("# Background metadata check interval in minutes.\n");
+                sb.append("# 后台元数据巡检间隔（分钟）。\n");
+                sb.append("# 0 disables periodic checks. Positive values periodically run metadata negotiation while connected.\n");
+                sb.append("# 0 表示关闭周期巡检；正数表示在线时周期执行元数据协商流程。\n");
+                sb.append("# Default: 60 minutes to keep maps fresh without frequent network checks.\n");
+                sb.append("# 默认：60 分钟，在保持地图新鲜的同时避免过于频繁的网络检查。\n");
+                sb.append("# Range: 0 - 1440 / 范围：0 - 1440\n");
+                sb.append("backgroundSyncIntervalMinutes=" + backgroundSyncIntervalMinutes + "\n");
 
                 Files.writeString(configFile, sb.toString());
 
-                LOGGER.info("Saved client config to: {} (hashThreads={})", configFile, hashThreads);
+                LOGGER.info("Saved client config to: {} (hashThreads={}, clientSyncMode={}, backgroundSyncIntervalMinutes={})",
+                        configFile, hashThreads, clientSyncMode, backgroundSyncIntervalMinutes);
             } catch (Exception e) {
                 LOGGER.error("Failed to save client config: {}", e.getMessage());
             }
@@ -246,6 +301,42 @@ public class ModConfig {
             int maxThreads = Runtime.getRuntime().availableProcessors();
             hashThreads = Math.max(1, Math.min(maxThreads, value));
         }
+
+        /**
+         * 获取客户端同步模式
+         *
+         * @return 同步模式
+         */
+        public ClientSyncMode getClientSyncMode() {
+            return clientSyncMode;
+        }
+
+        /**
+         * 设置客户端同步模式
+         *
+         * @param value 同步模式
+         */
+        public void setClientSyncMode(ClientSyncMode value) {
+            clientSyncMode = value;
+        }
+
+        /**
+         * 获取后台元数据巡检间隔（分钟）
+         *
+         * @return 巡检间隔，0 表示关闭
+         */
+        public int getBackgroundSyncIntervalMinutes() {
+            return backgroundSyncIntervalMinutes;
+        }
+
+        /**
+         * 设置后台元数据巡检间隔（分钟）
+         *
+         * @param value 巡检间隔
+         */
+        public void setBackgroundSyncIntervalMinutes(int value) {
+            backgroundSyncIntervalMinutes = Math.max(0, Math.min(1440, value));
+        }
     }
 
     /**
@@ -266,6 +357,12 @@ public class ModConfig {
         private volatile int incrementalUpdateIntervalTicks = 200;
         private volatile int scheduledUpdateHour = 4;
         private volatile int scheduledUpdateMinute = 0;
+
+
+        // ========== 客户端贡献设置 ==========
+        private volatile ContributionScope contributionScope = ContributionScope.WHITELIST;
+        private volatile int contributionQueueCooldownSeconds = 10;
+        private volatile int maxContributionQueueSize = 32;
 
         // ========== 维度扫描配置 ==========
         private volatile ScanMode defaultScanMode = ScanMode.SURFACE;
@@ -324,6 +421,13 @@ public class ModConfig {
                 incrementalUpdateIntervalTicks = Integer.parseInt(props.getProperty("incrementalUpdateIntervalTicks", "200"));
                 scheduledUpdateHour = Integer.parseInt(props.getProperty("scheduledUpdateHour", "4"));
                 scheduledUpdateMinute = Integer.parseInt(props.getProperty("scheduledUpdateMinute", "0"));
+
+                // 客户端贡献设置
+                contributionScope = ContributionScope.fromConfig(props.getProperty("contributionScope"), ContributionScope.WHITELIST);
+                contributionQueueCooldownSeconds = parseIntInRange(props, "contributionQueueCooldownSeconds",
+                        contributionQueueCooldownSeconds, 0, 3600);
+                maxContributionQueueSize = parseIntInRange(props, "maxContributionQueueSize",
+                        maxContributionQueueSize, 1, 1024);
 
                 // 维度扫描配置
                 defaultScanMode = ScanMode.valueOf(props.getProperty("defaultScanMode", "SURFACE"));
@@ -436,6 +540,44 @@ public class ModConfig {
                 sb.append("scheduledUpdateMinute=" + scheduledUpdateMinute + "\n");
                 sb.append("\n");
 
+                // ========== 客户端贡献设置 ==========
+                sb.append("# ========================================\n");
+                sb.append("# Client contribution settings / 客户端贡献设置\n");
+                sb.append("# ========================================\n");
+                sb.append("#\n");
+                sb.append("# Server contribution permission scope.\n");
+                sb.append("# 服务端接受客户端贡献的权限范围。\n");
+                sb.append("# DISABLED refuses all client uploads.\n");
+                sb.append("# DISABLED 拒绝所有客户端上传。\n");
+                sb.append("# OPS allows server operators to contribute.\n");
+                sb.append("# OPS 允许服务器管理员贡献。\n");
+                sb.append("# WHITELIST allows UUIDs listed in <world>/serverconfig/mapsyncer-contributors.json.\n");
+                sb.append("# WHITELIST 允许 <world>/serverconfig/mapsyncer-contributors.json 中记录的 UUID 贡献。\n");
+                sb.append("# OPS_AND_WHITELIST allows either operators or whitelisted UUIDs.\n");
+                sb.append("# OPS_AND_WHITELIST 允许管理员或白名单 UUID 贡献。\n");
+                sb.append("# ALL allows every player to contribute. Use only on trusted servers.\n");
+                sb.append("# ALL 允许所有玩家贡献。仅建议在可信服务器使用。\n");
+                sb.append("# Allowed values: DISABLED, OPS, WHITELIST, OPS_AND_WHITELIST, ALL\n");
+                sb.append("# 可选值：DISABLED、OPS、WHITELIST、OPS_AND_WHITELIST、ALL\n");
+                sb.append("# Default: WHITELIST. This keeps contribution opt-in and world-specific.\n");
+                sb.append("# 默认：WHITELIST。该默认值使贡献保持显式授权且按世界隔离。\n");
+                sb.append("contributionScope=" + contributionScope.name() + "\n");
+                sb.append("\n");
+                sb.append("# Cooldown in seconds between completed contribution sessions.\n");
+                sb.append("# 每个贡献会话完成后的冷却期（秒）。\n");
+                sb.append("# This serializes bursts from multiple players and reduces cache write contention.\n");
+                sb.append("# 用于串行化多玩家同时贡献，降低缓存写入竞争。\n");
+                sb.append("# Default: 10 seconds, Range: 0 - 3600 / 默认：10 秒，范围：0 - 3600\n");
+                sb.append("contributionQueueCooldownSeconds=" + contributionQueueCooldownSeconds + "\n");
+                sb.append("\n");
+                sb.append("# Maximum number of queued contribution sessions.\n");
+                sb.append("# 最大贡献会话排队数量。\n");
+                sb.append("# New contribution requests are rejected with queue_full when this limit is reached.\n");
+                sb.append("# 达到该限制后，新贡献请求会以 queue_full 拒绝。\n");
+                sb.append("# Default: 32 queued sessions, Range: 1 - 1024 / 默认：32 个排队会话，范围：1 - 1024\n");
+                sb.append("maxContributionQueueSize=" + maxContributionQueueSize + "\n");
+                sb.append("\n");
+
                 // ========== 维度扫描配置 ==========
                 sb.append("# ========================================\n");
                 sb.append("# Dimension scan settings / 维度扫描设置\n");
@@ -503,6 +645,18 @@ public class ModConfig {
             return scheduledUpdateMinute;
         }
 
+        public ContributionScope getContributionScope() {
+            return contributionScope;
+        }
+
+        public int getContributionQueueCooldownSeconds() {
+            return contributionQueueCooldownSeconds;
+        }
+
+        public int getMaxContributionQueueSize() {
+            return maxContributionQueueSize;
+        }
+
         public ScanMode getDefaultScanMode() {
             return defaultScanMode;
         }
@@ -547,6 +701,18 @@ public class ModConfig {
 
         public void setScheduledUpdateMinute(int value) {
             scheduledUpdateMinute = Math.max(0, Math.min(59, value));
+        }
+
+        public void setContributionScope(ContributionScope value) {
+            contributionScope = value;
+        }
+
+        public void setContributionQueueCooldownSeconds(int value) {
+            contributionQueueCooldownSeconds = Math.max(0, Math.min(3600, value));
+        }
+
+        public void setMaxContributionQueueSize(int value) {
+            maxContributionQueueSize = Math.max(1, Math.min(1024, value));
         }
 
         public void setDefaultScanMode(ScanMode value) {
