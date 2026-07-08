@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -182,6 +183,18 @@ public final class ContributionCoordinator {
         synchronized (LOCK) {
             QUEUE.removeIf(session -> session.playerId().equals(playerId));
             if (activeSession != null && activeSession.playerId().equals(playerId)) {
+                activeSession.markComplete("player_left");
+                ASSEMBLER.clearRequest(activeSession.requestId());
+                LOCK.notifyAll();
+            }
+        }
+    }
+
+    public static void cleanupOfflinePlayers(Set<UUID> onlinePlayerIds) {
+        Set<UUID> online = onlinePlayerIds == null ? Set.of() : onlinePlayerIds;
+        synchronized (LOCK) {
+            QUEUE.removeIf(session -> !online.contains(session.playerId()));
+            if (activeSession != null && !online.contains(activeSession.playerId())) {
                 activeSession.markComplete("player_left");
                 ASSEMBLER.clearRequest(activeSession.requestId());
                 LOCK.notifyAll();

@@ -205,6 +205,12 @@ public class ServerSyncHandlerLogic {
     /** 限速周期最大时长（1秒），防止周期过长导致累计量过大 */
     private static final long MAX_SPEED_LIMIT_CYCLE_MS = 1000;
 
+    /** contribution-only 独立请求允许的最大分片数，防止异常客户端无限占用组装缓冲区。 */
+    private static final int MAX_CONTRIBUTION_ONLY_PARTS = 256;
+
+    /** contribution-only 独立请求分片组装超时时间。 */
+    private static final long CONTRIBUTION_ONLY_ASSEMBLY_TTL_MS = 120_000L;
+
     /** 全局递增版本号，用于标记每次同步请求 */
     private static final AtomicInteger globalSyncVersion = new AtomicInteger(0);
 
@@ -227,6 +233,7 @@ public class ServerSyncHandlerLogic {
     private record ContributionOnlyRequestAssembly(
             int requestId,
             int totalParts,
+            long createdAtMillis,
             Map<Integer, ContributionOnlyRequestPayload> parts
     ) {
     }
@@ -287,6 +294,9 @@ public class ServerSyncHandlerLogic {
     }
 
     private static void handleContributionOnlyRequest(ContributionOnlyRequestPayload payload, PayloadContext context) {
+        if (payload == null) {
+            return;
+        }
         Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return;
@@ -297,6 +307,21 @@ public class ServerSyncHandlerLogic {
         if (server == null) {
             LOGGER.debug("Ignoring contribution-only request {} from player {} because server is unavailable",
                     payload.requestId(), playerId);
+            return;
+        }
+        server.execute(() -> handleContributionOnlyRequestOnServerThread(server, playerId, payload));
+    }
+
+    private static void handleContributionOnlyRequestOnServerThread(
+            net.minecraft.server.MinecraftServer server,
+            UUID playerId,
+            ContributionOnlyRequestPayload payload
+    ) {
+        cleanupExpiredContributionOnlyAssemblies();
+        ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
+        if (onlinePlayer == null) {
+            contributionOnlyRequestBuffers.remove(playerId);
+            playerContributionOnlyVersions.remove(playerId);
             return;
         }
         if (!isValidContributionOnlyPart(payload)) {
@@ -314,29 +339,20 @@ public class ServerSyncHandlerLogic {
         int requestVersion = globalContributionOnlyVersion.incrementAndGet();
         playerContributionOnlyVersions.put(playerId, requestVersion);
 
-        Runnable startRequest = () -> {
-            if (!Integer.valueOf(requestVersion).equals(playerContributionOnlyVersions.get(playerId))) {
-                return;
-            }
-            ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
-            if (onlinePlayer == null) {
-                return;
-            }
-            if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
-                NetworkManager.sendToPlayer(onlinePlayer, new ContributionResultPayload(
-                        assembledPayload.requestId(), 0, assembledPayload.clientMeta().size(), "not_allowed", true));
-                clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
-                return;
-            }
-            startContributionOnlyCandidateWorker(server, playerId, assembledPayload, requestVersion);
-        };
-        server.execute(startRequest);
+        if (!ContributionWhitelistBridge.isContributionAllowed(onlinePlayer)) {
+            NetworkManager.sendToPlayer(onlinePlayer, new ContributionResultPayload(
+                    assembledPayload.requestId(), 0, assembledPayload.clientMeta().size(), "not_allowed", true));
+            clearContributionOnlyVersionIfCurrent(playerId, requestVersion);
+            return;
+        }
+        startContributionOnlyCandidateWorker(server, playerId, assembledPayload, requestVersion);
     }
 
     private static boolean isValidContributionOnlyPart(ContributionOnlyRequestPayload payload) {
         return payload != null
                 && payload.partIndex() >= 0
                 && payload.totalParts() > 0
+                && payload.totalParts() <= MAX_CONTRIBUTION_ONLY_PARTS
                 && payload.partIndex() < payload.totalParts();
     }
 
@@ -360,7 +376,8 @@ public class ServerSyncHandlerLogic {
             assembly = new ContributionOnlyRequestAssembly(
                     payload.requestId(),
                     payload.totalParts(),
-                    new ConcurrentHashMap<>()
+                    System.currentTimeMillis(),
+                    new HashMap<>()
             );
             contributionOnlyRequestBuffers.put(playerId, assembly);
         }
@@ -386,6 +403,14 @@ public class ServerSyncHandlerLogic {
         LOGGER.debug("Contribution-only request {} assembled from {} parts, {} entries total",
                 payload.requestId(), payload.totalParts(), merged.size());
         return new ContributionOnlyRequestPayload(payload.requestId(), 0, 1, merged, reason);
+    }
+
+    private static void cleanupExpiredContributionOnlyAssemblies() {
+        if (contributionOnlyRequestBuffers.isEmpty()) {
+            return;
+        }
+        long cutoffMillis = System.currentTimeMillis() - CONTRIBUTION_ONLY_ASSEMBLY_TTL_MS;
+        contributionOnlyRequestBuffers.entrySet().removeIf(entry -> entry.getValue().createdAtMillis() < cutoffMillis);
     }
 
     private static void startContributionOnlyCandidateWorker(
@@ -670,7 +695,6 @@ public class ServerSyncHandlerLogic {
 
     private static void cleanupPlayerState(UUID playerId) {
         cleanupSyncState(playerId);
-        ContributionCoordinator.cancelPlayer(playerId);
     }
 
     private static void finishSyncState(UUID playerId) {
@@ -1370,6 +1394,8 @@ public class ServerSyncHandlerLogic {
      * @param onlinePlayerIds 当前在线玩家的UUID集合
      */
     public static void cleanupOfflinePlayers(Set<UUID> onlinePlayerIds) {
+        cleanupExpiredContributionOnlyAssemblies();
+
         // 检查syncingPlayers中的玩家是否仍然在线
         Set<UUID> toRemove = new HashSet<>();
         for (UUID playerId : syncingPlayers) {
@@ -1400,6 +1426,7 @@ public class ServerSyncHandlerLogic {
         if (!toRemove.isEmpty()) {
             LOGGER.debug("Cleaned up {} stale player states", toRemove.size());
         }
+        ContributionCoordinator.cleanupOfflinePlayers(onlinePlayerIds);
     }
 
     /**
