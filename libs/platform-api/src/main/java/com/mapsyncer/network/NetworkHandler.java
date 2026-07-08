@@ -1,5 +1,9 @@
 package com.mapsyncer.network;
 
+import com.mapsyncer.network.payload.ContributionCompletePayload;
+import com.mapsyncer.network.payload.ContributionDataPayload;
+import com.mapsyncer.network.payload.ContributionRequestPayload;
+import com.mapsyncer.network.payload.ContributionResultPayload;
 import com.mapsyncer.network.payload.ServerInstalledPayload;
 import com.mapsyncer.network.payload.SyncProgressPayload;
 import com.mapsyncer.network.payload.SyncRequestPayload;
@@ -40,6 +44,14 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
     String SYNC_PROGRESS_ID = "sync_progress";
     /** 服务端已安装通知包 ID */
     String SERVER_INSTALLED_ID = "server_installed";
+    /** 贡献请求包 ID */
+    String CONTRIBUTION_REQUEST_ID = "contribution_request";
+    /** 贡献数据包 ID */
+    String CONTRIBUTION_DATA_ID = "contribution_data";
+    /** 贡献完成包 ID */
+    String CONTRIBUTION_COMPLETE_ID = "contribution_complete";
+    /** 贡献结果包 ID */
+    String CONTRIBUTION_RESULT_ID = "contribution_result";
 
     // ===== 初始化 =====
 
@@ -60,6 +72,20 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      * @param payload 同步请求包
      */
     void sendToServer(SyncRequestPayload payload);
+
+    /**
+     * 发送贡献数据到服务端（客户端调用）
+     *
+     * @param payload 贡献数据包
+     */
+    void sendToServer(ContributionDataPayload payload);
+
+    /**
+     * 发送贡献完成通知到服务端（客户端调用）
+     *
+     * @param payload 贡献完成包
+     */
+    void sendToServer(ContributionCompletePayload payload);
 
     /**
      * 发送同步响应到指定玩家（服务端调用）
@@ -84,6 +110,22 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      * @param payload 服务端已安装通知包
      */
     void sendToPlayer(PLAYER_TYPE player, ServerInstalledPayload payload);
+
+    /**
+     * 发送贡献请求到指定玩家（服务端调用）
+     *
+     * @param player 服务端玩家对象
+     * @param payload 贡献请求包
+     */
+    void sendToPlayer(PLAYER_TYPE player, ContributionRequestPayload payload);
+
+    /**
+     * 发送贡献结果到指定玩家（服务端调用）
+     *
+     * @param player 服务端玩家对象
+     * @param payload 贡献结果包
+     */
+    void sendToPlayer(PLAYER_TYPE player, ContributionResultPayload payload);
 
     // ===== 处理器注册 =====
 
@@ -114,6 +156,34 @@ public interface NetworkHandler<PLAYER_TYPE, EVENT_TYPE> {
      * @param handler 处理函数
      */
     void registerSyncRequestHandler(BiConsumer<SyncRequestPayload, PayloadContext> handler);
+
+    /**
+     * 注册贡献请求处理器（客户端）
+     *
+     * @param handler 处理函数
+     */
+    void registerContributionRequestHandler(BiConsumer<ContributionRequestPayload, PayloadContext> handler);
+
+    /**
+     * 注册贡献数据处理器（服务端）
+     *
+     * @param handler 处理函数
+     */
+    void registerContributionDataHandler(BiConsumer<ContributionDataPayload, PayloadContext> handler);
+
+    /**
+     * 注册贡献完成处理器（服务端）
+     *
+     * @param handler 处理函数
+     */
+    void registerContributionCompleteHandler(BiConsumer<ContributionCompletePayload, PayloadContext> handler);
+
+    /**
+     * 注册贡献结果处理器（客户端）
+     *
+     * @param handler 处理函数
+     */
+    void registerContributionResultHandler(BiConsumer<ContributionResultPayload, PayloadContext> handler);
 
     // ===== 上下文操作 =====
 
