@@ -63,7 +63,7 @@ The following amendments supersede the first-draft snippets below wherever they 
 - Modify: `libs/common/src/main/java/com/mapsyncer/client/ClientHashManager.java:183-194`
 - Test: `mc-1.21.1/fabric/src/test/java/com/mapsyncer/client/ClientHashManagerTest.java`
 
-- [ ] **Step 1: Write failing regression tests**
+- [x] **Step 1: Write failing regression tests**
 
 Create `ClientHashManagerTest.java`:
 
@@ -134,7 +134,7 @@ class ClientHashManagerTest {
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -142,7 +142,7 @@ Run:
 
 Expected before implementation: first test fails because cached timestamp `100` is used despite hash mismatch. If dependency resolution prevents the test task from running in this local environment, run `.\gradlew :mc-1.21.1:fabric:compileTestJava` as a compile-only fallback and record that RED execution was blocked.
 
-- [ ] **Step 3: Implement hash-aware cached timestamp selection**
+- [x] **Step 3: Implement hash-aware cached timestamp selection**
 
 Change the timestamp block in `ClientHashManager.computeMetaForSync()` to:
 
@@ -161,7 +161,7 @@ if (cached != null && cached.hash().equals(hash)) {
 }
 ```
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `.\gradlew :mc-1.21.1:fabric:compileTestJava`
 
@@ -171,7 +171,7 @@ If dependency resolution permits, also run:
 
 Preferred GREEN verification is the `test` command. Use `compileTestJava` only when the test runtime is blocked by dependency resolution, and record the limitation in the task summary.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add libs/common/src/main/java/com/mapsyncer/client/ClientHashManager.java mc-1.21.1/fabric/src/test/java/com/mapsyncer/client/ClientHashManagerTest.java
