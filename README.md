@@ -1,8 +1,8 @@
 # MapSyncer for Xaero's World Map
 
-一个 Minecraft 多平台地图同步模组，将服务端已探索区域同步到客户端的 Xaero's World Map。
+一个 Minecraft 多平台地图同步模组，将服务端已探索区域同步到客户端的 Xaero's World Map；开启双向模式后，也可以把客户端本地较新的 Xaero 地图区块贡献回服务端，形成多人共享的地图基线。
 
-> **适用场景**：玩家首次进入已开放服务器，或服务器已用 Chunky 预生成地图，需要将地图同步给玩家，减少重复跑图时间成本。
+> **适用场景**：玩家首次进入已开放服务器、服务器已用 Chunky 预生成地图、多人分别探索了不同区域需要合并地图，或新服务器希望由首个携带本地地图的玩家建立初始缓存。
 
 ---
 
@@ -50,10 +50,37 @@
 | **洞穴模式** | 支持从指定高度向下扫描，输出到 caves 子目录 |
 | **多线程哈希** | 客户端 CRC32 计算支持并行，线程数可配置 |
 | **自动同步** | 加入服务器时自动检测服务端地图更新，无需手动执行指令 |
+| **双向同步** | 默认只接收服务端地图；启用 `BIDIRECTIONAL` 后可贡献本地较新的 Xaero 区域 |
+| **贡献校验** | 客户端上传前判新，服务端再次校验哈希、时间戳、路径和基线，避免旧地图覆盖新地图 |
+| **贡献队列** | 多玩家同时贡献时由服务端串行处理，并支持冷却时间和队列上限 |
+| **退出前贡献** | 正常点击断开多人服务器前，可短暂等待上传本地新增地图 |
+| **空缓存引导** | 服务端尚无地图缓存时，双向客户端可帮助建立初始服务端基线 |
 | **内置服务器** | 单人游戏局域网共享，复用主机 Xaero 存档 |
 | **MapPackager** | 独立 CLI 工具，将服务器缓存打包为客户端可用的 Xaero 地图包（离线分发） |
 | **Payload 分片** | 双向自动分片，>28KB 数据拆分为小包传输，接收端自动组装 |
 | **握手保护** | 禁止向未安装 mod 的客户端发送自定义 payload，防止踢出玩家 |
+
+---
+
+## 同步模式与双向贡献流程
+
+MapSyncer 默认保持传统的服务端到客户端同步；只有客户端显式设置为 `BIDIRECTIONAL`，且服务端贡献范围允许该玩家时，才会进入贡献阶段。
+
+| 模式 | 行为 |
+|------|------|
+| `DISABLED` | 客户端禁用 MapSyncer 同步，不请求服务端地图 |
+| `RECEIVE_ONLY` | 默认模式，只接收服务端地图，不上传本地地图 |
+| `BIDIRECTIONAL` | 先接收服务端更新，再上传本地较新的 Xaero 区域 |
+
+双向同步按“先分发、后贡献、再校验”的顺序执行：
+
+1. 客户端发起同步并上报本地 Xaero 区域元数据。
+2. 服务端先把权威缓存中客户端缺失或较旧的区域下发给客户端。
+3. 若客户端处于 `BIDIRECTIONAL`，服务端根据贡献范围生成可贡献候选。
+4. 客户端只上传本地哈希不同且逻辑时间戳晚于服务端基线的区域。
+5. 服务端再次校验上传数据，通过后写入 `server_map_cache/` 并保留贡献区域的原始逻辑时间戳。
+
+退出前贡献同步只覆盖正常点击多人服务器“断开连接”的路径；崩溃、强制关闭进程、网络中断和单人世界退出不会触发该保护。
 
 ---
 
@@ -97,6 +124,10 @@
 | 配置项 | 默认值 | 范围 | 说明 |
 |--------|--------|------|------|
 | `hashThreads` | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
+| `clientSyncMode` | RECEIVE_ONLY | DISABLED / RECEIVE_ONLY / BIDIRECTIONAL | 客户端同步模式 |
+| `backgroundSyncIntervalMinutes` | 60 | 0-1440 | 在线后台检查间隔，0 表示只在加入游戏或手动命令时检查 |
+| `syncBeforeDisconnect` | true | - | 正常点击断开连接时是否先尝试贡献本地地图，仅 `BIDIRECTIONAL` 生效 |
+| `disconnectSyncTimeoutSeconds` | 15 | 0-60 | 退出前贡献等待秒数，0 等同禁用退出前等待 |
 
 ### 服务端配置
 
@@ -111,6 +142,11 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 | `maxConcurrentRegions` | 4 | 1-16 | 并发转换区域数 |
 | `maxSyncPacketSize` | 262144 (256KB) | 64KB-1MB | 单包最大大小 |
 | `syncSpeedLimitKBps` | 1024 (1MiB/s) | 0-10240 | 同步速率限制（0=不限） |
+| `contributionScope` | WHITELIST | DISABLED / ALL / OPS / WHITELIST / OPS_AND_WHITELIST | 允许哪些客户端向服务端贡献较新的地图区域 |
+| `contributionQueueCooldownSeconds` | 10 | 0-3600 | 每个贡献会话结束后的冷却秒数 |
+| `maxContributionQueueSize` | 32 | 1-1024 | 服务端贡献请求等待队列容量 |
+
+贡献白名单位于 `world/serverconfig/mapsyncer-contributors.json`，按世界保存允许贡献的玩家 UUID。默认 `WHITELIST` 不会让所有玩家直接写入服务端地图缓存，建议公开服务器优先使用白名单或 OP 范围开放。
 
 **增量更新 `[incremental_update]`**
 
@@ -252,6 +288,14 @@ mc-26.1/                26.1 版本
         ▼
    Xaero 加载触发（反射调用）
   requestLoad → 地图重新渲染
+        │
+        ▼
+   可选双向贡献（BIDIRECTIONAL）
+  扫描本地 Xaero 元数据 → 上传较新区域
+        │
+        ▼
+    服务端贡献校验
+  哈希/时间戳/路径/基线校验 → 写入缓存
 ```
 
 ### 文件存储
@@ -265,13 +309,19 @@ mc-26.1/                26.1 版本
   ├── caves/<layer>/     # 洞穴模式输出
   └── generation_cache.properties  # 时间戳+哈希缓存
 
+  <world>/serverconfig/
+  └── mapsyncer-contributors.json  # 贡献白名单（UUID）
+
 客户端:
   <client>/xaero/world-map/Multiplayer_<IP>/     # 新版 Xaero 统一路径（优先）
   <client>/XaeroWorldMap/Multiplayer_<IP>/       # 旧版 Xaero 路径（兼容 fallback）
   ├── null/mw$<worldId>/   # 主世界
   ├── DIM-1/mw$<worldId>/  # 地狱
-  └── DIM1/mw$<worldId>/   # 末地
+  ├── DIM1/mw$<worldId>/   # 末地
+  └── sync_timestamps.cache # 同步逻辑时间戳缓存
 ```
+
+`sync_timestamps.cache` 用于记录同步逻辑时间戳，避免客户端刚下载的文件因本地修改时间变化被误判为可贡献的新地图。
 
 ### 维度映射
 
@@ -313,6 +363,8 @@ scripts/fastbuild/build-target.ps1 all -NoTest  # PowerShell 构建全部
 | 问题 | 说明 | 影响 |
 |------|------|------|
 | 洞穴内容异常 | 洞穴模式下部分内容不准确 | 基本上只有地狱受影响，看情况优化 |
+| 退出前同步边界 | 只覆盖正常点击多人服务器断开连接 | 崩溃、强制关闭、网络中断不会触发 |
+| 双向贡献授权 | 默认按白名单控制贡献权限 | 需要服务器管理员配置允许贡献的玩家 |
 
 ---
 
