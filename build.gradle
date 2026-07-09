@@ -14,6 +14,14 @@ subprojects {
         maven { url = 'https://maven.neoforged.net/releases' }
         maven { url = 'https://maven.aliyun.com/repository/public' }
     }
+
+    tasks.withType(ProcessResources).configureEach {
+        inputs.property 'mod_version', rootProject.mod_version
+
+        filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
+            expand 'mod_version': rootProject.mod_version
+        }
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {

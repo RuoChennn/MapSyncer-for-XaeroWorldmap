@@ -7,7 +7,7 @@ config="mapsyncer.mixins.json"
 
 [[mods]]
 modId="mapsyncer"
-version="1.0.3"
+version="${mod_version}"
 displayName="MapSyncer"
 description="Syncs server-side explored areas to client's Xaero World Map"
 authors="Ruo_Chen"
