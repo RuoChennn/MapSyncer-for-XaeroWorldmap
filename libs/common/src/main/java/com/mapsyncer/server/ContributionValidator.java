@@ -60,11 +60,7 @@ public final class ContributionValidator {
             return reject("not_newer");
         }
 
-        long acceptedTimestampSeconds = Math.max(
-                System.currentTimeMillis() / 1000,
-                current == null ? 1 : current.timestampSeconds() + 1
-        );
-        return new Result(true, "accepted", acceptedTimestampSeconds);
+        return new Result(true, "accepted", candidateTimestampSeconds);
     }
 
     private static Result reject(String reason) {
