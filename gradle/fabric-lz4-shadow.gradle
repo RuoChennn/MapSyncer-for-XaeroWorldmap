@@ -1,0 +1,25 @@
+// Fabric：shadow 打包 core/platform-api（含已重定位 lz4），再交给 remapJar（Issue #13）
+// 需在 dependencies 之前 apply；各模块声明 shadowBundle 依赖
+apply from: rootProject.file('gradle/lz4-relocate.gradle')
+
+configurations {
+    shadowBundle {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+tasks.named('jar', Jar) {
+    archiveClassifier.set('dev')
+}
+
+tasks.named('shadowJar') {
+    archiveClassifier.set('dev-all')
+    configurations = [project.configurations.shadowBundle]
+    configureLz4ShadowExcludes(it)
+}
+
+tasks.named('remapJar') {
+    dependsOn tasks.named('shadowJar')
+    inputFile.set(tasks.named('shadowJar').flatMap { it.archiveFile })
+}

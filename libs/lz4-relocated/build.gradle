@@ -1,0 +1,36 @@
+plugins {
+    id 'java-library'
+    id 'com.gradleup.shadow' version '8.3.11'
+}
+
+group = mod_group_id
+version = mod_version
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    lz4Shadow {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    lz4Shadow 'org.lz4:lz4-java:1.8.0'
+}
+
+apply from: rootProject.file('gradle/lz4-relocate.gradle')
+
+tasks.named('shadowJar') {
+    archiveClassifier.set('')
+    archiveBaseName.set('lz4-relocated')
+    configurations = [project.configurations.lz4Shadow]
+    configureLz4Shadow(it)
+    configureLz4ShadowExcludes(it)
+}
+
+tasks.named('jar') {
+    enabled = false
+}

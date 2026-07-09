@@ -1,0 +1,20 @@
+// LZ4 重定位与 JPMS 冲突规避（Issue #13）
+// 重定位仅在 :libs:lz4-relocated 模块执行；loader 直接 bundle 已重定位产物
+
+ext.configureLz4Shadow = { task ->
+    task.relocate('net.jpountz', 'com.mapsyncer.net.jpountz')
+    task.exclude('net/jpountz/util/linux/**')
+    task.exclude('net/jpountz/util/darwin/**')
+    task.exclude('net/jpountz/util/win32/**')
+    task.exclude('META-INF/versions/9/module-info.class')
+}
+
+ext.configureLz4ShadowExcludes = { task ->
+    task.exclude 'net/jpountz/**'
+    task.exclude 'org/slf4j/**'
+    task.exclude 'META-INF/versions/9/module-info.class'
+    task.exclude 'META-INF/*.SF'
+    task.exclude 'META-INF/*.DSA'
+    task.exclude 'META-INF/*.RSA'
+    task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

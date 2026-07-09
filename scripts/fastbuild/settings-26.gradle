@@ -21,6 +21,7 @@ rootProject.name = mod_id
 
 // ── 抽象库层 ──
 include 'libs:core'
+include 'libs:lz4-relocated'
 include 'libs:platform-api'
 include 'libs:common'
 include 'libs:mc-26'

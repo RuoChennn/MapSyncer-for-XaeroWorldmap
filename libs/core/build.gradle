@@ -1,19 +1,16 @@
 plugins {
     id 'java-library'
+    id 'com.gradleup.shadow' version '8.3.5'
 }
 
 group = mod_group_id
 version = mod_version
 
-// Core 模块兼容 Java 17（字节码），但使用 Java 21 编译
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
-
-// Core 模块：纯 Java 实现，无 Minecraft/NeoForge 依赖
-// 包含 MCA 解析器、NBT 解析器、工具类
 
 repositories {
     mavenCentral()
@@ -28,7 +25,9 @@ configurations {
 
 dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.9'
-    implementation 'org.lz4:lz4-java:1.8.0'
+    implementation(project(':libs:lz4-relocated')) {
+        transitive = false
+    }
     packagerLogging 'org.slf4j:slf4j-simple:2.0.9'
 }
 
@@ -36,12 +35,11 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// ============================================================
-// MapPackager CLI 工具（独立可运行 fat JAR）
-// ============================================================
+apply from: rootProject.file('gradle/lz4-relocate.gradle')
+
 def packagerMainClass = 'com.mapsyncer.tool.MapPackager'
 
-task mapPackagerJar(type: Jar) {
+tasks.register('mapPackagerJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
     archiveClassifier = ''
     archiveBaseName = 'mapsyncer-packager'
     archiveVersion = mod_version
@@ -49,27 +47,12 @@ task mapPackagerJar(type: Jar) {
 
     manifest {
         attributes 'Main-Class': packagerMainClass
-        attributes 'Multi-Release': 'true'
     }
 
-    // 包含 core 模块的编译输出
     from sourceSets.main.output
+    configurations = [project.configurations.runtimeClasspath, project.configurations.packagerLogging]
+    configureLz4ShadowExcludes(it)
 
-    // 打包 SLF4J API 运行时依赖
-    from {
-        configurations.runtimeClasspath.collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    }
-
-    // 打包 slf4j-simple（独立于 Minecraft 模块的 logging 实现）
-    from {
-        configurations.packagerLogging.collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    }
-
-    // 排除签名文件避免 fat JAR 签名冲突
     exclude 'META-INF/*.SF'
     exclude 'META-INF/*.DSA'
     exclude 'META-INF/*.RSA'
@@ -78,7 +61,7 @@ task mapPackagerJar(type: Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-task mapPackagerDist(type: Zip) {
+tasks.register('mapPackagerDist', Zip) {
     dependsOn mapPackagerJar
 
     archiveFileName = "mapsyncer-packager-${mod_version}.zip"

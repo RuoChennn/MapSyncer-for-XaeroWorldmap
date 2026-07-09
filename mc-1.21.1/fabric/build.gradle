@@ -1,5 +1,6 @@
 plugins {
     id 'fabric-loom' version '1.9.2'
+    id 'com.gradleup.shadow' version '8.3.5'
 }
 
 version = mod_version + '-fabric-' + g2_jar_suffix
@@ -34,6 +35,8 @@ sourceSets.main.resources.srcDirs(
     'src/main/resources',
 )
 
+apply from: rootProject.file('gradle/fabric-lz4-shadow.gradle')
+
 dependencies {
     // Minecraft and Fabric 1.21.1
     minecraft "com.mojang:minecraft:1.21.1"
@@ -50,9 +53,8 @@ dependencies {
     // 依赖核心模块
     implementation project(':libs:core')
     implementation project(':libs:platform-api')
-    // include 会将依赖打包到 JAR 中
-    include project(':libs:core')
-    include project(':libs:platform-api')
+    shadowBundle project(':libs:core')
+    shadowBundle project(':libs:platform-api')
 }
 
 tasks.withType(JavaCompile).configureEach {

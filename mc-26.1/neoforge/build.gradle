@@ -76,6 +76,8 @@ processResources {
     }
 }
 
+apply from: rootProject.file('gradle/lz4-relocate.gradle')
+
 // 创建仅包含项目内部依赖的配置
 configurations {
     bundle
@@ -85,16 +87,10 @@ dependencies {
     bundle project(':libs:platform-api')
 }
 
-// Shadow 插件配置：仅打包项目内部依赖
 shadowJar {
     archiveClassifier.set('')
     configurations = [project.configurations.bundle]
-    // 排除 slf4j（运行时已由模块系统提供）
-    exclude 'org/slf4j/**'
-    // 排除 META-INF 中的签名文件
-    exclude 'META-INF/*.SF'
-    exclude 'META-INF/*.DSA'
-    exclude 'META-INF/*.RSA'
+    configureLz4ShadowExcludes(it)
 }
 
 // 重新配置 jar 任务依赖 shadowJar

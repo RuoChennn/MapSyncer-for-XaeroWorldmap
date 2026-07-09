@@ -9,7 +9,7 @@ import java.io.*;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
-import net.jpountz.lz4.LZ4BlockInputStream;
+import com.mapsyncer.net.jpountz.lz4.LZ4BlockInputStream;
 
 /**
  * MCA文件读取器 - 零依赖实现

@@ -20,6 +20,7 @@ rootProject.name = mod_id
 
 // ── 抽象库层（平台无关，编译为独立 JAR）──
 include 'libs:core'             // 纯 Java 核心（MCA/NBT/工具类）
+include 'libs:lz4-relocated'    // lz4-java 重定位产物（规避 JPMS 包冲突）
 include 'libs:platform-api'     // 平台抽象接口
 include 'libs:common'           // 全版本共享的代码（source-only，不独立编译）
 include 'libs:mc-1.20'          // G1 锚点 1.20.1

@@ -1,5 +1,6 @@
 plugins {
     id 'net.fabricmc.fabric-loom-remap' version '1.15.4'
+    id 'com.gradleup.shadow' version '8.3.5'
 }
 
 version = mod_version + '-fabric-' + g3_jar_suffix
@@ -30,6 +31,8 @@ sourceSets.main.resources.srcDirs(
     'src/main/resources',
 )
 
+apply from: rootProject.file('gradle/fabric-lz4-shadow.gradle')
+
 dependencies {
     minecraft "com.mojang:minecraft:1.21.11"
     mappings loom.officialMojangMappings()
@@ -38,8 +41,8 @@ dependencies {
     modImplementation "me.shedaniel.cloth:cloth-config-fabric:15.0.127"
     implementation project(':libs:core')
     implementation project(':libs:platform-api')
-    include project(':libs:core')
-    include project(':libs:platform-api')
+    shadowBundle project(':libs:core')
+    shadowBundle project(':libs:platform-api')
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -69,6 +69,8 @@ processResources {
     }
 }
 
+apply from: rootProject.file('gradle/lz4-relocate.gradle')
+
 configurations {
     bundle
 }
@@ -80,10 +82,7 @@ dependencies {
 shadowJar {
     archiveClassifier.set('')
     configurations = [project.configurations.bundle]
-    exclude 'org/slf4j/**'
-    exclude 'META-INF/*.SF'
-    exclude 'META-INF/*.DSA'
-    exclude 'META-INF/*.RSA'
+    configureLz4ShadowExcludes(it)
 }
 
 tasks.named('jar') {
