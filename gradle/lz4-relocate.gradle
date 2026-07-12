@@ -10,7 +10,11 @@ ext.configureLz4Shadow = { task ->
 }
 
 ext.configureLz4ShadowExcludes = { task ->
-    task.exclude 'net/jpountz/**'
+    // 注意：不要在这里 exclude 'net/jpountz/**'。
+    // shadow 的 exclude 先于 relocate 执行，会在重定位前把原始类全部排除，
+    // 导致 lz4-relocated 产出一个空 jar（Issue #13 评论）。
+    // relocate（configureLz4Shadow）已将包名改为 com.mapsyncer.net.jpountz，
+    // loader 模块经 bundle 拿到的也是重定位后的包名，不会残留裸 net/jpountz。
     task.exclude 'org/slf4j/**'
     task.exclude 'META-INF/versions/9/module-info.class'
     task.exclude 'META-INF/*.SF'

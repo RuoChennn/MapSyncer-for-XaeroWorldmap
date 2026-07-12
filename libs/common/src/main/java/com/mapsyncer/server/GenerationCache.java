@@ -250,24 +250,42 @@ public class GenerationCache {
         if (!Files.isDirectory(dimDir)) {
             return null;
         }
+        String fileName = parts[parts.length - 1] + ".zip";
+
+        // 服务端缓存目录是扁平的：zip 直接位于维度目录下，无 mw$ 中间层。
+        //   地表：{dimDir}/{region}.zip
+        //   洞穴：{dimDir}/caves/{layer}/{region}.zip
+        Path flatPath;
+        if (parts.length == 2) {
+            flatPath = dimDir.resolve(fileName);
+        } else if (parts.length == 4 && "caves".equals(parts[1])) {
+            flatPath = dimDir.resolve("caves").resolve(parts[2]).resolve(fileName);
+        } else {
+            flatPath = null;
+        }
+        if (flatPath != null && Files.isRegularFile(flatPath)) {
+            return flatPath;
+        }
+
+        // 回退：mw$ 是客户端 Xaero Worldmap 的目录约定（{dimDir}/mw$id/{region}.zip）。
+        // 用于兼容含 mw$ 子目录的布局。
         Path mwDir;
         try (var stream = Files.list(dimDir)) {
             mwDir = stream.filter(p -> p.getFileName().toString().startsWith("mw$"))
                     .findFirst().orElse(null);
         } catch (IOException e) {
-            return null;
+            return flatPath;
         }
         if (mwDir == null) {
-            return null;
+            return flatPath;
         }
-        String fileName = parts[parts.length - 1] + ".zip";
         if (parts.length == 2) {
             return mwDir.resolve(fileName);
         }
         if (parts.length == 4 && "caves".equals(parts[1])) {
             return mwDir.resolve("caves").resolve(parts[2]).resolve(fileName);
         }
-        return null;
+        return flatPath;
     }
 
     /**
