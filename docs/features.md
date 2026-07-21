@@ -1,416 +1,286 @@
-# MapSyncer 功能实现文档
+# MapSyncer 功能模块
 
-本文档列出了 MapSyncer for XaeroWorldmap 模组的功能实现状态。
+将服务端已探索 / 预生成的 MCA 区域转换为 Xaero's World Map 格式，经网络或离线包同步到客户端。
 
-**状态标记**: ✅ 已实现已测试 | 🧪 已实现未测试 | ⚠️ 已知问题 | 📝 规划中
+**适用场景**：新玩家进服、Chunky 预生成大地图、减少重复跑图。
+
+**状态**：✅ 已实现
 
 ---
 
-## 一、核心功能
-
-MapSyncer 是 Minecraft 多平台地图同步模组，将服务端已探索区域同步到客户端 Xaero's World Map。
-
-**适用场景**: 玩家首次进入已开放服务器，或服务器已用 Chunky 预生成地图。
+## 一、平台与架构
 
 ### 平台支持
 
-| 平台 | Minecraft 版本 | 加载器版本 | Java | 状态 |
-|------|----------------|------------|------|------|
-| **Forge** | 1.20.1 | 47+ | 17 | ✅ |
-| **Fabric** | 1.20.1 | Fabric API 0.83+ | 17 | ✅ |
-| **Forge** | 1.21.1 | 52+ | 21 | ✅ |
-| **Fabric** | 1.21.1 | Fabric API 0.107+ | 21 | ✅ |
-| **NeoForge** | 1.21.1 | 21.1+ | 21 | ✅ |
-| **Forge** | 1.21.11 | 61+ | 21 | ✅ |
-| **Fabric** | 1.21.11 | Fabric API 0.141+ | 21 | ✅ |
-| **NeoForge** | 1.21.11 | 21.1+ | 21 | ✅ |
-| **Fabric** | 26.1 | Fabric API 0.149+ | 25 | ✅ |
-| **NeoForge** | 26.1 | 26.1+ | 25 | ✅ |
+| MC 版本 | Forge | NeoForge | Fabric | Java |
+|---------|:-----:|:--------:|:------:|:----:|
+| 1.20.1 | ✅ | — | ✅ | 17 |
+| 1.21.1 | ✅ | ✅ | ✅ | 21 |
+| 1.21.11 | ✅ | ✅ | ✅ | 21 |
+| 26.1 | — | ✅ | ✅ | 25 |
+| 26.2 | — | ✅ | ✅ | 25 |
+
+> 1.20.4 前 NeoForge、26.x Forge 不做适配。客户端依赖 Xaero's World Map **1.40.11+**。服务端无需安装 Xaero。
 
 ### 架构分层
 
 ```
-libs/               抽象库层（平台无关，编译为独立 JAR）
-├── core/           纯 Java 核心（MCA/NBT 解析、工具类、MapPackager）
-├── platform-api/   平台抽象接口、网络 Payload 定义
-└── common/         客户端/服务端共享逻辑（同步、缓存、自动同步）
+libs/common/        全版本业务逻辑（同步、缓存、命令逻辑、配置解析）
+libs/core/          纯 Java（MCA/NBT、MapPackager）
+libs/platform-api/  Platform 接口、网络 Payload、常量
+libs/mc-1.20/       G1 锚点（1.20.1 API）
+libs/mc-1.21/       G2 锚点（1.21.1 API）
+libs/mc-1.21.11/    G3 锚点（1.21.11 API）
+libs/mc-26/         G4 锚点（26.x API）
 
-mc-1.20.1/          MC 1.20.1 版本
-├── shared/         源码复用层（不独立编译，由平台模块 sourceSet 引用）
-├── fabric/         平台实现层（编译产出最终 mod JAR）
-└── forge/
-
-mc-1.21.1/          MC 1.21.1 版本
-├── shared/
-├── fabric/
-├── forge/
-└── neoforge/
-
-mc-1.21.11/         MC 1.21.11 版本
-├── shared/
-├── fabric/
-├── forge/
-└── neoforge/
-
-mc-26.1/            MC 26.1 版本
-├── shared/
-├── fabric/
-└── neoforge/
+mc-{精确版本}/{fabric|forge|neoforge}/   Loader 胶水（Platform 实现、网络注册）
 ```
 
 ---
 
 ## 二、命令系统
 
-### 服务端命令（需 OP 权限等级 4）
+### 客户端（`/mapsyncer`）
 
-| 命令 | 状态 | 说明 |
-|------|------|------|
-| `/mapsyncer generate` | ✅ | 生成所有维度缓存 |
-| `/mapsyncer generate <dim>` | ✅ | 生成指定维度（增量模式） |
-| `/mapsyncer generate <dim> <x> <z>` | ✅ | 生成单个区域 |
-| `/mapsyncer generate <dim> --force` | ✅ | 强制生成（清除缓存后重新生成） |
-| `/mapsyncer status` | ✅ | 查看生成进度和缓存统计（区域数量、各维度大小） |
-| `/mapsyncer incremental off` | ✅ | 关闭增量更新 |
-| `/mapsyncer incremental tick [interval]` | ✅ | Tick 模式（interval: 2400–72000 ticks，默认 6000 = 5 分钟） |
-| `/mapsyncer incremental scheduled [hour] [minute]` | ✅ | 定时模式（hour: 0-23, minute: 0-59） |
+| 命令 | 说明 |
+|------|------|
+| `/mapsyncer` / `help` | 帮助（Forge/NeoForge 上 OP4+ 可见服务端命令说明） |
+| `sync` / `sync <维度>` / `sync all` | 同步当前 / 指定 / 全部维度 |
+| `autosync` / `autosync on\|off` | 查看或开关客户端自动同步（写入配置） |
 
-### 客户端命令
+**维度补全**：原版三维度、`all`、当前维度、已注册 Mod 维度、已有 Xaero 地图目录。
 
-| 命令 | 状态 | 说明 |
-|------|------|------|
-| `/mapsyncer sync` | ✅ | 同步当前维度 |
-| `/mapsyncer sync <dim>` | ✅ | 同步指定维度（支持 `overworld`/`the_nether`/`the_end` 及 Mod 维度 ID） |
-| `/mapsyncer sync all` | ✅ | 同步所有维度 |
-| `/mapsyncer clearstate` | ✅ | 清除同步恢复状态（忽略断点续传） |
+### 服务端（需 OP 等级 4）
 
-**维度自动补全**: 包含 `overworld`、`the_nether`、`the_end`、`all`、当前维度、所有注册的 Mod 维度、已有 Xaero 地图目录。
+| 平台 | 前缀 |
+|------|------|
+| Fabric | `/mapsyncerserver` |
+| Forge / NeoForge | `/mapsyncer` |
 
----
+| 命令 | 说明 |
+|------|------|
+| `generate` / `generate <维>` / `generate <维> <x> <z>` | 全维 / 指定维 / 单 region 生成 |
+| `generate <维> --force` | 清缓存后强制重生成 |
+| `status` | 转换进度、增量状态、各维度缓存统计 |
+| `incremental off` | 关闭增量更新 |
+| `incremental tick [间隔]` | TICK 模式（2400–72000，默认 6000 = 5 分钟） |
+| `incremental scheduled [时] [分]` | SCHEDULED 模式（默认 04:00，服务器本地时区） |
+| `reloadconfig` | 从磁盘重载服务端配置 |
+| `help` | 服务端帮助 |
 
-## 三、同步系统
-
-### 传输优化
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| CRC32 哈希比对 | ✅ | 哈希一致跳过同步，流式计算避免内存峰值 |
-| 时间戳比对 | ✅ | 客户端旧于服务端才同步 |
-| 分批传输 | ✅ | 默认 256KB，可配置 64KB-1MB |
-| 速率限制 | ✅ | 默认 1MiB/s，可配置（0=不限） |
-| 断点续传 | ✅ | 中断后重连可恢复（基于哈希比对） |
-| 流式加载 | ✅ | 边接收边写入 Xaero 目录，立即触发重载 |
-| 带宽感知限速 | ✅ | 动态调整避免阻塞游戏网络 |
-| 视距优先排序 | ✅ | 玩家视距范围内的区域优先传输 |
-
-### Payload 分片传输
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 双向自动分片 | ✅ | 所有 >28KB 的数据在发送前拆分为小包（~1KB each） |
-| 接收端组装 | ✅ | 客户端自动识别分片并重新组装，支持乱序到达 |
-| 版本隔离 | ✅ | 分片处理逻辑在所有 MC 版本的 shared 层统一实现 |
-
-### 同步冲突防护
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 同步进行中拒绝 | ✅ | 同步进行中时拒绝新请求，避免并发同步冲突 |
-| 过期检测 | ✅ | 10 分钟超时自动清除残留状态 |
-| 离线玩家清理 | ✅ | 60 秒周期检查并清理已离线玩家的同步状态 |
-
-### 客户端增量更新功能
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 双重比对 | ✅ | 哈希+时间戳选择性更新 |
-| 时间戳缓存 | ✅ | 持久化（`sync_timestamps.cache`），秒级精度，服务器切换自动重初始化 |
-| Chunk Update 控制 | ✅ | 同步时暂停 Xaero 区块写入 |
-| 选择性重载 | ✅ | 仅重置视距范围内区域 |
-
-### 服务端同步规则
-
-1. 哈希匹配 → 跳过（内容相同）
-2. 哈希不匹配 + 客户端时间戳较旧 → 同步
-3. 哈希不匹配 + 客户端时间戳较新 → 跳过（客户端更新）
-4. 客户端无元数据 → 同步（新区域）
+生成任务进行中时拒绝新任务。生成前主线程 `saveEverything`（兼容 C2ME）。
 
 ---
 
-## 三B、增量更新模式与客户端自动同步
+## 三、客户端配置
 
-玩家加入时服务端发送 `ServerInstalledPayload`（含 `updateMode`、`lastGenerationTimestamp`、`incrementalUpdateIntervalTicks` 等）。客户端 `AutoSyncManager` 据此决定是否自动 `sync all`；手动 `/mapsyncer sync` 始终可用且不受冷却限制。
+| 路径 | 说明 |
+|------|------|
+| Fabric | `config/mapsyncer-client.properties` |
+| Forge / NeoForge | `config/mapsyncer-client.toml` → `[client]` |
 
-### DISABLED
-
-| 端 | 行为 | 状态 |
-|----|------|------|
-| 服务端 | 不启动 `IncrementalUpdateHandlerLogic` | ✅ |
-| 客户端进服 | 不自动 sync | ✅ |
-| 客户端断点续传 | 进服检测 `needsResume()`，聊天栏提示续传命令 | ✅ |
-
-### TICK（周期模式）
-
-| 端 | 行为 | 状态 |
-|----|------|------|
-| 服务端 | 每 N tick 调用 `ConversionOrchestrator.performIncrementalScan()`（默认 6000 = 5min，最小 2400 = 2min） | ✅ |
-| 客户端进服 | 时间戳比对 + **冷却**（冷却 = tick 间隔分钟数）；满足则 5s 后 `sync all`，聊天栏「正在自动同步…」 | ✅ |
-| 客户端在线 | `scheduleAtFixedRate`，周期 = tick×50ms；`markPeriodicSync()` + Action Bar 周期同步文案 | ✅ |
-| 客户端完成（周期） | 有数据 / 已最新 → Action Bar；不发聊天 | ✅ |
-
-### SCHEDULED（日程表模式）
-
-| 端 | 行为 | 状态 |
-|----|------|------|
-| 服务端 | 每日 `scheduledUpdateHour:Minute`（默认 04:00，本地时区）1 分钟窗口内扫描一次；`lastScheduledUpdate` 防重复 | ✅ |
-| 客户端进服 | **仅时间戳**：`clientMax < serverLastGen` → 自动 sync；**无冷却** | ✅ |
-| 客户端在线 | 无周期计时器；服务端更新后不主动拉取 | ✅ |
-| 客户端进服提示 | 「自动同步：每天」（指服务端 schedule；触发仍看时间戳） | ✅ |
-
-### 共用
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 断点续传优先 | ✅ | `hasPendingResume()` 时进服必 sync；TICK/SCHEDULED 开启时跳过断点续传聊天提示 |
-| 服务端无缓存时间 | ✅ | `lastGenerationTimestamp <= 0` 时不触发进服自动 sync |
-| 客户端已最新 | ✅ | `clientMax >= serverLastGen` 时不触发进服自动 sync |
+| 配置项 | 默认 | 范围 | 说明 |
+|--------|------|------|------|
+| `hashThreads` | CPU/2 | 1~核心数 | 同步前本地 region CRC32 并行扫描 |
+| `mapRegionLoadIntervalTicks` | 1 | -1~100 | 视距外 region 喂给 Xaero：-1=一次排空，0=仅视距内，N=每 N tick 1 个（防 OOM；兼容旧键 `mapRegionLoadsPerTick`） |
+| `autoSyncEnabled` | true | — | 进服自动 sync（TICK/SCHEDULED）+ TICK 在线周期 sync；关后仍可手动 sync |
 
 ---
 
-## 四、地图生成系统
+## 四、服务端配置
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 全维度生成 | ✅ | 自动扫描所有已存在区块的维度 |
-| Mod 维度支持 | ✅ | 支持 ResourceLocation 格式（暮光森林测试通过） |
-| 洞穴模式 | ✅ | layerPlan 驱动地表/洞穴多层（SURFACE、ALL、显式 Y）；单次 MCA 解析多 pass；地狱默认 `SURFACE,63`（v1.0.4 已验证） |
-| 地狱上层地表 | ✅ | 有顶盖维度 `SURFACE` 扫描逻辑顶以上（Y≥128），忽略指向下层的高度图 |
-| 增量更新 | ✅ | TICK 周期模式 + SCHEDULED 定时模式 |
-| 强制保存机制 | ✅ | 读取前调用 `server.saveEverything()` 确保数据一致性，兼容 C2ME |
-| 并发转换 | ✅ | 可配置线程池（默认 4 线程，最大 16），线程使用 MIN_PRIORITY 降低对服务端 tick 的 CPU 争用 |
-| 两遍处理 | ✅ | 第一遍处理时间戳变更区域，第二遍捕获新增区域 |
-| 世界格式自适应 | ✅ | 自动检测新格式（MC 26.1+）和传统格式 |
-| Xaero 路径自适应 | ✅ | 优先使用新版 `xaero/world-map`，旧版 `XaeroWorldMap` 目录存在时自动 fallback |
-| 内置服务器支持 | ✅ | 检测到内置服务器时复用主机 Xaero 存档目录作为地图缓存 |
-| 单独区域生成 | ✅ | 支持 `generate <dim> <x> <z>` 指定单个区域 |
-| 高度图优先级 | ✅ | WORLD_SURFACE 优先，对齐 Xaero 的树冠表面计算 |
+| 路径 | 说明 |
+|------|------|
+| Forge | `world/serverconfig/mapsyncer-server.toml`（每世界） |
+| NeoForge | `config/mapsyncer-server.toml` |
+| Fabric | `config/mapsyncer-server.properties`（camelCase / snake_case 双键名） |
 
----
+### 通用 `[general]`
 
-## 五、配置系统
+| 配置项 | 默认 | 范围 | 说明 |
+|--------|------|------|------|
+| `enableDebugLogging` | false | — | 地图生成调试日志 |
+| `maxConcurrentRegions` | **0（自动）** | 0–16 | 并发 MCA→Xaero 数；**0** = `max(1, min(16, 逻辑处理器数 − 2))`；正数为手动 |
+| `maxSyncPacketSize` | 262144 (256KB) | 64KB–1MB | 同步单包上限 |
+| `syncSpeedLimitKBps` | 1024 (1MiB/s) | 0–10240 | 同步限速（0=不限） |
 
-**配置文件位置**：Forge → `world/serverconfig/mapsyncer-server.toml`（每个世界独立）；NeoForge → `config/mapsyncer-server.toml`；Fabric → `config/mapsyncer-server.properties`
+### 增量更新 `[incremental_update]`
 
-### 客户端配置
+| 配置项 | 默认 | 说明 |
+|--------|------|------|
+| `incrementalUpdateMode` | DISABLED | DISABLED / TICK / SCHEDULED |
+| `incrementalUpdateIntervalTicks` | 6000 | TICK 间隔（最小 2400 = 2 分钟） |
+| `scheduledUpdateHour` / `Minute` | 4 / 0 | 定时点（本地时区） |
 
-**配置文件位置**：Fabric → `config/mapsyncer-client.properties`；Forge/NeoForge → `config/mapsyncer-client.toml` 的 `[client]` 段。
+### 维度扫描 `[dimension_scan]`
 
-| 配置项 | 类型 | 默认值 | 范围 | 说明 |
-|--------|------|--------|------|------|
-| `hashThreads` | int | CPU 核心数/2 | 1~核心数 | CRC32 哈希计算并行线程数 |
-| `mapRegionLoadIntervalTicks` | int | 1 | -1~100 | 视距外 region 传入 Xaero 的 tick 间隔：-1=一次排空，0=仅视距内，N=每 N tick 加载 1 个（Fabric 加载时兼容旧键 `mapRegionLoadsPerTick`；Fabric GUI 可配置） |
-| `autoSyncEnabled` | boolean | true | — | 进服自动同步（TICK/SCHEDULED）；TICK 模式另启在线周期同步；关闭后仍可手动 `/mapsyncer sync`（Fabric GUI 可配置） |
+| 配置项 | 默认 | 说明 |
+|--------|------|------|
+| `default_scan_mode` | SURFACE | 未列入列表的维度回退（SURFACE / CAVE） |
+| `default_cave_start` | 63 | `CAVE` 回退时的 caveStart Y |
+| `dimension_configs` | 三原版预设 | 每维度一条字符串 |
 
-### 服务端配置
+**推荐条目格式**（Fabric 与 Forge/NeoForge 均为列表风格）：
 
-**通用设置:**
+```toml
+dimension_configs = [
+    "minecraft:overworld = SURFACE",
+    "minecraft:the_nether = SURFACE,63",
+    "minecraft:the_end = SURFACE"
+]
+```
 
-| 配置项 | 类型 | 默认值 | 范围 | 说明 |
-|--------|------|--------|------|------|
-| `enableDebugLogging` | boolean | false | -- | 地图生成调试日志 |
-| `maxConcurrentRegions` | int | 4 | 1-16 | 并发区域转换线程数 |
-| `maxSyncPacketSize` | int | 262144 (256KB) | 64KB-1MB | 单包最大字节数 |
-| `syncSpeedLimitKBps` | int | 1024 (1MiB/s) | 0-10240 | 同步速率限制（0=不限） |
+| layerPlan | 说明 |
+|-----------|------|
+| `SURFACE` | 仅地表；有顶盖维度扫逻辑顶以上（如地狱 Y≥128） |
+| `ALL` | 全高度洞穴层 |
+| `63` / `63,127` | 显式洞穴层（不含地表） |
+| `SURFACE,63` 等 | 组合；层号 = `caveStart >> 4` → `caves/<层号>/` |
 
-**增量更新设置:**
-
-| 配置项 | 类型 | 默认值 | 范围 | 说明 |
-|--------|------|--------|------|------|
-| `incrementalUpdateMode` | UpdateMode | DISABLED | DISABLED/TICK/SCHEDULED | 增量更新触发模式 |
-| `incrementalUpdateIntervalTicks` | int | 6000 (5min) | 2400–72000 | TICK 模式间隔（20 ticks = 1 秒） |
-| `scheduledUpdateHour` | int | 4 | 0-23 | 定时模式小时 |
-| `scheduledUpdateMinute` | int | 0 | 0-59 | 定时模式分钟 |
-
-**维度扫描设置:**
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `default_scan_mode` | ScanMode | SURFACE | 未配置维度的默认层计划回退（SURFACE=仅地表；CAVE=单层洞穴） |
-| `default_cave_start` | int | 63 | `default_scan_mode=CAVE` 时未配置维度的 caveStart Y |
-| `dimension_configs` | List | 3 个原版预设 | 每维度 layerPlan + 维度类型信息 |
-
-维度配置格式: `"dimension|layerPlan|dim_type_info"`，其中 `dim_type_info` 为 `"hasSkylight|hasCeiling|minY|height|logicalHeight"`
-
-**layerPlan**（逗号分隔）:
-
-| 值 | 说明 |
-|----|------|
-| `SURFACE` | 仅地表（有顶盖维度为逻辑顶以上） |
-| `ALL` | 维度高度范围内全部洞穴层 |
-| `63` / `63,127` | 仅显式洞穴层 |
-| `SURFACE,63` / `SURFACE,ALL` / `ALL,63` | 组合；ALL 与显式 Y 按层号去重 |
-
-默认预设:
-- 主世界: `SURFACE`, hasSkylight=true, hasCeiling=false, minY=-64, height=384
-- 地狱: `SURFACE,63`, hasSkylight=false, hasCeiling=true, minY=0, height=256, logicalHeight=128
-- 末地: `SURFACE`, hasSkylight=false, hasCeiling=false, minY=0, height=256
-
-**洞穴层号**：`caveStart >> 4`（Y=63 → 层 3 → `caves/3/`）
-
-旧格式 `"dimension|scan_mode|cave_start|dim_type_info"` 仍可读取（如 `CAVE|63`、`SURFACE|63`），会合并为 layerPlan。
-
-### 缓存常量 (`CacheConfig`)
-
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| MAX_REGION_META_CACHE | 50000 条 | 区域元数据缓存上限 |
-| MAX_REGION_TIMESTAMP_CACHE | 50000 条 | 时间戳缓存上限 |
-| MAX_BLOCK_COLOR_CACHE | 5000 条 | 方块颜色缓存上限 |
-| MAX_BLOCK_PROPERTIES_CACHE | 10000 条 | 方块属性缓存上限 |
-
-### 超时常量 (`TimeoutConfig`)
-
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| TASK_TIMEOUT_SECONDS | 60s | 单区域转换超时 |
-| SAVE_TIMEOUT_MS | 60s | 区块保存超时 |
-| STALE_SYNC_TIMEOUT_MS | 10min | 同步过期检测 |
-| SERVER_RESPONSE_TIMEOUT_MS | 5s | 服务端响应超时 |
+**兼容**：`dimension|layerPlan`、旧多字段管道、Fabric 旧键 `dimensionConfig.N` / `dimensionConfigs=a;b`。维度类型信息运行时从服务器 API 获取，**不再写入配置**。
 
 ---
 
-## 六、网络协议
+## 五、地图同步
 
-6 种 Payload，全部平台无关:
+### 决策（`RegionSyncPolicy`）
 
-| Payload | 方向 | 说明 |
+1. 哈希一致 → 跳过  
+2. 哈希不一致且客户端时间戳 ≥ 服务端 → 跳过（保留本地探索）  
+3. 哈希不一致且客户端更旧 → 传输  
+4. 客户端无元数据 → 传输  
+
+### 传输能力
+
+| 功能 | 说明 |
+|------|------|
+| CRC32 + 时间戳 | 双重过滤增量同步 |
+| 视距优先 | 视距内先传，其余按距离排序 |
+| 分批 / 限速 | 按 `maxSyncPacketSize`、`syncSpeedLimitKBps` |
+| Payload 分片 | >28KB 拆 ~1KB 小包，接收端乱序组装 |
+| 流式写入 | 边收边写 `mw$worldId/`，每 region 触发重载 |
+| 断点续传 | 基于客户端 `sync_timestamps.cache`，无需服务端记进度 |
+| 冲突防护 | 同步中拒新请求；10 分钟过期；离线/切维中断；约每 60s 清理离线残留 |
+| 握手保护 | 未装 MapSyncer 的客户端不发自定义包 |
+
+### 网络 Payload（6 种）
+
+| Payload | 方向 | 作用 |
 |---------|------|------|
-| `ServerInstalledPayload` | 服务端→客户端 | 玩家加入时通知：版本、最后生成时间、更新模式、TICK 间隔 tick 数 |
-| `SyncRequestPayload` | 客户端→服务端 | 发送区域元数据（路径→时间戳+哈希）用于差异比对 |
-| `SyncResponsePayload` | 服务端→客户端 | 传输区域数据批次（状态: ok/uptodate/no_cache/dim_not_available/in_progress） |
-| `ChunkMapData` | 嵌入 SyncResponse | 单区域压缩地图数据，含 caveLayer 字段 |
-| `SyncProgressPayload` | 服务端→客户端 | 进度更新（已处理/总数/状态），客户端以 Action Bar 形式显示 |
-| `ClientMeta` | 嵌入 SyncRequest | 区域元数据: 秒级时间戳 + CRC32 哈希 |
-
-### 握手保护
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| Forge 握手保护 | ✅ | 服务端检查客户端 mod 列表，未安装 MapSyncer 则跳过发送自定义 payload |
-| NeoForge 双向握手 | ✅ | 握手阶段检查 `mods()` 返回值，未安装则拒发 payload |
-| 重复注册防护 | ✅ | NetworkHandler 幂等防护，防止 payload 重复注册 |
+| `ServerInstalledPayload` | 服→客 | 版本、最后生成时间、更新模式、TICK 间隔 |
+| `SyncRequestPayload` | 客→服 | 区域元数据（路径→时间戳+CRC32），可分片 |
+| `SyncResponsePayload` | 服→客 | 区域数据；状态含 ok / uptodate / no_cache / dim_not_available / in_progress / aborted:* |
+| `ChunkMapData` | 嵌入响应 | 单 region 压缩图 + `caveLayer` |
+| `SyncProgressPayload` | 服→客 | 进度（Action Bar） |
+| `ClientMeta` | 嵌入请求 | 秒级时间戳 + CRC32 |
 
 ---
 
-## 七、维度路径映射
+## 六、增量更新与客户端自动同步
+
+服务端 `incrementalUpdateMode` 控制**何时重扫 MCA 更新缓存**；客户端在 `autoSyncEnabled=true` 时按同一模式决定是否**自动 sync**。手动 `/mapsyncer sync` 始终可用。
+
+| 模式 | 服务端 | 客户端（autosync 开） |
+|------|--------|----------------------|
+| **DISABLED** | 不跑增量扫描 | 不自动 sync；未完成同步时可进服断点提示 |
+| **TICK** | 每 N tick 增量扫描 | 进服：时间戳 + 冷却 → 延迟 sync；**在线**周期 sync（Action Bar） |
+| **SCHEDULED** | 每日定点 1 分钟窗口扫描一次 | 进服仅时间戳比对（无冷却）；在线无周期 timer |
+
+**共用**：`needsResume` 时进服优先续传；`lastGenerationTimestamp<=0` 或客户端已最新则不触发进服自动 sync。
+
+---
+
+## 七、地图生成（MCA → Xaero）
+
+| 功能 | 说明 |
+|------|------|
+| 全维 / 单维 / 单 region / `--force` | 命令驱动生成 |
+| LayerPlan 多层输出 | 单次 MCA 解析多 pass（地表 + 洞穴） |
+| 并发转换 | `maxConcurrentRegions` 解析后的固定线程池，MIN_PRIORITY |
+| 增量扫描 | 比对 MCA mtime；两遍（变更 + 新增） |
+| 世界格式自适应 | MC 26.1+ 与传统格式 |
+| MCA 压缩 | GZIP / ZLIB / LZ4 |
+| 渲染对齐 | WORLD_SURFACE 优先；地狱逻辑顶；洞穴 underair 状态机；树叶/透明/染色等 |
+| 内置服务器 | 复用主机 Xaero 存档目录作缓存，跳过二次转换 |
+| Xaero 路径 | 优先 `xaero/world-map`，fallback `XaeroWorldMap` |
+
+流水线：`region/*.mca` → NBT 解析 → RegionConverter → `region.zip`（Xaero 6.8）→ GenerationCache → 网络 / MapPackager。
+
+---
+
+## 八、缓存
+
+| 缓存 | 位置 | 作用 | 上限 |
+|------|------|------|------|
+| GenerationCache | `server_map_cache/generation_cache.properties` | region 时间戳 + CRC32 | 50000 |
+| McaTimestampCache | 内存 | MCA mtime，驱动增量扫描 | 50000 |
+| ClientTimestampCache | `sync_timestamps.cache` | 客户端同步时间戳与断点状态 | 有 trim |
+| BlockColorMapper / BlockPropertyResolver | 内存 | 取色 / 属性 | 5000 / 10000 |
+
+`CacheConfig` / `TimeoutConfig`：单区域转换超时 60s、同步过期 10min、服务端响应超时 5s 等。
+
+---
+
+## 九、维度映射与存储
 
 | 维度 | Minecraft ID | Xaero 目录 |
 |------|--------------|------------|
 | 主世界 | `minecraft:overworld` | `null` |
 | 地狱 | `minecraft:the_nether` | `DIM-1` |
 | 末地 | `minecraft:the_end` | `DIM1` |
-| Mod 维度 | `namespace:path` | `namespace$path` |
-
----
-
-## 八、文件存储结构
+| Mod | `namespace:path` | `namespace$path` |
 
 ```
 服务端: <server>/server_map_cache/
-├── null/, DIM-1/, DIM1/           # 原版维度
-├── namespace$path/                 # Mod 维度
-├── caves/<layer>/                  # 洞穴模式输出
-└── generation_cache.properties     # 时间戳+哈希缓存
+├── null/, DIM-1/, DIM1/, namespace$path/
+├── caves/<layer>/
+└── generation_cache.properties
 
-客户端: <client>/xaero/world-map/Multiplayer_<serverIP>/  # 新版统一路径（优先）
-       <client>/XaeroWorldMap/Multiplayer_<serverIP>/      # 旧版路径（兼容 fallback）
-├── null/mw$<worldId>/             # 主世界
-├── DIM-1/mw$<worldId>/            # 地狱
-├── DIM1/mw$<worldId>/             # 末地
-├── caves/<layer>/                 # 洞穴层
-└── sync_timestamps.cache          # 同步时间戳缓存
+客户端: xaero/world-map/Multiplayer_<IP>/  （优先）
+       或 XaeroWorldMap/Multiplayer_<IP>/   （fallback）
+├── <维>/mw$<worldId>/
+├── caves/<layer>/
+└── sync_timestamps.cache
 ```
 
 ---
 
-## 九、MCA 解析系统
+## 十、MCA 解析与方块系统
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 独立解析器 | ✅ | 纯 Java，少量方块查询依赖 Minecraft API，不加载区块到内存 |
-| GZIP/ZLIB | ✅ | 支持压缩类型 1、2 |
-| NBT 解析 | ✅ | 全标签类型（0-12），嵌套结构，含大小限制防恶意数据 |
-| 方块状态解析 | ✅ | 调色板、属性、位数组 |
-| 生物群系解析 | ✅ | 4x4x4 voxel 格式 |
-| 表面扫描 | ✅ | layerPlan 驱动多 pass（地表/洞穴）；有顶盖维度 SURFACE 扫逻辑顶以上；WORLD_SURFACE 高度图优先 |
-| Xaero 洞穴格式 | ✅ | 洞穴空像素写 air（非 tile 级 -1）；tile footer 含 caveStart/caveDepth；洞穴群系按 cave Y 采样 |
-| Xaero 格式输出 | ✅ | 版本 6.8，TileChunk/Tile 结构 |
-| MCA/MCR 兼容 | ✅ | 正则匹配 `r.<x>.<z>.mca/mcr` |
+**MCA**：独立纯 Java 解析；GZIP/ZLIB/LZ4；NBT 全标签 + 大小/深度限制；调色板与生物群系 4×4×4；layerPlan 多 pass；Xaero 洞穴空像素写 air。
+
+**方块**：`BlockPropertyResolver` 桥接平台 API（air/流体/透明/发光等）；`BlockColorMapper`（MapColor + 启发式）；彩色玻璃 overlay、含水检测、Mod 方块识别。
 
 ---
 
-## 十、方块系统
+## 十一、MapPackager（离线分发）
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 属性查询 | ✅ | isAir/isWater/isLava/isFluid/isTransparent/isInvisible 等 15 字段 |
-| 含水检测 | ✅ | waterlogged 属性 + 名称匹配 |
-| Mod 方块识别 | ✅ | 注册表 API、RenderShape、BlockTags |
-| 颜色映射 | ✅ | MapColor API + 纹理提取 + 启发式规则 |
-| 植物/花卉检测 | ✅ | isFlower/isPlant/isGrassBlock |
-| 发光检测 | ✅ | isGlowing/lightBlock/lightEmission |
-| 透明方块处理 | ✅ | checkTransparency 包含 SnowLayerBlock 等透明覆盖物 |
-| 彩色玻璃处理 | ✅ | StainedGlassPaneBlock 作为 overlay 处理，普通玻璃保持隐形 |
-| 平台适配 | ✅ | 通过 `BlockPropertyResolver` 桥接 MC API 和纯 Java 核心 |
+```bash
+./gradlew buildPackager
+java -jar mapsyncer-packager.jar -c <缓存> -o <zip> [-s 名] [-w worldId] [-d 世界目录]
+```
+
+扫描全部维度（含洞穴层），输出 `Multiplayer_<名>/<维>/mw$<worldId>/`，并转换 `generation_cache.properties` → `sync_timestamps.cache`。纯 Java，无需 MC/Xaero 运行时。
 
 ---
 
-## 十一、MapPackager — 离线地图打包工具
+## 十二、客户端体验与稳定性
 
-独立 CLI 工具（`libs/core/.../tool/MapPackager.java`），将服务器缓存目录打包为客户端可直接使用的 Xaero 地图 zip 包。
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 维度扫描 | ✅ | 自动扫描 `server_map_cache/` 下所有维度目录 |
-| Zip 打包 | ✅ | 按 `Multiplayer_<name>/<dim>/mw$<worldId>/` 路径结构组织 |
-| 时间戳转换 | ✅ | `generation_cache.properties` → `sync_timestamps.cache` |
-| World ID 检测 | ✅ | 自动从 `xaeromap.txt` 读取，支持手动指定 |
-| CLI 参数 | ✅ | `-c` 缓存目录, `-o` 输出文件, `-s` 服务器名, `-w` World ID, `-d` 世界目录 |
-| Gradle 构建 | ✅ | `./gradlew buildPackager` 输出到 `output/` 目录 |
-
-用法: `java -jar mapsyncer-packager.jar -c ./cache -o ./output.zip`
+| 功能 | 说明 |
+|------|------|
+| 进度 / 完成耗时 | Action Bar；进服自动 sync 可有聊天提示 |
+| 同步时暂停 Xaero 写入 | 完成后恢复 |
+| 选择性重载 | 收到的 region；视距外由 `mapRegionLoadIntervalTicks` 限速排空 |
+| 洞穴层 | 按目标维度加载；清理 `.xwmc` / `.outdated` |
+| 多线程哈希 | ForkJoinPool，`hashThreads` 可配 |
+| 并发与内存 | ConcurrentHashMap、流式 CRC32、缓存上限、overlay 不重复存储 |
+| 生命周期 | 停服清理线程池与静态缓存；玩家断开立即中断 sync |
 
 ---
 
-## 十二、安全与稳定性
+## 已知限制
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 并发保护 | ✅ | volatile、ConcurrentHashMap、锁 |
-| 内存管理 | ✅ | 流式 CRC32 + 稀疏 overlay 存储 + 缓存上限 + 时间戳缓存无限增长修复 |
-| NBT 大小限制 | ✅ | array/list/depth 限制防恶意数据（MAX_LIST_SIZE 100000） |
-| 错误处理 | ✅ | 单区块失败不中断 |
-| C2ME 兼容 | ✅ | 主线程调度保存 |
-| 异步同步 | ✅ | 独立守护线程，不阻塞服务端主线程/Watchdog |
-| 断开处理 | ✅ | 玩家断开/切维度立即中断同步线程 |
-| 过期清理 | ✅ | 60 秒周期检查离线玩家残留状态 |
-| 服务器重启安全 | ✅ | 关闭时清理线程池、重置单例缓存、清除静态缓存 |
-| 光照双重存储修复 | ✅ | overlay 数据不重复存储，避免 OOM |
+- 部分 Mod 维度多层洞穴 LayerPlan 需自行验证
+- v1.0.4 已修复地狱 `SURFACE,63` 地表/洞穴显示问题（见 `CHANGELOG.md`）
 
----
-
-## 十三、客户端特性
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 同步进度显示 | ✅ | Action Bar 动态刷新百分比 + 完成后总耗时 |
-| 断点续传提示 | ✅ | 重连后检测未完成同步，显示可点击的继续/忽略按钮 |
-| **自动同步** | ✅ | 见 [三B、增量更新模式与客户端自动同步](#三b增量更新模式与客户端自动同步)：DISABLED 关闭；TICK 进服+在线周期；SCHEDULED 进服仅时间戳比对 |
-| 流式写入 | ✅ | 边接收边写入 Xaero 目录，每区域写入后清除对应层 `.xwmc` 缓存并触发重载 |
-| 洞穴层同步 | ✅ | 按同步目标维度（非玩家当前维度）决定加载地表层或洞穴层；地狱 sync 时洞穴层也会重载 |
-| 洞穴缓存清理 | ✅ | 同步时清除 `cache*/caves/<layer>/{x}_{z}.xwmc`（及 `.outdated`） |
-| 视距优先 | ✅ | 优先加载视距范围内区域 |
-| 过期检测 | ✅ | 10 分钟超时自动清除累积数据 |
-| 多线程哈希 | ✅ | ForkJoinPool 并行计算 CRC32，线程数可配置 |
-| Xaero 路径兼容 | ✅ | 优先新版 `xaero/world-map`，旧版 `XaeroWorldMap` 目录存在时自动 fallback |
-| 单机目录命名 | ✅ | 对齐 Xaero 单机目录命名，使用存档文件夹名 |
+**许可证**：GPL-3.0

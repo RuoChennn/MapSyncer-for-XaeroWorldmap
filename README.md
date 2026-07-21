@@ -39,22 +39,23 @@
 
 ## 功能特性
 
+> 按模块的完整说明见 [`docs/features.md`](docs/features.md)。
+
 | 特性 | 说明 |
 |------|------|
-| **增量同步** | CRC32 哈希比对 + 时间戳比对，仅同步有变化的区域 |
-| **流式加载** | 边接收边写入 Xaero 目录，每区域立即触发重载 |
-| **带宽感知** | 动态调整发送速率，避免阻塞游戏网络 |
-| **断点续传** | 同步中断后重连自动恢复（基于哈希比对） |
-| **视距优先** | 玩家视距范围内的区域优先传输 |
-| **维度支持** | 主世界、地狱、末地及 Mod 维度（暮光森林等） |
-| **增量更新** | 服务端可配置 TICK 周期 / SCHEDULED 定时自动更新地图缓存 |
-| **洞穴模式** | 通过 layerPlan 配置地表/洞穴层（SURFACE、ALL、显式 Y），单次 MCA 解析可输出多层，写入 `caves/<层号>/` |
-| **多线程哈希** | 客户端 CRC32 计算支持并行，线程数可配置 |
-| **自动同步** | 根据服务端增量更新模式，进服或在线自动拉取地图（见下文） |
-| **内置服务器** | 单人游戏局域网共享，复用主机 Xaero 存档 |
-| **MapPackager** | 独立 CLI 工具，将服务器缓存打包为客户端可用的 Xaero 地图包（离线分发） |
-| **Payload 分片** | 双向自动分片，>28KB 数据拆分为小包传输，接收端自动组装 |
-| **握手保护** | 禁止向未安装 mod 的客户端发送自定义 payload，防止踢出玩家 |
+| **增量同步** | CRC32 + 时间戳比对，仅传输有变化的区域；保留客户端更新探索 |
+| **流式加载** | 边接收边写入 Xaero 目录，每区域触发重载 |
+| **带宽控制** | 可配置单包大小与 KB/s 限速；大包自动分片组装 |
+| **断点续传** | 基于客户端哈希缓存，中断后可恢复 |
+| **视距优先** | 视距内区域优先传输；视距外可限速喂给 Xaero |
+| **维度 / 洞穴** | 原版与 Mod 维度；`dimension = layerPlan`（SURFACE / ALL / 显式 Y / 组合） |
+| **增量更新** | 服务端 DISABLED / TICK / SCHEDULED 自动更新地图缓存 |
+| **自动同步** | 按服务端模式进服或在线自动拉取（可关）；手动 sync 始终可用 |
+| **并发转换** | `maxConcurrentRegions`：0=自动（逻辑核−2，上限 16） |
+| **配置热重载** | `/mapsyncer reloadconfig`（Fabric 为 `/mapsyncerserver`） |
+| **内置服务器** | 局域网共享时复用主机 Xaero 存档，免二次转换 |
+| **MapPackager** | 离线将 `server_map_cache` 打成客户端可用 zip |
+| **握手保护** | 未安装本模组的客户端不发送自定义包 |
 
 ---
 
@@ -70,7 +71,6 @@
 | `/mapsyncer sync all` | 同步所有维度 |
 | `/mapsyncer autosync` | 查看客户端自动同步开关状态 |
 | `/mapsyncer autosync on\|off` | 开启/关闭客户端自动同步（写入配置文件） |
-| `/mapsyncer clearstate` | 清除同步恢复状态（忽略断点续传） |
 
 **维度参数支持**：
 - 原版：`overworld`、`the_nether`、`the_end`
@@ -118,7 +118,7 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 | 配置项 | 默认值 | 范围 | 说明 |
 |--------|--------|------|------|
 | `enableDebugLogging` | false | - | 启用调试日志 |
-| `maxConcurrentRegions` | 4 | 1-16 | 并发转换区域数 |
+| `maxConcurrentRegions` | 0（自动） | 0-16 | 并发转换区域数；0 = `max(1, min(16, 逻辑处理器数 − 2))` |
 | `maxSyncPacketSize` | 262144 (256KB) | 64KB-1MB | 单包最大大小 |
 | `syncSpeedLimitKBps` | 1024 (1MiB/s) | 0-10240 | 同步速率限制（0=不限） |
 
@@ -138,33 +138,30 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 | `default_scan_mode` | SURFACE | 未配置维度的默认层计划回退（SURFACE=仅地表；CAVE=单层洞穴，见 `default_cave_start`） |
 | `default_cave_start` | 63 | `default_scan_mode=CAVE` 时未配置维度的 caveStart Y |
 
-**维度配置格式**（新格式，推荐）：
+**维度配置**（推荐 `维度 = layerPlan`，Fabric / Forge / NeoForge 均为列表）：
 
 ```toml
 dimension_configs = [
-    "minecraft:overworld|SURFACE",
-    "minecraft:the_nether|SURFACE,63",
-    "minecraft:the_end|SURFACE"
+    "minecraft:overworld = SURFACE",
+    "minecraft:the_nether = SURFACE,63",
+    "minecraft:the_end = SURFACE"
 ]
 ```
-
-格式：`维度ID|layerPlan`
 
 **layerPlan**（逗号分隔，可组合）：
 
 | 值 | 说明 |
 |----|------|
-| `SURFACE` | 仅地表。无顶盖维度为全列扫描；有顶盖维度（地狱）为逻辑顶以上（Y≥128） |
-| `ALL` | 生成维度高度范围内的全部洞穴层 |
-| `63` / `63,127` | 仅指定洞穴层（caveStart Y 坐标），不含地表 |
-| `SURFACE,63` | 地表 + 洞穴层 63 |
-| `SURFACE,ALL` / `ALL,63` | 组合；`ALL` 与显式 Y 按层号自动去重 |
+| `SURFACE` | 仅地表。无顶盖为全列扫描；有顶盖（地狱）为逻辑顶以上（Y≥128） |
+| `ALL` | 维度高度范围内全部洞穴层 |
+| `63` / `63,127` | 仅指定洞穴层（caveStart Y），不含地表 |
+| `SURFACE,63` / `SURFACE,ALL` / `ALL,63` | 组合；`ALL` 与显式 Y 按层号去重 |
 
-- 仅写 `SURFACE` 时**不会**自动生成洞穴层；需要洞穴须显式写 Y 或 `ALL`
-- 地狱默认 `SURFACE,63`：逻辑顶以上地表（基岩顶层）+ 洞穴层 Y=63（Xaero 层号 3，目录 `caves/3/`）
-- 旧格式 `维度|SURFACE|63|…` / `维度|CAVE|63|…` 仍可读取，会自动合并为 layerPlan；尾部 `dim_type_info` 字段已忽略，维度类型信息在运行时从服务器 API 获取
+- 仅写 `SURFACE` **不会**自动生成洞穴；需洞穴须写 Y 或 `ALL`
+- 地狱默认 `SURFACE,63`：逻辑顶以上地表 + 洞穴 Y=63（Xaero 层号 3 → `caves/3/`）
+- 兼容：`维度|layerPlan`、旧多字段管道、Fabric 旧键；维度类型信息运行时从 API 获取，不写进配置
 
-**洞穴层号**：Xaero 使用 `caveStart >> 4`（如 Y=63 → 层 3），缓存与 zip 输出路径为 `caves/3/`。
+**洞穴层号**：`caveStart >> 4`（Y=63 → 层 3 → `caves/3/`）。
 
 ---
 

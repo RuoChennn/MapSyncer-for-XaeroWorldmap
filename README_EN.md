@@ -1,14 +1,16 @@
 # MapSyncer for Xaero's World Map
 
-A multi-platform Minecraft mod that syncs server-side explored areas to clients' Xaero's World Map.
+A multi-platform Minecraft mod that converts server-side explored / pre-generated MCA regions into Xaero's World Map format and syncs them to clients (network or offline pack).
 
-> **Use case**: Players joining an established server, or servers using Chunky for map pre-generation — sync the map to players and eliminate redundant exploration time.
+> **Use case**: Players joining an established server, or servers using Chunky for pre-generation — sync the map and cut redundant exploration.
+
+Chinese README: [`README.md`](README.md) · Full module list: [`docs/features.md`](docs/features.md)
 
 ---
 
 ## Platform Support
 
-> Prioritizing modern versions. NeoForge didn't exist as an independent loader before 1.20.4. Forge provides no developer documentation after 26.1.
+> NeoForge before 1.20.4 and Forge on 26.x are not supported.
 
 | MC Version | Forge | NeoForge | Fabric |
 |------------|:-----:|:--------:|:------:|
@@ -16,10 +18,11 @@ A multi-platform Minecraft mod that syncs server-side explored areas to clients'
 | 1.21.1 | ✅ | ✅ | ✅ |
 | 1.21.11 | ✅ | ✅ | ✅ |
 | 26.1 | — | ✅ | ✅ |
+| 26.2 | — | ✅ | ✅ |
 
 ### Client Dependencies
 
-Supports both dedicated servers and integrated servers (single-player LAN sharing). On integrated servers, the host's Xaero's World Map save directory is reused as the map cache, eliminating redundant conversion.
+Supports dedicated and integrated servers (LAN). On integrated servers, the host's Xaero save directory is reused as the map cache (no second conversion).
 
 | Dependency | Requirement |
 |------------|-------------|
@@ -27,8 +30,8 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 
 ### Server Requirements
 
-- Xaero's World Map is NOT required on the server
-- Chunky or similar pre-generation tools are recommended
+- Xaero is **not** required on the server
+- Chunky (or similar) is recommended for pre-generation
 
 ---
 
@@ -36,270 +39,189 @@ Supports both dedicated servers and integrated servers (single-player LAN sharin
 
 | Feature | Description |
 |---------|-------------|
-| **Incremental Sync** | CRC32 hash + timestamp comparison — only transfers changed regions |
-| **Streaming Load** | Writes to Xaero directory as data arrives, triggers immediate reload per region |
-| **Bandwidth-Aware** | Dynamic send rate adjustment to avoid blocking game network |
-| **Resumable Sync** | Auto-resumes from interruption after reconnect (hash-based) |
-| **View-Distance Priority** | Regions within player's view distance are prioritized |
-| **Dimension Support** | Overworld, Nether, End, and mod dimensions (e.g. Twilight Forest) |
-| **Incremental Update** | Server-side periodic/scheduled map cache regeneration |
-| **Cave Mode** | Layer plan (SURFACE, ALL, explicit Y); single MCA parse can emit multiple layers to `caves/<layer>/` |
-| **Multi-Threaded Hash** | Configurable parallel CRC32 computation on the client |
-| **Auto Sync** | Automatically checks for newer server maps on join, no manual command needed |
+| **Incremental sync** | CRC32 + timestamp; keeps newer client exploration |
+| **Streaming load** | Write to Xaero as data arrives; reload per region |
+| **Bandwidth control** | Configurable packet size & KB/s limit; auto fragment large payloads |
+| **Resumable sync** | Client hash cache; resume after disconnect |
+| **View-distance priority** | In-view first; out-of-view drain rate configurable |
+| **Dimensions / caves** | Vanilla + mod dims; `dimension = layerPlan` (SURFACE / ALL / Y / combos) |
+| **Incremental update** | Server DISABLED / TICK / SCHEDULED cache refresh |
+| **Auto sync** | Join / online pull by server mode (toggleable); manual sync always works |
+| **Concurrent conversion** | `maxConcurrentRegions`: **0 = auto** (`logical CPUs − 2`, capped at 16) |
+| **Config reload** | `/mapsyncer reloadconfig` (Fabric: `/mapsyncerserver`) |
+| **Integrated server** | Reuse host Xaero saves on LAN |
+| **MapPackager** | Offline zip from `server_map_cache` |
+| **Handshake guard** | No custom packets to clients without this mod |
 
 ---
 
 ## Commands
 
-### Client Commands
+### Client (`/mapsyncer`)
 
 | Command | Description |
 |---------|-------------|
-| `/mapsyncer` | Show help |
+| `/mapsyncer` | Help |
 | `/mapsyncer sync` | Sync current dimension |
-| `/mapsyncer sync <dim>` | Sync a specific dimension |
+| `/mapsyncer sync <dim>` | Sync one dimension |
 | `/mapsyncer sync all` | Sync all dimensions |
-| `/mapsyncer autosync` | Show client auto-sync toggle status |
-| `/mapsyncer autosync on\|off` | Enable/disable client auto-sync (saved to config) |
+| `/mapsyncer autosync` | Show auto-sync toggle |
+| `/mapsyncer autosync on\|off` | Enable/disable auto-sync (saved to config) |
 
-**Dimension arguments**: `overworld`, `the_nether`, `the_end`, or mod dimension IDs like `twilightforest:twilight_forest`
+**Dimensions**: `overworld`, `the_nether`, `the_end`, or mod IDs such as `twilightforest:twilight_forest`
 
-### Server Commands (OP required)
+### Server (OP level 4)
 
-> Forge/NeoForge uses `/mapsyncer`; Fabric uses `/mapsyncerserver` to avoid conflicts with the client-side `/mapsyncer`.
+> Forge/NeoForge: `/mapsyncer` · Fabric: `/mapsyncerserver`
 
 | Command | Description |
 |---------|-------------|
-| `/mapsyncer generate` | Generate cache for all dimensions |
-| `/mapsyncer generate <dim>` | Generate cache for a specific dimension |
-| `/mapsyncer generate <dim> <x> <z>` | Generate a single region |
-| `/mapsyncer generate <dim> --force` | Force rebuild (clears existing cache) |
-| `/mapsyncer status` | View generation progress and cache statistics |
-| `/mapsyncer incremental off` | Disable incremental updates |
-| `/mapsyncer incremental tick [interval]` | Enable periodic updates (2400–72000 ticks, default 6000 = 5 min) |
-| `/mapsyncer incremental scheduled [hour] [min]` | Enable scheduled updates (default 04:00) |
+| `generate` / `generate <dim>` / `generate <dim> <x> <z>` | All / one dim / one region |
+| `generate <dim> --force` | Clear cache and rebuild |
+| `status` | Progress + cache stats |
+| `incremental off` | Disable incremental updates |
+| `incremental tick [interval]` | Periodic (2400–72000 ticks, default 6000 = 5 min) |
+| `incremental scheduled [h] [m]` | Daily schedule (default 04:00, server local TZ) |
+| `reloadconfig` | Reload server config from disk |
+| `help` | Server help |
 
 ---
 
 ## Configuration
 
-### Client Config
+### Client
 
 | Option | Default | Range | Description |
-|--------|--------|-------|-------------|
-| `hashThreads` | CPU cores/2 | 1–cores | Number of threads for CRC32 computation |
-| `mapRegionLoadIntervalTicks` | 1 | -1–100 | Tick interval for out-of-view regions into Xaero: -1=drain all, 0=view only, N=one region every N ticks |
-| `autoSyncEnabled` | true | - | Join auto-sync (TICK/SCHEDULED); TICK also enables online periodic sync; manual `/mapsyncer sync` always works |
+|--------|---------|-------|-------------|
+| `hashThreads` | CPU/2 | 1–cores | Parallel CRC32 scan threads |
+| `mapRegionLoadIntervalTicks` | 1 | -1–100 | Out-of-view drain into Xaero: -1=all at once, 0=view only, N=one every N ticks |
+| `autoSyncEnabled` | true | — | Join auto-sync (TICK/SCHEDULED); TICK also online periodic; manual sync always OK |
 
-Fabric: `config/mapsyncer-client.properties`; Forge/NeoForge: `[client]` section in `config/mapsyncer-client.toml`.
+Fabric: `config/mapsyncer-client.properties` · Forge/NeoForge: `[client]` in `config/mapsyncer-client.toml`
 
-### Server Config
+### Server
 
-Forge config: `world/serverconfig/mapsyncer-server.toml` (per-world)
-NeoForge / Fabric config: `config/` directory (`.toml` for NeoForge, `.properties` for Fabric)
+Forge: `world/serverconfig/mapsyncer-server.toml` (per world)  
+NeoForge: `config/mapsyncer-server.toml` · Fabric: `config/mapsyncer-server.properties` (camelCase / snake_case keys)
 
-**General `[general]`**
+**General**
 
 | Option | Default | Range | Description |
-|--------|--------|-------|-------------|
-| `enableDebugLogging` | false | — | Enable debug logging |
-| `maxConcurrentRegions` | 4 | 1–16 | Concurrent region conversion threads |
-| `maxSyncPacketSize` | 262144 (256KB) | 64KB–1MB | Max packet size in bytes |
-| `syncSpeedLimitKBps` | 1024 (1MiB/s) | 0–10240 | Sync rate limit (0 = unlimited) |
+|--------|---------|-------|-------------|
+| `enableDebugLogging` | false | — | Generation debug logs |
+| `maxConcurrentRegions` | **0 (auto)** | 0–16 | Concurrent conversions; 0 = `max(1, min(16, logical CPUs − 2))` |
+| `maxSyncPacketSize` | 262144 (256KB) | 64KB–1MB | Max sync packet bytes |
+| `syncSpeedLimitKBps` | 1024 (1MiB/s) | 0–10240 | Rate limit (0 = unlimited) |
 
-**Incremental Update `[incremental_update]`**
+**Incremental update**
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `incrementalUpdateMode` | DISABLED | DISABLED / TICK / SCHEDULED |
-| `incrementalUpdateIntervalTicks` | 6000 | TICK mode interval (20 ticks = 1 s; default 5 min, min 2 min) |
-| `scheduledUpdateHour` | 4 | Scheduled update hour (0–23) |
-| `scheduledUpdateMinute` | 0 | Scheduled update minute (0–59) |
+| `incrementalUpdateIntervalTicks` | 6000 | TICK interval (min 2400 = 2 min) |
+| `scheduledUpdateHour` / `Minute` | 4 / 0 | Daily schedule |
 
-**Dimension Scan `[dimension_scan]`**
+**Dimension scan**
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `default_scan_mode` | SURFACE | Default layer-plan fallback for unconfigured dimensions (SURFACE = surface only; CAVE = single cave layer via `default_cave_start`) |
-| `default_cave_start` | 63 | Cave start Y when `default_scan_mode=CAVE` |
+| `default_scan_mode` | SURFACE | Fallback for dims not in the list (SURFACE / CAVE) |
+| `default_cave_start` | 63 | Cave start Y when fallback is CAVE |
+| `dimension_configs` | Three vanilla presets | One string per dimension |
 
-**Dimension config format** (new, recommended):
+**Preferred entry format** (list style on all loaders):
 
 ```toml
 dimension_configs = [
-    "minecraft:overworld|SURFACE|true|false|-64|384|384",
-    "minecraft:the_nether|SURFACE,63|false|true|0|256|128",
-    "minecraft:the_end|SURFACE|false|false|0|256|256"
+    "minecraft:overworld = SURFACE",
+    "minecraft:the_nether = SURFACE,63",
+    "minecraft:the_end = SURFACE"
 ]
 ```
 
-Format: `dimensionID|layerPlan|hasSkylight|hasCeiling|minY|height|logicalHeight`
+| layerPlan | Description |
+|-----------|-------------|
+| `SURFACE` | Surface only; ceiling dims scan above logical top (Nether Y≥128) |
+| `ALL` | All cave layers in height range |
+| `63` / `63,127` | Explicit cave layers only |
+| `SURFACE,63` / … | Combinations; layer index = `caveStart >> 4` → `caves/<n>/` |
 
-**layerPlan** (comma-separated, combinable):
-
-| Value | Description |
-|-------|-------------|
-| `SURFACE` | Surface only. Full column for open dimensions; above logical top (Y≥128) for ceiling dimensions (Nether) |
-| `ALL` | All cave layers across the dimension height range |
-| `63` / `63,127` | Explicit cave layer(s) only (caveStart Y), no surface |
-| `SURFACE,63` | Surface + cave layer at Y=63 |
-| `SURFACE,ALL` / `ALL,63` | Combined; `ALL` deduplicates with explicit Y by layer index |
-
-- `SURFACE` alone does **not** auto-generate cave layers; use explicit Y or `ALL` for caves
-- Nether default `SURFACE,63`: surface above logical top (bedrock ceiling) + cave layer Y=63 (Xaero layer 3, path `caves/3/`)
-- Legacy `dimension|SURFACE|63|…` / `dimension|CAVE|63|…` is still parsed into layerPlan
-
-**dim_type_info**: `hasSkylight|hasCeiling|minY|height|logicalHeight`. Nether `logicalHeight=128` means logical top at Y127; above that is the surface zone; `height=256` is total dimension height.
-
-**Cave layer index**: Xaero uses `caveStart >> 4` (e.g. Y=63 → layer 3, stored under `caves/3/`).
+Compatible: `dimension|layerPlan`, legacy multi-field pipes, Fabric legacy keys. Dimension type info comes from the server API at runtime (not stored in config).
 
 ---
 
-## Incremental Update Modes & Client Auto-Sync
+## Incremental Update & Client Auto-Sync
 
-The server `incrementalUpdateMode` controls when the **map cache** is rescanned from MCA files. On join, the client receives `ServerInstalledPayload` and may **auto-sync** when **`autoSyncEnabled` is true**, using the same hash/timestamp rules as manual `/mapsyncer sync`. Use `/mapsyncer autosync off` or the config file to disable client auto-sync.
+Server mode controls **when MCA is rescanned** into the cache. With `autoSyncEnabled=true`, the client may **auto-sync** using the same hash/timestamp rules as manual sync.
 
-### DISABLED
+| Mode | Server | Client (autosync on) |
+|------|--------|----------------------|
+| **DISABLED** | No incremental scan | No auto sync; resume prompt if needed |
+| **TICK** | Scan every N ticks | Join: timestamp + cooldown; **online** periodic sync (Action Bar) |
+| **SCHEDULED** | Once daily in a 1-minute window | Join: timestamp only (no cooldown); no online timer |
 
-- **Server**: No incremental scan handler.
-- **Client**: No auto-sync on join; manual sync only. Shows resume prompt if a previous sync was interrupted.
+Shared: unfinished sync (`needsResume`) is preferred on join; skip auto join sync if server has no generation timestamp or client is already up to date.
 
-### TICK
+---
 
-- **Server**: Scans changed regions every `incrementalUpdateIntervalTicks` (default **6000 = 5 min**, min **2400 = 2 min**).
-- **Client on join**: Sync if local timestamps are older than server **and** join cooldown (minutes = tick interval) has elapsed. Chat messages for start/complete.
-- **Client while online**: Fixed-rate timer matching server tick interval; progress on **Action Bar** only (periodic sync strings).
-- **Manual sync**: No cooldown.
+## MapPackager
 
-### SCHEDULED
+```bash
+./gradlew buildPackager
+java -jar mapsyncer-packager.jar -c <cache> -o <zip> [-s name] [-w worldId] [-d worldDir]
+```
 
-- **Server**: Once daily at `scheduledUpdateHour:Minute` (default **04:00**, server local timezone), within a 1-minute window.
-- **Client on join**: Sync **only if** `clientMaxTimestamp < serverLastGenerationTimestamp`; **no cooldown**.
-- **Client while online**: No periodic timer; rejoin or manual sync after server updates.
-- **Manual sync**: No cooldown.
+Packs all dimensions (including cave layers) into `Multiplayer_<name>/<dim>/mw$<worldId>/` and converts `generation_cache.properties` → `sync_timestamps.cache`. Pure Java; no Minecraft/Xaero runtime required.
 
 ---
 
 ## Project Structure
 
 ```
-libs/                   Abstract library layer (platform-agnostic, compiled as independent JARs)
-├── core/               Pure Java core: MCA/NBT parsing, utilities
-└── platform-api/       Platform abstraction interfaces, network payload definitions
+libs/common/          Shared business logic
+libs/core/            Pure Java MCA/NBT + MapPackager
+libs/platform-api/    Platform API + payloads
+libs/mc-1.20/ … mc-26/   G1–G4 MC API anchors
 
-mc-1.20.1/              1.20.1 version
-├── shared/             Shared source (referenced by platform modules via sourceSet)
-├── fabric/             Platform implementation (produces final mod JAR)
-└── forge/
-
-mc-1.21.1/              1.21.1 version
-├── shared/
-├── fabric/
-├── forge/
-└── neoforge/
-
-mc-26.1/                26.1 version
-├── shared/
-├── fabric/
-└── neoforge/
+mc-{version}/{fabric|forge|neoforge}/   Loader glue
 ```
 
 ### Pipeline
 
 ```
-Server MCA files (region/*.mca)
-        │
-        ▼
-    MCA Parser (pure Java, no Xaero dependency)
-   Decompress → NBT parse → Extract chunk data
-        │
-        ▼
-   Region Conversion (RegionConverter)
-        │
-        ▼
-Encode to Xaero format (region.zip)
-        │
-        ▼
-  Timestamp + Hash Cache (GenerationCache)
-        │
-        ▼
-  Incremental Update Processor (optional)
-  TICK mode / SCHEDULED mode
-        │
-        ▼
-    Network Sync Protocol
-  Hash comparison → View-distance priority sort
-  Batched transfer + rate limiting
-        │
-        ▼
-    Streaming Receive
-  Write to Xaero directory as data arrives
-        │
-        ▼
-   Xaero Reload Trigger (reflection)
-  requestLoad → Map re-renders
+MCA (region/*.mca) → parse → convert → region.zip (Xaero 6.8)
+  → GenerationCache → optional incremental scan
+  → network (hash / view priority / batch / rate limit)
+  → stream into mw$worldId/ → Xaero requestLoad
 ```
 
-### File Storage
+### Storage & dimension mapping
 
-```
-Server:
-  <server>/server_map_cache/
-  ├── null/              # Overworld
-  ├── DIM-1/             # Nether
-  ├── DIM1/              # End
-  ├── caves/<layer>/     # Cave mode output
-  └── generation_cache.properties  # Timestamp + hash cache
-
-Client:
-  <client>/xaero/world-map/Multiplayer_<IP>/     # Modern Xaero unified path (preferred)
-  <client>/XaeroWorldMap/Multiplayer_<IP>/       # Legacy Xaero path (compatibility fallback)
-  ├── null/mw$<worldId>/   # Overworld
-  ├── DIM-1/mw$<worldId>/  # Nether
-  ├── DIM1/mw$<worldId>/   # End
-  ├── caves/<layer>/        # Cave layers (e.g. caves/3/ for Y=63)
-  └── sync_timestamps.cache
-```
-
-### Dimension Mapping
-
-| Dimension | Minecraft ID | Xaero Directory |
-|-----------|--------------|-----------------|
-| Overworld | `minecraft:overworld` | `null` |
-| Nether | `minecraft:the_nether` | `DIM-1` |
-| End | `minecraft:the_end` | `DIM1` |
-| Mod dimensions | `namespace:path` | `namespace$path` |
+Same layout as the Chinese README (`server_map_cache/`, `xaero/world-map/` with `XaeroWorldMap` fallback; `null` / `DIM-1` / `DIM1` / `namespace$path`).
 
 ---
 
 ## Build
 
 ```bash
-# Build all active platforms (parallel)
 ./gradlew build -x test --parallel
-
-# Build a single platform
 ./gradlew :mc-1.21.1:forge:build -x test
-./gradlew :mc-1.21.1:fabric:build -x test
-
-# Quick build scripts
-scripts/fastbuild/build-all.bat              # All active platforms
-scripts/fastbuild/build-forge.bat            # All Forge modules (Gradle 8.9 + JDK 17/21)
-scripts/fastbuild/build-fabric-26.1.bat      # Fabric 26.1 (isolated Gradle process)
-scripts/fastbuild/build-26.1.bat             # All 26.1 modules
+./gradlew buildPackager
+scripts/fastbuild/build-all.bat
+scripts/fastbuild/build-target.ps1 all -NoTest
 ```
 
-Build artifacts are placed in each platform module's `build/libs/` directory.
+Mod JARs: each module `build/libs/` · collected under root `output/` for packager / `buildAll`.
 
 ---
 
 ## Known Issues
 
-| Issue | Description | Impact |
-|-------|-------------|--------|
-| Mod dimension cave layers | Multi-layer cave configs for some mod dimensions may need manual layerPlan tuning | Only when using ALL/explicit Y on mod dimensions |
+| Issue | Notes |
+|-------|--------|
+| Mod-dimension cave layers | Some mods may need manual layerPlan tuning for ALL / explicit Y |
 
-> v1.0.4 fixes Nether `SURFACE,63` surface/cave generation and client sync display; see `CHANGELOG.md`.
+> v1.0.4 fixed Nether `SURFACE,63` surface/cave generation and client display — see `CHANGELOG.md`.
 
 ---
 
