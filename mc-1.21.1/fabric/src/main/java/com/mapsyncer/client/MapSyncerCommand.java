@@ -38,9 +38,6 @@ public class MapSyncerCommand {
                                         .executes(ctx -> MapSyncerCommandLogic.setClientAutoSync(true)))
                                 .then(ClientCommandManager.literal("off")
                                         .executes(ctx -> MapSyncerCommandLogic.setClientAutoSync(false))))
-                        .then(ClientCommandManager.literal("clearstate")
-                                .requires(source -> false)
-                                .executes(ctx -> MapSyncerCommandLogic.clearSyncState()))
         );
     }
 }

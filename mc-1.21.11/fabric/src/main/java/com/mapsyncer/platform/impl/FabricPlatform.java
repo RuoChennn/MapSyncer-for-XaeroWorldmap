@@ -48,6 +48,11 @@ public class FabricPlatform implements Platform {
     }
 
     @Override
+    public String getServerCommandPrefix() {
+        return "mapsyncerserver";
+    }
+
+    @Override
     public String getMinecraftVersion() {
         return "1.21.11";
     }

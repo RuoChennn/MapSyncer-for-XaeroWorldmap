@@ -98,9 +98,11 @@ Supports dedicated and integrated servers (LAN). On integrated servers, the host
 | `mapRegionLoadIntervalTicks` | 1 | -1–100 | Out-of-view drain into Xaero: -1=all at once, 0=view only, N=one every N ticks |
 | `autoSyncEnabled` | true | — | Join auto-sync (TICK/SCHEDULED); TICK also online periodic; manual sync always OK |
 
-Fabric: `config/mapsyncer-client.properties` · Forge/NeoForge: `[client]` in `config/mapsyncer-client.toml`
+Fabric: `config/mapsyncer-client.properties` (optional Cloth for **client** options only) · Forge/NeoForge: `[client]` in `config/mapsyncer-client.toml`
 
 ### Server
+
+Server settings are **file-only** (plus `/mapsyncer reloadconfig`; Fabric: `/mapsyncerserver reloadconfig`). No Cloth UI for server config.
 
 Forge: `world/serverconfig/mapsyncer-server.toml` (per world)  
 NeoForge: `config/mapsyncer-server.toml` · Fabric: `config/mapsyncer-server.properties` (camelCase / snake_case keys)

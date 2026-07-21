@@ -51,18 +51,7 @@ public class MapSyncerCommandLogic {
         mc.player.sendSystemMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"));
 
         if (hasServerPermission) {
-            String prefix = CacheCommandHandler.serverCommandPrefix();
-            mc.player.sendSystemMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_region", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_force", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.status", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled", prefix));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.reloadconfig", prefix));
+            CacheCommandHandler.showHelp(ClientMessageHelper::sendChatMessage);
         }
     }
 
@@ -188,14 +177,6 @@ public class MapSyncerCommandLogic {
         String dimensionId = currentDim.identifier().toString();
         sendSyncRequest(mc, dimensionId, false, false);
 
-        return 1;
-    }
-
-    /**
-     * 清除同步状态标记。
-     */
-    public static int clearSyncState() {
-        SyncResumeHelper.clearSyncState();
         return 1;
     }
 

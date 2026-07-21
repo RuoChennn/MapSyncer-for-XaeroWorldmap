@@ -23,6 +23,12 @@ public interface Platform {
     PlatformType getType();
 
     /**
+     * 当前 Loader 下的服务端命令字面量（不含 /）。
+     * Fabric：{@code mapsyncerserver}；Forge / NeoForge：{@code mapsyncer}。
+     */
+    String getServerCommandPrefix();
+
+    /**
      * 获取 Minecraft 版本字符串
      */
     String getMinecraftVersion();

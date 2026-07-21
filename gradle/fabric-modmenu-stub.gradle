@@ -1,0 +1,20 @@
+// Fabric：Mod Menu 可选入口的编译期 stub（不打入最终 JAR）。
+// 运行时若安装了 Mod Menu，由其提供真实 com.terraformersmc.modmenu.api.*。
+sourceSets {
+    modMenuApi {
+        java {
+            srcDirs = ["${rootProject.projectDir}/gradle/modmenu-api-stub"]
+        }
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+}
+
+tasks.named('compileModMenuApiJava', JavaCompile).configure {
+    // stub 仅依赖 MC 的 Screen；与 main 同源 classpath（含 Loom MC）
+    classpath = sourceSets.main.compileClasspath
+}
+
+tasks.named('compileJava', JavaCompile).configure {
+    dependsOn tasks.named('compileModMenuApiJava')
+    classpath += sourceSets.modMenuApi.output
+}

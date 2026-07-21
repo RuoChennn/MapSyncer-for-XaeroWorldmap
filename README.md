@@ -105,11 +105,13 @@
 | `mapRegionLoadIntervalTicks` | 1 | -1~100 | 视距外 region 传入 Xaero 的 tick 间隔：-1=一次排空，0=仅视距内，N=每 N tick 加载 1 个 |
 | `autoSyncEnabled` | true | - | 进服自动同步（TICK/SCHEDULED）；TICK 模式另启在线周期同步；关闭后仍可手动 `/mapsyncer sync` |
 
-Fabric 配置文件：`config/mapsyncer-client.properties`；Forge/NeoForge：`config/mapsyncer-client.toml` 的 `[client]` 段。
+Fabric 配置文件：`config/mapsyncer-client.properties`（可选 Cloth 仅编辑客户端项）；Forge/NeoForge：`config/mapsyncer-client.toml` 的 `[client]` 段。
 
 Fabric 服务端 `.properties` 同时接受 camelCase 与 snake_case 键名（如 `defaultScanMode` / `default_scan_mode`），便于从 TOML 复制配置。
 
 ### 服务端配置
+
+服务端配置**只通过配置文件**（及 `/mapsyncer reloadconfig` / Fabric `/mapsyncerserver reloadconfig`）管理，不使用 Cloth。
 
 Forge 配置文件位于 `world/serverconfig/mapsyncer-server.toml`（每个世界独立配置）
 NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`，Fabric 为 `.properties`）

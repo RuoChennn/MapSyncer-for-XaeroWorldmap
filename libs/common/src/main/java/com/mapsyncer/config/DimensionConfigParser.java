@@ -223,8 +223,9 @@ public final class DimensionConfigParser {
             }
             int close = findMatchingListClose(fileText, bracket);
             if (close < 0) {
-                LOGGER.warn("Unclosed {} list in config", LIST_KEY);
-                return List.of();
+                LOGGER.warn("Unclosed {} list in config; falling back to legacy dimension config keys",
+                        LIST_KEY);
+                return null;
             }
             String body = fileText.substring(bracket + 1, close);
             return parseListBodyEntries(body);

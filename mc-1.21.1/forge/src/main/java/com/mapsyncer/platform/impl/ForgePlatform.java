@@ -47,6 +47,12 @@ public class ForgePlatform implements Platform {
     }
 
     @Override
+    public String getServerCommandPrefix() {
+        return "mapsyncer";
+    }
+
+
+    @Override
     public String getMinecraftVersion() {
         return "1.21.1";
     }

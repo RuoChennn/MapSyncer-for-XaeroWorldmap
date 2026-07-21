@@ -77,7 +77,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   Loader 胶水（Platform 实现、�
 
 | 路径 | 说明 |
 |------|------|
-| Fabric | `config/mapsyncer-client.properties` |
+| Fabric | `config/mapsyncer-client.properties`（可选 Cloth 客户端 GUI） |
 | Forge / NeoForge | `config/mapsyncer-client.toml` → `[client]` |
 
 | 配置项 | 默认 | 范围 | 说明 |
@@ -89,6 +89,8 @@ mc-{精确版本}/{fabric|forge|neoforge}/   Loader 胶水（Platform 实现、�
 ---
 
 ## 四、服务端配置
+
+服务端仅通过配置文件管理（含 `/… reloadconfig`），**不提供 Cloth / 客户端 GUI 编辑服务端项**。
 
 | 路径 | 说明 |
 |------|------|

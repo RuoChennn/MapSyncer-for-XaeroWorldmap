@@ -7,6 +7,7 @@ import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.server.CacheCommandHandler;
 import com.mapsyncer.util.ChatUtils;
+import com.mapsyncer.util.ClientMessageHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -50,18 +51,7 @@ public class MapSyncerCommandLogic {
         mc.player.displayClientMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"), false);
 
         if (hasServerPermission) {
-            String prefix = CacheCommandHandler.serverCommandPrefix();
-            mc.player.displayClientMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_region", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.generate_force", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.status", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled", prefix), false);
-            mc.player.displayClientMessage(ChatUtils.desc("mapsyncer.help.server.reloadconfig", prefix), false);
+            CacheCommandHandler.showHelp(ClientMessageHelper::sendChatMessage);
         }
     }
 
@@ -187,14 +177,6 @@ public class MapSyncerCommandLogic {
         String dimensionId = currentDim.location().toString();
         sendSyncRequest(mc, dimensionId, false, false);
 
-        return 1;
-    }
-
-    /**
-     * 清除同步状态标记。
-     */
-    public static int clearSyncState() {
-        SyncResumeHelper.clearSyncState();
         return 1;
     }
 

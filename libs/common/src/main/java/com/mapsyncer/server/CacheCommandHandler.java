@@ -2,7 +2,6 @@ package com.mapsyncer.server;
 
 import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.platform.PlatformManager;
-import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
@@ -10,10 +9,9 @@ import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.ModLogConfig;
-import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,9 +34,7 @@ public class CacheCommandHandler {
      * Fabric：{@code mapsyncerserver}；Forge / NeoForge：{@code mapsyncer}。
      */
     public static String serverCommandPrefix() {
-        return PlatformManager.getPlatform().getType() == PlatformType.FABRIC
-                ? "mapsyncerserver"
-                : "mapsyncer";
+        return PlatformManager.getPlatform().getServerCommandPrefix();
     }
 
     /**
@@ -71,13 +67,33 @@ public class CacheCommandHandler {
      * 向发送者报告当前增量更新工作模式（配置值 + 运行信息）。
      */
     public static void showIncrementalMode(Consumer<net.minecraft.network.chat.Component> sender) {
+        sender.accept(incrementalStatusMessage());
+        sender.accept(ChatUtils.desc(
+                "mapsyncer.command.incremental_status_hint", serverCommandPrefix()));
+    }
+
+    /**
+     * 生成状态（带前缀），与 {@link #incrementalStatusMessage()} 共用 lang 组件。
+     */
+    public static MutableComponent generationStatusMessage() {
+        if (ConversionOrchestrator.isRunning()) {
+            return ChatUtils.message("mapsyncer.generate.in_progress",
+                    ConversionOrchestrator.getProcessedCount(),
+                    ConversionOrchestrator.getTotalCount(),
+                    ConversionOrchestrator.getStatus());
+        }
+        return ChatUtils.message("mapsyncer.generate.no_progress");
+    }
+
+    /**
+     * 增量更新状态（带前缀）。按配置模式报告，不因 handler 未跑而误报“未启用”。
+     */
+    public static MutableComponent incrementalStatusMessage() {
         var platform = PlatformManager.getPlatform();
         UpdateMode mode = platform.getIncrementalUpdateMode();
         IncrementalUpdateHandlerLogic handler = IncrementalUpdateHandlerLogic.getInstance();
 
-        if (mode == UpdateMode.DISABLED) {
-            sender.accept(ChatUtils.message("mapsyncer.command.incremental_status_disabled"));
-        } else if (mode == UpdateMode.TICK) {
+        if (mode == UpdateMode.TICK) {
             int interval = platform.getIncrementalUpdateIntervalTicks();
             int remainingTicks = handler.isRunning()
                     ? Math.max(0, interval - handler.getTickCounter())
@@ -85,20 +101,17 @@ public class CacheCommandHandler {
             int remainingSeconds = remainingTicks / 20;
             int minutes = remainingSeconds / 60;
             int seconds = remainingSeconds % 60;
-            sender.accept(ChatUtils.message(
+            return ChatUtils.message(
                     "mapsyncer.command.incremental_status_tick",
-                    interval, interval / 20.0f, minutes, seconds));
-        } else if (mode == UpdateMode.SCHEDULED) {
+                    interval, interval / 20.0f, minutes, seconds);
+        }
+        if (mode == UpdateMode.SCHEDULED) {
             int hour = platform.getScheduledUpdateHour();
             int minute = platform.getScheduledUpdateMinute();
-            sender.accept(ChatUtils.message(
-                    "mapsyncer.command.incremental_status_scheduled", hour, minute));
-        } else {
-            sender.accept(ChatUtils.message("mapsyncer.command.incremental_status_disabled"));
+            return ChatUtils.message(
+                    "mapsyncer.command.incremental_status_scheduled", hour, minute);
         }
-
-        sender.accept(ChatUtils.desc(
-                "mapsyncer.command.incremental_status_hint", serverCommandPrefix()));
+        return ChatUtils.message("mapsyncer.command.incremental_status_disabled");
     }
 
     /**
@@ -186,44 +199,6 @@ public class CacheCommandHandler {
         }, "xaero-map-generator");
         worker.start();
         return true;
-    }
-
-    /**
-     * 获取生成状态信息
-     */
-    public static String getGenerationStatus() {
-        if (ConversionOrchestrator.isRunning()) {
-            return String.format("转换进行中：%d/%d 个区域 - %s",
-                    ConversionOrchestrator.getProcessedCount(),
-                    ConversionOrchestrator.getTotalCount(),
-                    ConversionOrchestrator.getStatus());
-        }
-        return "无转换任务";
-    }
-
-    /**
-     * 获取增量更新状态信息
-     */
-    public static String getIncrementalStatus() {
-        var platform = PlatformManager.getPlatform();
-        UpdateMode mode = platform.getIncrementalUpdateMode();
-        IncrementalUpdateHandlerLogic handler = IncrementalUpdateHandlerLogic.getInstance();
-
-        if (mode == UpdateMode.DISABLED || !handler.isRunning()) {
-            return "增量更新未启用";
-        } else if (mode == UpdateMode.TICK) {
-            int interval = platform.getIncrementalUpdateIntervalTicks();
-            int remainingTicks = interval - handler.getTickCounter();
-            int remainingSeconds = remainingTicks / 20;
-            int minutes = remainingSeconds / 60;
-            int seconds = remainingSeconds % 60;
-            return String.format("增量更新TICK模式，下次 %d分%d秒后", minutes, seconds);
-        } else if (mode == UpdateMode.SCHEDULED) {
-            int hour = platform.getScheduledUpdateHour();
-            int minute = platform.getScheduledUpdateMinute();
-            return String.format("增量更新定时模式，每日 %02d:%02d", hour, minute);
-        }
-        return "增量更新未启用";
     }
 
     /**
@@ -364,6 +339,11 @@ public class CacheCommandHandler {
             ModLogConfig.applyDebugLogging();
             DimensionRegistry.resetRegistration();
             DimensionConfigParser.invalidateCache();
+
+            // 空闲时重建线程池，使 maxConcurrentRegions 在本会话立即生效
+            if (!ConversionOrchestrator.isRunning()) {
+                ConversionOrchestrator.shutdownExecutor();
+            }
 
             IncrementalUpdateHandlerLogic handler = IncrementalUpdateHandlerLogic.getInstance();
             handler.stop();

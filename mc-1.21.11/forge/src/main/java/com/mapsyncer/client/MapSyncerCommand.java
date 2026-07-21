@@ -39,9 +39,6 @@ public class MapSyncerCommand {
                                         .executes(ctx -> MapSyncerCommandLogic.setClientAutoSync(true)))
                                 .then(net.minecraft.commands.Commands.literal("off")
                                         .executes(ctx -> MapSyncerCommandLogic.setClientAutoSync(false))))
-                        .then(net.minecraft.commands.Commands.literal("clearstate")
-                                .requires(source -> false)
-                                .executes(ctx -> MapSyncerCommandLogic.clearSyncState()))
         );
     }
 }

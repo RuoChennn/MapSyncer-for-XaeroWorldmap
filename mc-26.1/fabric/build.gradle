@@ -19,8 +19,6 @@ repositories {
     maven { url = 'https://maven.aliyun.com/repository/public' }
     // Cloth Config
     maven { url = 'https://maven.shedaniel.me/' }
-    // Mod Menu (optional)
-    maven { url = 'https://maven.terraformersmc.com/releases/' }
 }
 
 // 引用版本特定的共享源码（不独立编译，由本模块提供 MC 依赖）
@@ -36,6 +34,7 @@ sourceSets.main.resources.srcDirs(
 )
 
 apply from: rootProject.file('gradle/fabric-lz4-shadow.gradle')
+apply from: rootProject.file('gradle/fabric-modmenu-stub.gradle')
 
 dependencies {
     // Minecraft and Fabric 26.1 (无混淆映射，MC 26.1 即官方映射)

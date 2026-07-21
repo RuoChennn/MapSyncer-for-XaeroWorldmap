@@ -60,7 +60,7 @@ public class CacheGenerateCommand {
                                 .executes(CacheGenerateCommand::setIncrementalOff))
                         .then(Commands.literal("tick")
                                 .executes(CacheGenerateCommand::setIncrementalTick)
-                                .then(Commands.argument("interval", IntegerArgumentType.integer(20, 72000))
+                                .then(Commands.argument("interval", IntegerArgumentType.integer(2400, 72000))
                                         .executes(CacheGenerateCommand::setIncrementalTickInterval)))
                         .then(Commands.literal("scheduled")
                                 .executes(CacheGenerateCommand::setIncrementalScheduled)
@@ -183,10 +183,8 @@ public class CacheGenerateCommand {
     }
 
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
-        String genStatus = CacheCommandHandler.getGenerationStatus();
-        String incStatus = CacheCommandHandler.getIncrementalStatus();
-
-        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.status.combined", genStatus, incStatus), false);
+        ctx.getSource().sendSuccess(CacheCommandHandler::generationStatusMessage, false);
+        ctx.getSource().sendSuccess(CacheCommandHandler::incrementalStatusMessage, false);
 
         List<DimensionCacheStats> cacheStats = CacheCommandHandler.getCacheStats();
         if (!cacheStats.isEmpty()) {

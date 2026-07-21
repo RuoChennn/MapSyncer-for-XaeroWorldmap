@@ -17,7 +17,6 @@ repositories {
     maven { url = 'https://maven.fabricmc.net/' }
     maven { url = 'https://maven.aliyun.com/repository/public' }
     maven { url = 'https://maven.shedaniel.me/' }
-    maven { url = 'https://maven.terraformersmc.com/releases/' }
 }
 
 sourceSets.main.java.srcDirs(
@@ -32,6 +31,7 @@ sourceSets.main.resources.srcDirs(
 )
 
 apply from: rootProject.file('gradle/fabric-lz4-shadow.gradle')
+apply from: rootProject.file('gradle/fabric-modmenu-stub.gradle')
 
 dependencies {
     minecraft "com.mojang:minecraft:1.21.11"

@@ -1,5 +1,6 @@
 package com.mapsyncer.client;
 
+import com.mapsyncer.config.ConcurrentRegionsConfig;
 import com.mapsyncer.config.ModConfig;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
@@ -12,8 +13,7 @@ import com.mapsyncer.platform.UpdateMode;
  * 配置界面工厂 - 客户端专用
  *
  * 使用 Cloth Config API 创建配置界面。
- * 每个配置项带有 tooltip 说明，提供类似 NeoForge 配置文件的快速提示功能。
- * 此类仅在客户端加载，不会在专用服务器上触发类加载。
+ * 此类仅在客户端加载。
  */
 public class ConfigScreenFactory {
 
@@ -73,9 +73,11 @@ public class ConfigScreenFactory {
             .setSaveConsumer(config::setEnableDebugLogging)
             .build());
 
+        // 0 = auto（与配置文件一致）；勿用 1–16 默认 4，否则保存会覆盖 auto=0
         general.addEntry(entryBuilder.startIntSlider(
-                Component.translatable("option.mapsyncer.concurrent_regions"), config.getMaxConcurrentRegions(), 1, 16)
-            .setDefaultValue(4)
+                Component.translatable("option.mapsyncer.concurrent_regions"),
+                config.getMaxConcurrentRegions(), ConcurrentRegionsConfig.AUTO, ConcurrentRegionsConfig.MAX_CONCURRENT)
+            .setDefaultValue(ConcurrentRegionsConfig.AUTO)
             .setTooltip(Component.translatable("option.mapsyncer.concurrent_regions.tooltip"))
             .setSaveConsumer(config::setMaxConcurrentRegions)
             .build());
@@ -110,8 +112,9 @@ public class ConfigScreenFactory {
             .build());
 
         incremental.addEntry(entryBuilder.startIntSlider(
-                Component.translatable("option.mapsyncer.interval_ticks"), config.getIncrementalUpdateIntervalTicks(), 20, 72000)
-            .setDefaultValue(200)
+                Component.translatable("option.mapsyncer.interval_ticks"),
+                config.getIncrementalUpdateIntervalTicks(), 2400, 72000)
+            .setDefaultValue(6000)
             .setTooltip(Component.translatable("option.mapsyncer.interval_ticks.tooltip"))
             .setSaveConsumer(config::setIncrementalUpdateIntervalTicks)
             .build());

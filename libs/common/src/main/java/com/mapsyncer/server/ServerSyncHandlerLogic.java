@@ -730,6 +730,7 @@ public class ServerSyncHandlerLogic {
         Set<String> skippedDimensions = new HashSet<>();
         DimensionPathMapping dimMapping = DimensionPathMapping.getInstance();
         boolean hasValidDimension = false;
+        boolean alreadyNotifiedMissingDim = false;
 
         for (String xaeroDim : requestedDimensions) {
             Path dimCacheDir = cacheDir.resolve(xaeroDim);
@@ -750,6 +751,7 @@ public class ServerSyncHandlerLogic {
                                 friendlyDim,
                                 CacheCommandHandler.serverCommandPrefix(),
                                 friendlyDim)));
+                alreadyNotifiedMissingDim = true;
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
             } else {
                 LOGGER.debug("Sync-all: skipping dimension {} with no cache", xaeroDim);
@@ -758,7 +760,20 @@ public class ServerSyncHandlerLogic {
 
         if (!hasValidDimension) {
             LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
+            String prefix = CacheCommandHandler.serverCommandPrefix();
+            boolean skipChat = alreadyNotifiedMissingDim;
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
+                if (!skipChat) {
+                    if (targetDimension != null && !targetDimension.isEmpty()) {
+                        String friendlyDim = dimMapping.toServerDimension(targetDimension);
+                        player.sendSystemMessage(ChatUtils.error(
+                                "mapsyncer.server.dim_not_available",
+                                friendlyDim, prefix, friendlyDim));
+                    } else {
+                        player.sendSystemMessage(ChatUtils.message(
+                                "mapsyncer.server.no_cache", prefix));
+                    }
+                }
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "dim_not_available"));
                 finalizePlayerSync(playerId);

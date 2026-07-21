@@ -15,7 +15,8 @@
   "environment": "*",
   "entrypoints": {
     "main": ["com.mapsyncer.MapSyncer"],
-    "client": ["com.mapsyncer.MapSyncerClient"]
+    "client": ["com.mapsyncer.MapSyncerClient"],
+    "modmenu": ["com.mapsyncer.client.ModMenuIntegration"]
   },
   "mixins": [],
   "depends": {
@@ -25,6 +26,7 @@
     "fabric-api": "*"
   },
   "suggests": {
-    "cloth-config": "*"
+    "cloth-config": "*",
+    "modmenu": "*"
   }
 }
