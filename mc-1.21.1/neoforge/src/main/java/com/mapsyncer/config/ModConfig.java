@@ -61,10 +61,9 @@ public class ModConfig {
      * 获取原版维度的默认配置（系统预设）
      *
      * <p>使用字符串格式避免 NightConfig 序列化问题</p>
-     * <p>格式：{@code dimension|layerPlan|dim_type_info}（layerPlan 为 SURFACE / ALL / Y 坐标或其组合）</p>
-     * <p>dim_type_info：{@code hasSkylight|hasCeiling|minY|height|logicalHeight}</p>
-     *
-     * <p>例如：{@code minecraft:the_nether|SURFACE,63|false|true|0|256|128}</p>
+     * <p>推荐格式：{@code dimension = layerPlan}（layerPlan 为 SURFACE / ALL / Y 或其组合）</p>
+     * <p>例如：{@code minecraft:the_nether = SURFACE,63}</p>
+     * <p>旧管道格式 {@code dimension|layerPlan} 仍可读取</p>
      *
      * @return 默认维度配置字符串列表
      */
@@ -152,51 +151,51 @@ public class ModConfig {
          */
         public ClientConfig(ModConfigSpec.Builder builder) {
             builder.push("client");
-            builder.comment("Client settings / 客户端设置");
+            builder.comment("客户端设置 / Client settings");
 
             // 计算默认线程数：可用处理器数的一半，最少 1 个
             int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
             int maxThreads = Runtime.getRuntime().availableProcessors();
 
             hashThreads = builder
-                    .comment("Number of threads for hash computation during map sync",
-                             "哈希计算线程数（用于地图同步时的并行计算）",
+                    .comment("哈希计算线程数（用于地图同步时的并行计算）",
+                             "Number of threads for hash computation during map sync",
                              "",
-                             "Default uses half of available processors to avoid blocking game main thread",
                              "默认使用可用处理器数的一半，避免阻塞游戏主线程",
+                             "Default uses half of available processors to avoid blocking game main thread",
                              "",
-                             "Thread count recommendations:",
                              "线程数选择建议：",
-                             "  1-2 cores: use 1 thread",
                              "  1-2 核：使用 1 线程",
-                             "  4 cores: use 2 threads (default for most setups)",
                              "  4 核：使用 2 线程（大多数配置的默认值）",
-                             "  8+ cores: use 4-8 threads for faster sync",
                              "  8+ 核：使用 4-8 线程加快同步速度",
+                             "Thread count recommendations:",
+                             "  1-2 cores: use 1 thread",
+                             "  4 cores: use 2 threads (default for most setups)",
+                             "  8+ cores: use 4-8 threads for faster sync",
                              "",
-                             "Default: " + defaultThreads + " (half of " + maxThreads + " available processors)",
                              "默认：" + defaultThreads + "（可用 " + maxThreads + " 个处理器的一半）",
-                             "Range: 1 - " + maxThreads,
-                             "范围：1 - " + maxThreads)
+                             "Default: " + defaultThreads + " (half of " + maxThreads + " available processors)",
+                             "范围：1 - " + maxThreads,
+                             "Range: 1 - " + maxThreads)
                     .defineInRange("hashThreads", defaultThreads, 1, maxThreads);
 
             mapRegionLoadIntervalTicks = builder
-                    .comment("Tick interval between loading each out-of-view region into Xaero (1 = every tick).",
-                             "视距外 region 传入 Xaero 的客户端 tick 间隔（1 = 每 tick 一个）。",
+                    .comment("视距外 region 传入 Xaero 的客户端 tick 间隔（1 = 每 tick 一个）。",
+                             "Tick interval between loading each out-of-view region into Xaero (1 = every tick).",
                              "",
-                             "  -1 = Unlimited (drain all at once)",
                              "  -1 = 不限制（一次排空）",
-                             "  0  = View-distance only",
                              "  0  = 仅加载视距内",
-                             "  1-100 = one region every N ticks (default: 1)",
-                             "  1-100 = 每 N tick 加载 1 个（默认：1）")
+                             "  1-100 = 每 N tick 加载 1 个（默认：1）",
+                             "  -1 = Unlimited (drain all at once)",
+                             "  0  = View-distance only",
+                             "  1-100 = one region every N ticks (default: 1)")
                     .defineInRange("mapRegionLoadIntervalTicks", 1, -1, 100);
 
             autoSyncEnabled = builder
-                    .comment("Enable join auto-sync when server uses TICK or SCHEDULED; online periodic sync when TICK",
-                             "服务端 TICK/SCHEDULED 模式下启用进服自动同步；TICK 模式另启在线周期同步",
-                             "Manual /mapsyncer sync is always available",
-                             "手动 /mapsyncer sync 始终可用")
+                    .comment("服务端 TICK/SCHEDULED 模式下启用进服自动同步；TICK 模式另启在线周期同步",
+                             "Enable join auto-sync when server uses TICK or SCHEDULED; online periodic sync when TICK",
+                             "手动 /mapsyncer sync 始终可用",
+                             "Manual /mapsyncer sync is always available")
                     .define("autoSyncEnabled", true);
 
             builder.pop();
@@ -305,26 +304,19 @@ public class ModConfig {
          */
         public ServerConfig(ModConfigSpec.Builder builder) {
             builder.push("general");
-            builder.comment("General settings / 通用设置");
+            builder.comment("通用设置 / General settings");
 
             enableDebugLogging = builder
-                    .comment("Enable debug logging for map generation",
-                             "启用调试日志记录（用于地图生成过程调试）")
+                    .comment("启用调试日志记录（用于地图生成过程调试）",
+                             "Enable debug logging for map generation")
                     .define("enableDebugLogging", false);
             maxConcurrentRegions = builder
-                    .comment("Maximum number of regions to convert concurrently",
-                             "同时转换的最大区域数量")
-                    .defineInRange("maxConcurrentRegions", 4, 1, 16);
+                    .comment("同时转换的最大区域数；0 = 自动（逻辑处理器数 - 2，最小 1，最大 16）",
+                             "Max regions to convert concurrently; 0 = auto (logical CPUs - 2, min 1, max 16)")
+                    .defineInRange("maxConcurrentRegions", 0, 0, 16);
             maxSyncPacketSize = builder
-                    .comment("Maximum sync packet size in bytes",
-                             "同步数据包最大字节数",
-                             "",
-                             "Size options for quick reference (all divide 1024KB/s evenly):",
-                             "  65536  = 64KB  (conservative, 16 packets/s at 1024KB/s)",
-                             "  131072 = 128KB (balanced, 8 packets/s at 1024KB/s)",
-                             "  262144 = 256KB (recommended, 4 packets/s at 1024KB/s)",
-                             "  524288 = 512KB (efficient, 2 packets/s at 1024KB/s)",
-                             "  1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)",
+                    .comment("同步数据包最大字节数",
+                             "Maximum sync packet size in bytes",
                              "",
                              "大小选项供快速参考（均能被 1024KB/s 整除）：",
                              "  65536  = 64KB  （保守，1024KB/s 时每秒 16 包）",
@@ -333,19 +325,19 @@ public class ModConfig {
                              "  524288 = 512KB （高效，1024KB/s 时每秒 2 包）",
                              "  1048576 = 1MB  （最大，1024KB/s 时每秒 1 包）",
                              "",
-                             "Default: 256KB (recommended), Range: 64KB - 1MB",
-                             "默认：256KB（推荐），范围：64KB - 1MB")
+                             "Size options for quick reference (all divide 1024KB/s evenly):",
+                             "  65536  = 64KB  (conservative, 16 packets/s at 1024KB/s)",
+                             "  131072 = 128KB (balanced, 8 packets/s at 1024KB/s)",
+                             "  262144 = 256KB (recommended, 4 packets/s at 1024KB/s)",
+                             "  524288 = 512KB (efficient, 2 packets/s at 1024KB/s)",
+                             "  1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)",
+                             "",
+                             "默认：256KB（推荐），范围：64KB - 1MB",
+                             "Default: 256KB (recommended), Range: 64KB - 1MB")
                     .defineInRange("maxSyncPacketSize", 262144, 65536, 1048576);
             syncSpeedLimitKBps = builder
-                    .comment("Sync speed limit in KB/s (0 = unlimited)",
-                             "同步速度限制 KB/s（0 = 无限制）",
-                             "",
-                             "Speed options for quick reference:",
-                             "  100  = 100KB/s  (slow, suitable for limited bandwidth)",
-                             "  512  = 512KB/s  (moderate, half MiB)",
-                             "  1024 = 1024KB/s = 1MiB/s (default, recommended)",
-                             "  5120 = 5120KB/s = 5MiB/s (fast, suitable for LAN)",
-                             "  10240 = 10240KB/s = 10MiB/s (very fast)",
+                    .comment("同步速度限制 KB/s（0 = 无限制）",
+                             "Sync speed limit in KB/s (0 = unlimited)",
                              "",
                              "速度选项供快速参考：",
                              "  100  = 100KB/s  （慢速，适合带宽受限）",
@@ -354,64 +346,69 @@ public class ModConfig {
                              "  5120 = 5120KB/s = 5MiB/s （快速，适合局域网）",
                              "  10240 = 10240KB/s = 10MiB/s （非常快）",
                              "",
-                             "Default: 1024 (1MiB/s), Range: 0 - 10240",
-                             "默认：1024（1MiB/s），范围：0 - 10240")
+                             "Speed options for quick reference:",
+                             "  100  = 100KB/s  (slow, suitable for limited bandwidth)",
+                             "  512  = 512KB/s  (moderate, half MiB)",
+                             "  1024 = 1024KB/s = 1MiB/s (default, recommended)",
+                             "  5120 = 5120KB/s = 5MiB/s (fast, suitable for LAN)",
+                             "  10240 = 10240KB/s = 10MiB/s (very fast)",
+                             "",
+                             "默认：1024（1MiB/s），范围：0 - 10240",
+                             "Default: 1024 (1MiB/s), Range: 0 - 10240")
                     .defineInRange("syncSpeedLimitKBps", 1024, 0, 10240);
 
             builder.pop();
 
             builder.push("incremental_update");
-            builder.comment("Incremental update settings / 增量更新设置");
+            builder.comment("增量更新设置 / Incremental update settings");
 
             incrementalUpdateMode = builder
-                    .comment("Incremental update mode: DISABLED (off), TICK (periodic by ticks), SCHEDULED (daily at specific time)",
-                             "增量更新模式：DISABLED（禁用），TICK（按 tick 周期更新），SCHEDULED（每日定时更新）")
+                    .comment("增量更新模式：DISABLED（禁用），TICK（按 tick 周期更新），SCHEDULED（每日定时更新）",
+                             "Incremental update mode: DISABLED (off), TICK (periodic by ticks), SCHEDULED (daily at specific time)")
                     .defineEnum("incrementalUpdateMode", UpdateMode.DISABLED);
 
             incrementalUpdateIntervalTicks = builder
-                    .comment("Interval in server ticks for TICK mode (20 ticks = 1 second, default 6000 = 5 minutes)",
-                             "TICK 模式的更新间隔（20 ticks = 1 秒，默认 6000 = 5 分钟）")
+                    .comment("TICK 模式的更新间隔（20 ticks = 1 秒，默认 6000 = 5 分钟）",
+                             "Interval in server ticks for TICK mode (20 ticks = 1 second, default 6000 = 5 minutes)")
                     .defineInRange("incrementalUpdateIntervalTicks", 6000, 2400, 72000);
 
             scheduledUpdateHour = builder
-                    .comment("Hour of day for SCHEDULED mode (0-23, uses server's local timezone)",
-                             "SCHEDULED 模式的更新时间（小时，0-23，使用服务器本地时区）")
+                    .comment("SCHEDULED 模式的更新时间（小时，0-23，使用服务器本地时区）",
+                             "Hour of day for SCHEDULED mode (0-23, uses server's local timezone)")
                     .defineInRange("scheduledUpdateHour", 4, 0, 23);
 
             scheduledUpdateMinute = builder
-                    .comment("Minute of hour for SCHEDULED mode (0-59)",
-                             "SCHEDULED 模式的更新时间（分钟，0-59）")
+                    .comment("SCHEDULED 模式的更新时间（分钟，0-59）",
+                             "Minute of hour for SCHEDULED mode (0-59)")
                     .defineInRange("scheduledUpdateMinute", 0, 0, 59);
 
             builder.pop();
 
             builder.push("dimension_scan");
-            builder.comment("Dimension scan settings / 维度扫描设置");
+            builder.comment("维度扫描设置 / Dimension scan settings");
 
             defaultScanMode = builder
-                    .comment("Default layer plan fallback for dimensions not in dimension_configs",
-                             "SURFACE = surface only; CAVE = single cave layer at default_cave_start",
-                             "未在 dimension_configs 中的维度的默认层计划（SURFACE=仅地表，CAVE=单层洞穴）")
+                    .comment("未在 dimension_configs 中的维度的默认层计划（SURFACE=仅地表，CAVE=单层洞穴）",
+                             "Default layer plan fallback for dimensions not in dimension_configs",
+                             "SURFACE = surface only; CAVE = single cave layer at default_cave_start")
                     .defineEnum("default_scan_mode", ScanMode.SURFACE);
 
             defaultCaveStart = builder
-                    .comment("Cave start Y when default_scan_mode=CAVE (maps to layerPlan caves(Y))",
-                             "default_scan_mode=CAVE 时的 caveStart Y（对应 caves(Y) 层计划）")
+                    .comment("default_scan_mode=CAVE 时的 caveStart Y（对应 caves(Y) 层计划）",
+                             "Cave start Y when default_scan_mode=CAVE (maps to layerPlan caves(Y))")
                     .defineInRange("default_cave_start", 63, -512, 512);
 
             dimensionConfigs = builder
-                    .comment("Per-dimension scan configuration list",
-                             "Format: \"dimension|layerPlan|dim_type_info\"",
-                             "layerPlan: SURFACE, ALL, explicit Y (e.g. 63), or combos (e.g. SURFACE,63)",
-                             "dim_type_info: \"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
-                             "Example: \"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"",
-                             "Legacy \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" still accepted",
-                             "维度扫描配置列表",
-                             "格式：\"dimension|layerPlan|dim_type_info\"",
+                    .comment("维度扫描配置列表（每个维度一条字符串）",
+                             "推荐：\"dimension = layerPlan\"",
                              "layerPlan：SURFACE、ALL、显式 Y（如 63）或组合（如 SURFACE,63）",
-                             "dim_type_info：\"hasSkylight|hasCeiling|minY|height|logicalHeight\"",
-                             "示例：\"minecraft:the_nether|SURFACE,63|false|true|0|256|128\"",
-                             "旧格式 \"dimension|SURFACE|63|…\" / \"dimension|CAVE|63|…\" 仍可读取")
+                             "示例：\"minecraft:the_nether = SURFACE,63\"",
+                             "旧格式 \"dimension|layerPlan\" / \"dimension|SURFACE|63|…\" 仍可读取",
+                             "Per-dimension scan configuration list (one string per dimension)",
+                             "Preferred: \"dimension = layerPlan\"",
+                             "layerPlan: SURFACE, ALL, explicit Y (e.g. 63), or combos (e.g. SURFACE,63)",
+                             "Example: \"minecraft:the_nether = SURFACE,63\"",
+                             "Legacy \"dimension|layerPlan\" and \"dimension|SURFACE|63|…\" still accepted")
                     .defineList("dimension_configs", getDefaultDimensionConfigStrings(),
                         obj -> obj instanceof String);
 

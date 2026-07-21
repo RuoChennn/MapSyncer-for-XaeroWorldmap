@@ -1,5 +1,6 @@
 package com.mapsyncer.platform.impl;
 
+import com.mapsyncer.config.ConcurrentRegionsConfig;
 import com.mapsyncer.config.DimensionScanConfig;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.mca.DimensionTypeInfo;
@@ -163,7 +164,7 @@ public class FabricPlatform implements Platform {
 
     @Override
     public int getMaxConcurrentRegions() {
-        return ModConfig.SERVER().getMaxConcurrentRegions();
+        return ConcurrentRegionsConfig.resolve(ModConfig.SERVER().getMaxConcurrentRegions());
     }
 
     @Override

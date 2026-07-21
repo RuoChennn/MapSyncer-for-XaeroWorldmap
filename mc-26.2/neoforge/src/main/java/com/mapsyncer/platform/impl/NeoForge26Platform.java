@@ -6,6 +6,7 @@ import com.mapsyncer.platform.Platform;
 import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.config.DimensionScanConfig;
+import com.mapsyncer.config.ConcurrentRegionsConfig;
 import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.config.ModConfig;
 import com.mapsyncer.server.BlockPropertyResolver;
@@ -159,7 +160,7 @@ public class NeoForge26Platform implements Platform {
 
     @Override
     public int getMaxConcurrentRegions() {
-        return ModConfig.SERVER.maxConcurrentRegions.get();
+        return ConcurrentRegionsConfig.resolve(ModConfig.SERVER.maxConcurrentRegions.get());
     }
 
     @Override

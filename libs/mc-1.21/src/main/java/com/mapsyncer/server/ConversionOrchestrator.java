@@ -137,7 +137,7 @@ public class ConversionOrchestrator {
     /**
      * 获取或创建转换线程池
      *
-     * 线程池大小由配置 maxConcurrentRegions 决定。
+     * 线程池大小由配置 maxConcurrentRegions 决定（0=自动：逻辑处理器数-2，范围 1–16）。
      * MCA 解析和转换是纯文件 IO 操作，不依赖 Minecraft API，
      * 因此可以安全并发执行。
      *
@@ -148,7 +148,7 @@ public class ConversionOrchestrator {
             int maxConcurrent = PlatformManager.getPlatform().getMaxConcurrentRegions();
             conversionExecutor = Executors.newFixedThreadPool(maxConcurrent,
                 new NamedThreadFactory("mapsyncer-converter"));
-            LOGGER.info("Created conversion thread pool with {} threads", maxConcurrent);
+            LOGGER.info("Created conversion thread pool with {} threads (resolved maxConcurrentRegions)", maxConcurrent);
         }
         return conversionExecutor;
     }

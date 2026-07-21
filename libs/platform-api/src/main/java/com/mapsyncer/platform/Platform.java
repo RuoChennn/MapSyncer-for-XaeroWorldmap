@@ -117,7 +117,7 @@ public interface Platform {
     int getMaxSyncPacketSize();
 
     /**
-     * 获取最大并发区域数
+     * 获取实际并发区域转换数（已解析：配置 0 为自动）
      */
     int getMaxConcurrentRegions();
 
