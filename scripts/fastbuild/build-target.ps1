@@ -62,13 +62,13 @@ function Switch-Settings([string]$Profile) {
         default { throw "Unknown settings profile: $Profile" }
     }
 
-    $marker = switch ($Profile) {
-        "forge" { "include 'mc-1.20.1:forge'" }
-        "12111" { "include 'mc-1.21.11:fabric'" }
-        "26" { "include 'mc-26.1:fabric'" }
+    $markerPattern = switch ($Profile) {
+        "forge" { "^\s*include\s+'mc-1\.20\.1:forge'" }
+        "12111" { "^\s*include\s+'mc-1\.21\.11:fabric'" }
+        "26" { "^\s*include\s+'mc-26\.1:fabric'" }
     }
 
-    if (Select-String -Path $SettingsDefault -Pattern ([regex]::Escape($marker)) -Quiet) {
+    if (Select-String -Path $SettingsDefault -Pattern $markerPattern -Quiet) {
         Write-Host "Settings -> already $Profile, skip" -ForegroundColor DarkGray
         return
     }

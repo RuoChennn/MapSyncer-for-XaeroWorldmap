@@ -23,16 +23,26 @@ configurations {
     }
 }
 
+evaluationDependsOn(':libs:lz4-relocated')
+
 dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.9'
-    implementation(project(':libs:lz4-relocated')) {
-        transitive = false
-    }
     packagerLogging 'org.slf4j:slf4j-simple:2.0.9'
+}
+
+afterEvaluate {
+    def lz4ShadowJar = project(':libs:lz4-relocated').tasks.named('shadowJar')
+    dependencies {
+        implementation(files(lz4ShadowJar.flatMap { it.archiveFile }))
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+tasks.named('compileJava') {
+    dependsOn ':libs:lz4-relocated:shadowJar'
 }
 
 apply from: rootProject.file('gradle/lz4-relocate.gradle')

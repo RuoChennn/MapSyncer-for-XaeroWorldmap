@@ -28,6 +28,7 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -59,11 +60,14 @@ public class MapSyncer {
         DimensionPathMapping.getInstance().initialize(21);
         LOGGER.info("DimensionPathMapping initialized for version 1.21.X");
 
-        // 注册配置（FML 3.0 eventbus 7.0: 保留 ModLoadingContext 兼容层）
+        // 注册配置（FML 3.0 / eventbus 7.0 仍使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
-        modBus.addListener((net.minecraftforge.fml.event.config.ModConfigEvent.Loading event) ->
-                ModConfig.bindServerConfig(event.getConfig()));
+        modBus.addListener(event -> {
+            if (event instanceof ModConfigEvent.Loading loading) {
+                ModConfig.bindServerConfig(loading.getConfig());
+            }
+        });
 
         // 创建网络处理器实例
         ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();

@@ -98,16 +98,12 @@ public class ModConfig {
     }
 
     public static void reloadServerFromDisk() {
-        net.minecraftforge.fml.config.IConfigSpec.ILoadedConfig loaded = boundServerConfig != null
-                ? boundServerConfig.getLoadedConfig() : null;
-        if (loaded != null) {
+        if (boundServerConfig != null) {
             Path path = boundServerConfig.getFullPath();
             CommentedFileConfig disk = CommentedFileConfig.of(path);
             disk.load();
             try {
-                loaded.config().clear();
-                loaded.config().putAll(disk);
-                SERVER_SPEC.acceptConfig(loaded);
+                SERVER_SPEC.acceptConfig(disk);
             } finally {
                 disk.close();
             }

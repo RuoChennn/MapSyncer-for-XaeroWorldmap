@@ -42,6 +42,17 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # Loader 胶水层
 
 ## 使用构建脚本
 
+### 首次环境准备（一键部署依赖）
+
+安装 JDK 17/21/25、下载 Gradle 8.9、引导 Wrapper，并预拉取 Maven / MC 工件：
+
+```powershell
+.\scripts\setup-deps.ps1              # 完整部署（含 Maven 预拉取，耗时较长）
+.\scripts\setup-deps.ps1 -Quick       # 仅 JDK 检测 + Gradle 8.9 + Wrapper
+```
+
+或双击 `scripts\setup-deps.bat`。
+
 ### PowerShell（推荐）
 
 ```powershell

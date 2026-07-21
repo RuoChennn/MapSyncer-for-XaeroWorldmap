@@ -29,8 +29,34 @@ tasks.named('shadowJar') {
     configurations = [project.configurations.lz4Shadow]
     configureLz4Shadow(it)
     configureLz4ShadowExcludes(it)
+
+    outputs.upToDateWhen {
+        def jarFile = archiveFile.get().asFile
+        jarFile.exists() && jarFile.length() >= 1024
+    }
+
+    doLast {
+        def jarFile = archiveFile.get().asFile
+        if (jarFile.length() < 1024) {
+            throw new GradleException(
+                "lz4-relocated shadowJar is unexpectedly small (${jarFile.length()} bytes). " +
+                "Run ':libs:lz4-relocated:clean :libs:lz4-relocated:shadowJar' and rebuild."
+            )
+        }
+    }
 }
 
 tasks.named('jar') {
     enabled = false
+}
+
+tasks.named('build') {
+    dependsOn tasks.named('shadowJar')
+}
+
+afterEvaluate {
+    [configurations.apiElements, configurations.runtimeElements].each { elements ->
+        elements.outgoing.artifacts.clear()
+        elements.outgoing.artifact(tasks.named('shadowJar'))
+    }
 }

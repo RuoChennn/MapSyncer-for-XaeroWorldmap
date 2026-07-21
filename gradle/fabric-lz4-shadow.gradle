@@ -19,7 +19,22 @@ tasks.named('shadowJar') {
     configureLz4ShadowExcludes(it)
 }
 
-tasks.named('remapJar') {
-    dependsOn tasks.named('shadowJar')
-    inputFile.set(tasks.named('shadowJar').flatMap { it.archiveFile })
+afterEvaluate {
+    def remapJarTask = tasks.findByName('remapJar')
+    if (remapJarTask != null) {
+        // Loom remap（≤1.21.11）：shadowJar -> remapJar 产出发布 jar
+        remapJarTask.dependsOn(tasks.named('shadowJar'))
+        remapJarTask.inputFile.set(tasks.named('shadowJar').flatMap { it.archiveFile })
+    } else {
+        // Loom 非 remap（≥26.1）：无 remapJar，shadowJar 即发布 jar
+        tasks.named('jar', Jar) {
+            enabled = false
+        }
+        tasks.named('shadowJar') {
+            archiveClassifier.set('')
+        }
+        tasks.named('assemble').configure {
+            dependsOn(tasks.named('shadowJar'))
+        }
+    }
 }
