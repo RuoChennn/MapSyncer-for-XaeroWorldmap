@@ -62,6 +62,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   Loader 胶水（Platform 实现、�
 | `generate` / `generate <维>` / `generate <维> <x> <z>` | 全维 / 指定维 / 单 region 生成 |
 | `generate <维> --force` | 清缓存后强制重生成 |
 | `status` | 转换进度、增量状态、各维度缓存统计 |
+| `incremental` | 查看当前增量更新模式（DISABLED / TICK / SCHEDULED） |
 | `incremental off` | 关闭增量更新 |
 | `incremental tick [间隔]` | TICK 模式（2400–72000，默认 6000 = 5 分钟） |
 | `incremental scheduled [时] [分]` | SCHEDULED 模式（默认 04:00，服务器本地时区） |

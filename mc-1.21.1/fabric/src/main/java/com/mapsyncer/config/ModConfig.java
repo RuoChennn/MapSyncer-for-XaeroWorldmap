@@ -450,6 +450,7 @@ public class ModConfig {
                 sb.append("#   262144 = 256KB （推荐，1024KB/s 时每秒 4 包）\n");
                 sb.append("#   524288 = 512KB （高效，1024KB/s 时每秒 2 包）\n");
                 sb.append("#   1048576 = 1MB  （最大，1024KB/s 时每秒 1 包）\n");
+                sb.append("# 默认：256KB（推荐），范围：64KB - 1MB\n");
                 sb.append("#\n");
                 sb.append("# Size options for quick reference (all divide 1024KB/s evenly):\n");
                 sb.append("#   65536  = 64KB  (conservative, 16 packets/s at 1024KB/s)\n");
@@ -457,8 +458,6 @@ public class ModConfig {
                 sb.append("#   262144 = 256KB (recommended, 4 packets/s at 1024KB/s)\n");
                 sb.append("#   524288 = 512KB (efficient, 2 packets/s at 1024KB/s)\n");
                 sb.append("#   1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)\n");
-                sb.append("#\n");
-                sb.append("# 默认：256KB（推荐），范围：64KB - 1MB\n");
                 sb.append("# Default: 256KB (recommended), Range: 64KB - 1MB\n");
                 sb.append("maxSyncPacketSize=" + maxSyncPacketSize + "\n");
                 sb.append("\n");

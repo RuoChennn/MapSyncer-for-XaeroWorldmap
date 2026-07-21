@@ -87,6 +87,7 @@
 | `/mapsyncer generate <维度> <x> <z>` | 生成单个区域 |
 | `/mapsyncer generate <维度> --force` | 强制重新生成（清除缓存） |
 | `/mapsyncer status` | 查看生成进度和缓存统计 |
+| `/mapsyncer incremental` | 查看当前增量更新模式 |
 | `/mapsyncer incremental off` | 禁用增量更新 |
 | `/mapsyncer incremental tick [间隔]` | 启用周期更新（2400–72000 ticks，默认 6000 = 5 分钟） |
 | `/mapsyncer incremental scheduled [时] [分]` | 启用定时更新（默认 04:00） |

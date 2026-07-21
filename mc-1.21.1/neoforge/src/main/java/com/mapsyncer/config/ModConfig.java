@@ -324,6 +324,7 @@ public class ModConfig {
                              "  262144 = 256KB （推荐，1024KB/s 时每秒 4 包）",
                              "  524288 = 512KB （高效，1024KB/s 时每秒 2 包）",
                              "  1048576 = 1MB  （最大，1024KB/s 时每秒 1 包）",
+                             "默认：256KB（推荐），范围：64KB - 1MB",
                              "",
                              "Size options for quick reference (all divide 1024KB/s evenly):",
                              "  65536  = 64KB  (conservative, 16 packets/s at 1024KB/s)",
@@ -331,8 +332,6 @@ public class ModConfig {
                              "  262144 = 256KB (recommended, 4 packets/s at 1024KB/s)",
                              "  524288 = 512KB (efficient, 2 packets/s at 1024KB/s)",
                              "  1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)",
-                             "",
-                             "默认：256KB（推荐），范围：64KB - 1MB",
                              "Default: 256KB (recommended), Range: 64KB - 1MB")
                     .defineInRange("maxSyncPacketSize", 262144, 65536, 1048576);
             syncSpeedLimitKBps = builder

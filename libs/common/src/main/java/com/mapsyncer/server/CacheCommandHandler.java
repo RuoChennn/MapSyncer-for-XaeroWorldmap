@@ -2,6 +2,7 @@ package com.mapsyncer.server;
 
 import com.mapsyncer.config.DimensionConfigParser;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.platform.PlatformType;
 import com.mapsyncer.platform.UpdateMode;
 import com.mapsyncer.server.ConversionOrchestrator.DimensionCacheStats;
 import com.mapsyncer.server.ConversionOrchestrator.SingleRegionResult;
@@ -31,19 +32,73 @@ public class CacheCommandHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(CacheCommandHandler.class);
 
     /**
-     * 显示帮助信息
+     * 当前 Loader 下的服务端命令前缀。
+     * Fabric：{@code mapsyncerserver}；Forge / NeoForge：{@code mapsyncer}。
+     */
+    public static String serverCommandPrefix() {
+        return PlatformManager.getPlatform().getType() == PlatformType.FABRIC
+                ? "mapsyncerserver"
+                : "mapsyncer";
+    }
+
+    /**
+     * 显示帮助信息（使用当前平台命令前缀）
      */
     public static void showHelp(Consumer<net.minecraft.network.chat.Component> sender) {
+        showHelp(sender, serverCommandPrefix());
+    }
+
+    /**
+     * 显示帮助信息
+     *
+     * @param prefix 服务端命令字面量（不含 /）
+     */
+    public static void showHelp(Consumer<net.minecraft.network.chat.Component> sender, String prefix) {
         sender.accept(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_dim"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_region"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_force"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.status"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_off"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_tick"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"));
-        sender.accept(ChatUtils.desc("mapsyncer.help.server.reloadconfig"));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_dim", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_region", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_force", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.status", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_off", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_tick", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.reloadconfig", prefix));
+    }
+
+    /**
+     * 向发送者报告当前增量更新工作模式（配置值 + 运行信息）。
+     */
+    public static void showIncrementalMode(Consumer<net.minecraft.network.chat.Component> sender) {
+        var platform = PlatformManager.getPlatform();
+        UpdateMode mode = platform.getIncrementalUpdateMode();
+        IncrementalUpdateHandlerLogic handler = IncrementalUpdateHandlerLogic.getInstance();
+
+        if (mode == UpdateMode.DISABLED) {
+            sender.accept(ChatUtils.message("mapsyncer.command.incremental_status_disabled"));
+        } else if (mode == UpdateMode.TICK) {
+            int interval = platform.getIncrementalUpdateIntervalTicks();
+            int remainingTicks = handler.isRunning()
+                    ? Math.max(0, interval - handler.getTickCounter())
+                    : interval;
+            int remainingSeconds = remainingTicks / 20;
+            int minutes = remainingSeconds / 60;
+            int seconds = remainingSeconds % 60;
+            sender.accept(ChatUtils.message(
+                    "mapsyncer.command.incremental_status_tick",
+                    interval, interval / 20.0f, minutes, seconds));
+        } else if (mode == UpdateMode.SCHEDULED) {
+            int hour = platform.getScheduledUpdateHour();
+            int minute = platform.getScheduledUpdateMinute();
+            sender.accept(ChatUtils.message(
+                    "mapsyncer.command.incremental_status_scheduled", hour, minute));
+        } else {
+            sender.accept(ChatUtils.message("mapsyncer.command.incremental_status_disabled"));
+        }
+
+        sender.accept(ChatUtils.desc(
+                "mapsyncer.command.incremental_status_hint", serverCommandPrefix()));
     }
 
     /**

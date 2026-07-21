@@ -694,7 +694,8 @@ public class ServerSyncHandlerLogic {
 
         if (!Files.exists(cacheDir)) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.message("mapsyncer.server.no_cache"));
+                player.sendSystemMessage(ChatUtils.message(
+                        "mapsyncer.server.no_cache", CacheCommandHandler.serverCommandPrefix()));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
                 finalizePlayerSync(playerId);
@@ -744,7 +745,11 @@ public class ServerSyncHandlerLogic {
             } else if (!syncAll) {
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 enqueueIfCurrent(server, playerId, syncVersion, player ->
-                        player.sendSystemMessage(ChatUtils.error("mapsyncer.server.dim_not_available", friendlyDim, friendlyDim)));
+                        player.sendSystemMessage(ChatUtils.error(
+                                "mapsyncer.server.dim_not_available",
+                                friendlyDim,
+                                CacheCommandHandler.serverCommandPrefix(),
+                                friendlyDim)));
                 LOGGER.warn("Requested dimension {} (xaero: {}) has no cache data at {}", friendlyDim, xaeroDim, dimCacheDir);
             } else {
                 LOGGER.debug("Sync-all: skipping dimension {} with no cache", xaeroDim);

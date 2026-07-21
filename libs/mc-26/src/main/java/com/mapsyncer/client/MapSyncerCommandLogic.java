@@ -5,6 +5,7 @@ import com.mapsyncer.network.NetworkManager;
 import com.mapsyncer.network.payload.ClientMeta;
 import com.mapsyncer.network.payload.SyncRequestPayload;
 import com.mapsyncer.platform.PlatformManager;
+import com.mapsyncer.server.CacheCommandHandler;
 import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.ClientMessageHelper;
 import com.mapsyncer.util.DimensionPathMapping;
@@ -50,15 +51,18 @@ public class MapSyncerCommandLogic {
         mc.player.sendSystemMessage(ChatUtils.header("mapsyncer.command.help_dimension_note"));
 
         if (hasServerPermission) {
+            String prefix = CacheCommandHandler.serverCommandPrefix();
             mc.player.sendSystemMessage(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.help.server.header")));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_region"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_force"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.status"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick"));
-            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled"));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_dim", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_region", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.generate_force", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.status", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_off", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_tick", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.incremental_scheduled", prefix));
+            mc.player.sendSystemMessage(ChatUtils.desc("mapsyncer.help.server.reloadconfig", prefix));
         }
     }
 

@@ -80,6 +80,7 @@ Supports dedicated and integrated servers (LAN). On integrated servers, the host
 | `generate <dim> --force` | Clear cache and rebuild |
 | `status` | Progress + cache stats |
 | `incremental off` | Disable incremental updates |
+| `incremental` | Show current incremental update mode |
 | `incremental tick [interval]` | Periodic (2400–72000 ticks, default 6000 = 5 min) |
 | `incremental scheduled [h] [m]` | Daily schedule (default 04:00, server local TZ) |
 | `reloadconfig` | Reload server config from disk |
