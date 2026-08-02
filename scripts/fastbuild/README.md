@@ -7,6 +7,7 @@
 | 1.20.1  | fabric | forge | neoforge |
 | 1.21.1  | fabric | forge | neoforge |
 | 26.1    | fabric | —     | neoforge |
+| 26.2    | fabric | —     | —        |
 
 ## Gradle 版本兼容性
 

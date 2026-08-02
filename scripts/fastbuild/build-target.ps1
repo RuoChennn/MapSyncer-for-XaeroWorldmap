@@ -2,12 +2,14 @@
 #
 # 用法:
 #   .\build-target.ps1 fabric-26.1 -Clean -NoTest
+#   .\build-target.ps1 fabric-26.2 -Clean
 #   .\build-target.ps1 neoforge-26.1 -Clean -NoTest
 #   .\build-target.ps1 all -NoTest
 #
 # Settings 文件说明:
 #   settings.gradle          — 默认: 1.20.1 + 1.21.1 系列
 #   scripts/fastbuild/settings-26.gradle — 26.1 专用 (隔离 Loom 1.16)
+#   scripts/fastbuild/settings-262.gradle — 26.2 Fabric 专用 (隔离 Loom 1.17)
 
 param(
     [Parameter(Mandatory=$true, Position=0)]
@@ -24,6 +26,7 @@ $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $SettingsDefault = Join-Path $ProjectRoot "settings.gradle"
 $SettingsBak = Join-Path $ProjectRoot "settings.bak.gradle"
 $Settings26 = Join-Path $ProjectRoot "scripts\fastbuild\settings-26.gradle"
+$Settings262 = Join-Path $ProjectRoot "scripts\fastbuild\settings-262.gradle"
 
 # Gradle 版本映射
 $GradleVersions = @{
@@ -34,13 +37,14 @@ $GradleVersions = @{
     "fabric-1.20.1"   = "9.4.0"
     "fabric-1.21.1"   = "9.4.0"
     "fabric-26.1"     = "9.4.0"
+    "fabric-26.2"     = "9.5.1"
     "core"            = "9.4.0"
     "platform-api"    = "9.4.0"
     "all"             = "9.4.0"
 }
 
 # 需要隔离 settings 的目标（避免 Loom 版本冲突）
-$IsolatedSettingsTargets = @("fabric-26.1", "neoforge-26.1")
+$IsolatedSettingsTargets = @("fabric-26.1", "neoforge-26.1", "fabric-26.2")
 
 function Get-GradleVersion($target) {
     if ($GradleVersions.ContainsKey($target)) {
@@ -53,21 +57,23 @@ function Set-GradleWrapper($version) {
     $wrapperProps = Join-Path $ProjectRoot "gradle\wrapper\gradle-wrapper.properties"
     $newUrl = "distributionUrl=https\://services.gradle.org/distributions/gradle-${version}-bin.zip"
     $content = Get-Content $wrapperProps -Raw
-    $updatedContent = $content -replace "distributionUrl=.*", $newUrl
+    $updatedContent = $content -replace "(?m)^distributionUrl=.*$", $newUrl
     Set-Content $wrapperProps $updatedContent -NoNewline
     Write-Host "Gradle wrapper -> $version" -ForegroundColor Cyan
 }
 
 function Switch-SettingsFile($target) {
     if ($IsolatedSettingsTargets -contains $target) {
+        $settings = if ($target -eq "fabric-26.2") { $Settings262 } else { $Settings26 }
+        $marker = if ($target -eq "fabric-26.2") { "(?m)^include 'mc-26\.2:fabric'\s*$" } else { "(?m)^include 'mc-26\.1:fabric'\s*$" }
         # 检查当前是否已经是 26 版本
         $currentContent = Get-Content $SettingsDefault -Raw
-        if ($currentContent -notmatch "include 'mc-26.1:fabric'") {
-            Write-Host "Settings -> 26.x (isolated)" -ForegroundColor Yellow
+        if ($currentContent -notmatch $marker) {
+            Write-Host "Settings -> $target (isolated)" -ForegroundColor Yellow
             # 备份当前
             Copy-Item $SettingsDefault $SettingsBak -Force
             # 切换到 26 版本
-            Copy-Item $Settings26 $SettingsDefault -Force
+            Copy-Item $settings $SettingsDefault -Force
             $script:_settingsSwitched = $true
         } else {
             Write-Host "Settings -> already 26.x, skip" -ForegroundColor DarkGray
@@ -76,7 +82,7 @@ function Switch-SettingsFile($target) {
     } else {
         # 非 26 目标：检查是否需要恢复
         $currentContent = Get-Content $SettingsDefault -Raw
-        if ($currentContent -match "include 'mc-26.1:fabric'" -or (Test-Path $SettingsBak)) {
+        if ($currentContent -match "(?m)^include 'mc-26\.[12]:fabric'\s*$" -or (Test-Path $SettingsBak)) {
             if (Test-Path $SettingsBak) {
                 Write-Host "Settings -> default (restored)" -ForegroundColor Yellow
                 Copy-Item $SettingsBak $SettingsDefault -Force

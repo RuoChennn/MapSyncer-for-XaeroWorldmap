@@ -16,6 +16,7 @@ A multi-platform Minecraft mod that syncs server-side explored areas to clients'
 | 1.21.1 | ✅ | ✅ | ✅ |
 | 1.21.11 | ✅ | ✅ | ✅ |
 | 26.1 | — | ✅ | ✅ |
+| 26.2 | — | — | ✅ |
 
 ### Client Dependencies
 
@@ -155,6 +156,10 @@ mc-26.1/                26.1 version
 ├── shared/
 ├── fabric/
 └── neoforge/
+
+mc-26.2/                26.2 version
+├── shared/
+└── fabric/
 ```
 
 ### Pipeline
@@ -245,6 +250,7 @@ Client:
 scripts/fastbuild/build-all.bat              # All active platforms
 scripts/fastbuild/build-forge.bat            # All Forge modules (Gradle 8.9 + JDK 17/21)
 scripts/fastbuild/build-fabric-26.1.bat      # Fabric 26.1 (isolated Gradle process)
+scripts/fastbuild/build-fabric-26.2.bat      # Fabric 26.2 (isolated Gradle process)
 scripts/fastbuild/build-26.1.bat             # All 26.1 modules
 ```
 

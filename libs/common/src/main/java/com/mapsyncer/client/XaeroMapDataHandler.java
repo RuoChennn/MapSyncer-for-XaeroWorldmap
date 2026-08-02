@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
@@ -153,7 +154,11 @@ public final class XaeroMapDataHandler {
      */
     public static Path writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
         String xaeroDim = chunk.dimension;
-        Path dimDir = serverDir.resolve(xaeroDim);
+        Path dimDir = resolveDimensionDirectory(serverDir, xaeroDim);
+        if (dimDir == null) {
+            LOGGER.warn("Rejected unsafe Xaero dimension path: {}", xaeroDim);
+            return null;
+        }
         Path mwDir = dimDir.resolve("mw$" + worldId);
 
         Path targetDir;
@@ -178,6 +183,20 @@ public final class XaeroMapDataHandler {
         }
 
         return mwDir;
+    }
+
+    static Path resolveDimensionDirectory(Path serverDir, String dimension) {
+        if (serverDir == null || dimension == null) {
+            return null;
+        }
+
+        try {
+            Path root = serverDir.toAbsolutePath().normalize();
+            Path resolved = root.resolve(dimension).normalize();
+            return root.equals(resolved.getParent()) ? resolved : null;
+        } catch (InvalidPathException ignored) {
+            return null;
+        }
     }
 
     /**

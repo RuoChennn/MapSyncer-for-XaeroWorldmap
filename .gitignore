@@ -64,3 +64,6 @@ outputs/
 
 # Temporary decompilation artifacts
 .tmpfml/
+
+# Local code-navigation cache
+.serena/
