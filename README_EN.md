@@ -16,6 +16,9 @@ A multi-platform Minecraft mod that syncs server-side explored areas to clients'
 | 1.21.1 | ✅ | ✅ | ✅ |
 | 1.21.11 | ✅ | ✅ | ✅ |
 | 26.1 | — | ✅ | ✅ |
+| 26.2 | — | — | ✅ |
+
+> **Fabric 26.2 note**: after the sync transfer finishes, players must relog into the server before Xaero's World Map fully reloads and displays the synced map data.
 
 ### Client Dependencies
 

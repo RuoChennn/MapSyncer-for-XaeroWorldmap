@@ -13,7 +13,7 @@ pluginManagement {
 }
 
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
 rootProject.name = mod_id
@@ -56,4 +56,5 @@ include 'mc-1.21.11:neoforge'
 // MC 26.1
 include 'mc-26.1:shared'
 include 'mc-26.1:neoforge'
+include 'mc-26.2:shared'
 // include 'mc-26.1:fabric'  // Loom 版本冲突，使用 scripts/settings-26.gradle 单独构建
