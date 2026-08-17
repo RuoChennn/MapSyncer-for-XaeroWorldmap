@@ -27,7 +27,6 @@ public final class ColumnScanContext {
     /** 进入空气区域（Xaero: 遇 air 设 underair=true） */
     void onAir(int pos) {
         underair[pos] = true;
-        shouldEnterGround[pos] = false;
     }
 
     /**
@@ -39,9 +38,40 @@ public final class ColumnScanContext {
         }
     }
 
-    /** 洞穴模式：只有 underair 后才可记录实体方块/overlay */
-    boolean canProcessCaveBlock(int pos, boolean isCaveMode) {
-        return !isCaveMode || underair[pos];
+    /**
+     * 对齐 Xaero 的完整洞穴状态机：先穿过最上方地表，再等到空气后记录洞穴表面。
+     */
+    boolean canProcessCaveBlock(int pos, boolean isCaveMode,
+                                ChunkSectionParser.BlockState state,
+                                BlockPropertyLookup lookup) {
+        if (!isCaveMode) {
+            return true;
+        }
+
+        int flags = lookup.getFlags(state.name());
+        boolean fluid = state.isFluid()
+            || (flags & BlockPropertyLookup.FLAG_TRANSLUCENT_FLUID) != 0;
+        if (fluid) {
+            if (shouldEnterGround[pos]) {
+                return false;
+            }
+            underair[pos] = true;
+        }
+
+        if (!underair[pos]) {
+            return false;
+        }
+        if (shouldEnterGround[pos]) {
+            boolean solidGround = (flags & (BlockPropertyLookup.FLAG_INVISIBLE
+                | BlockPropertyLookup.FLAG_SHOULD_OVERLAY)) == 0
+                && (flags & BlockPropertyLookup.FLAG_HAS_VANILLA_COLOR) != 0;
+            if (solidGround) {
+                underair[pos] = false;
+                shouldEnterGround[pos] = false;
+            }
+            return false;
+        }
+        return true;
     }
 
     static boolean hasFluid(ChunkSectionParser.BlockState state, BlockPropertyLookup lookup) {

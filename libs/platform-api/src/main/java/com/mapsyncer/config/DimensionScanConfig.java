@@ -53,7 +53,7 @@ public record DimensionScanConfig(
         }
         int start = caveStart();
         if (start == Integer.MIN_VALUE) {
-            return Math.max(30, start - minBuildHeight);
+            return 30;
         }
         return 15;
     }

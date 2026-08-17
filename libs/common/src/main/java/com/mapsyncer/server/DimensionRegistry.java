@@ -7,6 +7,7 @@ import com.mapsyncer.platform.PlatformManager;
 import com.mapsyncer.util.DimensionApiHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.DimensionTypeHelper;
+import com.mapsyncer.util.ModLogConfig;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -43,6 +44,10 @@ public class DimensionRegistry {
      * @param server MinecraftServer实例
      */
     public static void registerAllDimensions(MinecraftServer server) {
+        // 每个 Loader 启动时都会走到这里；在此应用 enableDebugLogging，
+        // 否则该配置只有在 /mapsyncer reloadconfig 之后才会生效。
+        ModLogConfig.applyDebugLogging();
+
         // 防止重复注册
         if (hasRegistered) {
             LOGGER.debug("Dimensions already registered, skipping");
@@ -108,10 +113,13 @@ public class DimensionRegistry {
                 dimTypeInfo = DimensionTypeInfo.fromDimensionId(dimId);
             }
 
-            // 使用默认地表模式和动态维度类型信息创建配置
+            // 层计划取自 default_scan_mode / default_cave_start（原版维度仍用内置默认），
+            // 维度类型信息从运行中的 ServerLevel 动态获取。
+            LayerPlan defaultPlan = PlatformManager.getPlatform()
+                    .getConfigForDimension(dimId).layerPlan();
             DimensionScanConfig finalConfig = new DimensionScanConfig(
                     dimId,
-                    LayerPlan.surfaceOnly(),
+                    defaultPlan,
                     dimTypeInfo
             );
 
@@ -137,7 +145,9 @@ public class DimensionRegistry {
      */
     public static void resetRegistration() {
         hasRegistered = false;
-        DimensionPathMapping.resetInstance();
+        // Keep the Minecraft version selected during mod startup; recreating the
+        // singleton here silently reverted 26.x servers to the 1.21 path layout.
+        DimensionPathMapping.getInstance().clearDetectedMappings();
         LOGGER.info("Dimension registration state reset");
     }
 

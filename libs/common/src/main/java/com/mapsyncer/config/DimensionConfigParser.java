@@ -12,12 +12,12 @@ import java.util.Properties;
 /**
  * 维度配置解析工具类。
  *
- * <p>推荐条目格式：{@code dimension = layerPlan}（如 {@code minecraft:the_nether = SURFACE,63}）</p>
+ * <p>推荐条目格式：{@code dimension = layerPlan}（如 {@code minecraft:the_nether = SURFACE,ALL,FULL}）</p>
  * <p>Fabric 与 Forge/NeoForge 均使用列表风格：</p>
  * <pre>
  * dimension_configs = [
  *     "minecraft:overworld = SURFACE",
- *     "minecraft:the_nether = SURFACE,63"
+ *     "minecraft:the_nether = SURFACE,ALL,FULL"
  * ]
  * </pre>
  * <p>兼容：{@code dimension|layerPlan}、旧多字段管道格式、Fabric 旧
@@ -60,9 +60,13 @@ public final class DimensionConfigParser {
     public static List<String> getDefaultDimensionConfigStrings() {
         List<String> defaults = new ArrayList<>(3);
         defaults.add(formatEntry("minecraft:overworld", LayerPlan.surfaceOnly()));
-        defaults.add(formatEntry("minecraft:the_nether", LayerPlan.mixed(DEFAULT_CAVE_START)));
+        defaults.add(formatEntry("minecraft:the_nether", defaultNetherPlan()));
         defaults.add(formatEntry("minecraft:the_end", LayerPlan.surfaceOnly()));
         return defaults;
+    }
+
+    private static LayerPlan defaultNetherPlan() {
+        return new LayerPlan(true, true, List.of(LayerPlan.FULL_CAVE_START));
     }
 
     public static void invalidateCache() {
@@ -182,7 +186,7 @@ public final class DimensionConfigParser {
      * <pre>
      * dimension_configs = [
      *     "minecraft:overworld = SURFACE",
-     *     "minecraft:the_nether = SURFACE,63"
+     *     "minecraft:the_nether = SURFACE,ALL,FULL"
      * ]
      * </pre>
      * <p>否则回退 {@link #loadEntriesFromProperties}（旧 {@code dimensionConfig.N} / 分号拼接）。</p>
@@ -404,14 +408,14 @@ public final class DimensionConfigParser {
     public static void appendEntriesToPropertiesFile(StringBuilder sb, List<String> dimensionConfigs) {
         sb.append("# 维度扫描配置（与 Forge/NeoForge 列表风格一致）\n");
         sb.append("# 格式：\"dimension = layerPlan\"\n");
-        sb.append("# layerPlan：SURFACE、ALL、显式 Y（如 63）或组合（如 SURFACE,63）\n");
-        sb.append("# 示例：\"minecraft:the_nether = SURFACE,63\"\n");
+        sb.append("# layerPlan：SURFACE、ALL、FULL、显式 Y（如 63）或组合\n");
+        sb.append("# 示例：\"minecraft:the_nether = SURFACE,ALL,FULL\"\n");
         sb.append("# 旧管道 / dimensionConfig.N / 分号拼接 仍可读取\n");
         sb.append("#\n");
         sb.append("# Per-dimension scan configuration (same list style as Forge/NeoForge)\n");
         sb.append("# Format: \"dimension = layerPlan\"\n");
-        sb.append("# layerPlan: SURFACE, ALL, explicit Y (e.g. 63), or combos (e.g. SURFACE,63)\n");
-        sb.append("# Example: \"minecraft:the_nether = SURFACE,63\"\n");
+        sb.append("# layerPlan: SURFACE, ALL, FULL, explicit Y (e.g. 63), or combinations\n");
+        sb.append("# Example: \"minecraft:the_nether = SURFACE,ALL,FULL\"\n");
         sb.append("# Legacy pipe / dimensionConfig.N / dimensionConfigs=a;b still load\n");
         sb.append(LIST_KEY).append(" = [\n");
         if (dimensionConfigs != null) {
@@ -449,7 +453,7 @@ public final class DimensionConfigParser {
             switch (normalizedPath) {
                 case "the_nether":
                     return new DimensionScanConfig("minecraft:the_nether",
-                        LayerPlan.mixed(DEFAULT_CAVE_START), DimensionTypeInfo.nether());
+                        defaultNetherPlan(), DimensionTypeInfo.nether());
                 case "overworld":
                     return new DimensionScanConfig("minecraft:overworld",
                         LayerPlan.surfaceOnly(), DimensionTypeInfo.overworld());

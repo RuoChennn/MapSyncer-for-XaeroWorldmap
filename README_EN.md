@@ -44,7 +44,7 @@ Supports dedicated and integrated servers (LAN). On integrated servers, the host
 | **Bandwidth control** | Configurable packet size & KB/s limit; auto fragment large payloads |
 | **Resumable sync** | Client hash cache; resume after disconnect |
 | **View-distance priority** | In-view first; out-of-view drain rate configurable |
-| **Dimensions / caves** | Vanilla + mod dims; `dimension = layerPlan` (SURFACE / ALL / Y / combos) |
+| **Dimensions / caves** | Vanilla + mod dims; `dimension = layerPlan` (SURFACE / ALL / FULL / Y / combos) |
 | **Incremental update** | Server DISABLED / TICK / SCHEDULED cache refresh |
 | **Auto sync** | Join / online pull by server mode (toggleable); manual sync always works |
 | **Concurrent conversion** | `maxConcurrentRegions`: **0 = auto** (`logical CPUs − 2`, capped at 16) |
@@ -134,7 +134,7 @@ NeoForge: `config/mapsyncer-server.toml` · Fabric: `config/mapsyncer-server.pro
 ```toml
 dimension_configs = [
     "minecraft:overworld = SURFACE",
-    "minecraft:the_nether = SURFACE,63",
+    "minecraft:the_nether = SURFACE,ALL,FULL",
     "minecraft:the_end = SURFACE"
 ]
 ```
@@ -142,9 +142,12 @@ dimension_configs = [
 | layerPlan | Description |
 |-----------|-------------|
 | `SURFACE` | Surface only; ceiling dims scan above logical top (Nether Y≥128) |
-| `ALL` | All cave layers in height range |
+| `ALL` | All cave layers in the playable height range |
+| `FULL` | Separate full-depth layer used by Xaero's Full cave mode |
 | `63` / `63,127` | Explicit cave layers only |
-| `SURFACE,63` / … | Combinations; layer index = `caveStart >> 4` → `caves/<n>/` |
+| `SURFACE,ALL,FULL` / … | Combinations; explicit layer index = `caveStart >> 4` → `caves/<n>/` |
+
+The Nether defaults to `SURFACE,ALL,FULL`, covering Xaero cave modes Off, Layered, and Full. `FULL` is stored in Xaero's separate `caves/-2147483648/` layer.
 
 Compatible: `dimension|layerPlan`, legacy multi-field pipes, Fabric legacy keys. Dimension type info comes from the server API at runtime (not stored in config).
 

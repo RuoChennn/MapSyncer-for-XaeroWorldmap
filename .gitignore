@@ -30,6 +30,7 @@ logs/
 
 # Claude Code
 .claude/
+.serena/
 
 # 参考资料（反编译源码、工具 JAR、日志等，不参与构建）
 .reference/

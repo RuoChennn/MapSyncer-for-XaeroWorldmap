@@ -10,9 +10,10 @@ import java.util.List;
  * <p>逗号分隔，可组合：</p>
  * <ul>
  *   <li>{@code SURFACE} — 仅地表（有顶盖维度为逻辑顶以上；无顶盖维度为全列）</li>
- *   <li>{@code ALL} — 生成维度高度范围内的全部洞穴层</li>
+ *   <li>{@code ALL} — 生成维度可玩高度范围内的全部洞穴层</li>
+ *   <li>{@code FULL} — 生成 Xaero 完整洞穴模式使用的独立层</li>
  *   <li>{@code 63} / {@code 63,127} — 仅显式洞穴层，不含地表</li>
- *   <li>{@code SURFACE,ALL} / {@code SURFACE,63} / {@code ALL,63} — 组合；与显式 Y 自动去重</li>
+ *   <li>{@code SURFACE,ALL,FULL} / {@code SURFACE,63} — 组合；与显式 Y 自动去重</li>
  *   <li>空 — 由 {@link RegionGenerationPlanner} 回退为仅地表</li>
  * </ul>
  */
@@ -22,6 +23,7 @@ public record LayerPlan(
     List<Integer> caveStarts
 ) {
     public static final int DEFAULT_CAVE_START = 63;
+    public static final int FULL_CAVE_START = Integer.MIN_VALUE;
 
     public LayerPlan {
         caveStarts = caveStarts == null || caveStarts.isEmpty()
@@ -74,7 +76,7 @@ public record LayerPlan(
         if (includeAllCaves) {
             parts.add("ALL");
         }
-        caveStarts.forEach(y -> parts.add(String.valueOf(y)));
+        caveStarts.forEach(y -> parts.add(y == FULL_CAVE_START ? "FULL" : String.valueOf(y)));
         return String.join(",", parts);
     }
 
@@ -92,6 +94,9 @@ public record LayerPlan(
         }
         if (trimmed.equalsIgnoreCase("ALL")) {
             return allCaves();
+        }
+        if (trimmed.equalsIgnoreCase("FULL")) {
+            return caves(FULL_CAVE_START);
         }
 
         if (!trimmed.contains(",")) {
@@ -114,6 +119,8 @@ public record LayerPlan(
                 surface = true;
             } else if (token.equalsIgnoreCase("ALL")) {
                 allCaves = true;
+            } else if (token.equalsIgnoreCase("FULL")) {
+                starts.add(FULL_CAVE_START);
             } else {
                 try {
                     starts.add(Integer.parseInt(token));
@@ -133,6 +140,16 @@ public record LayerPlan(
      * 兼容旧配置 {@code scanMode|caveField} 合并为层计划。
      */
     public static LayerPlan fromLegacy(ScanMode scanMode, String caveField) {
+        String trimmed = caveField == null ? "" : caveField.trim();
+        if (trimmed.regionMatches(true, 0, "SPLIT", 0, 5)) {
+            String remainder = trimmed.substring(5).replace('+', ',');
+            while (remainder.startsWith(",") || remainder.startsWith("|")) {
+                remainder = remainder.substring(1);
+            }
+            LayerPlan explicit = parse(remainder);
+            return new LayerPlan(true, true, explicit.caveStarts());
+        }
+
         LayerPlan parsed = parse(caveField);
         if (scanMode == ScanMode.SURFACE) {
             if (!parsed.includeAllCaves() && parsed.caveStarts().isEmpty()) {

@@ -48,7 +48,7 @@
 | **带宽控制** | 可配置单包大小与 KB/s 限速；大包自动分片组装 |
 | **断点续传** | 基于客户端哈希缓存，中断后可恢复 |
 | **视距优先** | 视距内区域优先传输；视距外可限速喂给 Xaero |
-| **维度 / 洞穴** | 原版与 Mod 维度；`dimension = layerPlan`（SURFACE / ALL / 显式 Y / 组合） |
+| **维度 / 洞穴** | 原版与 Mod 维度；`dimension = layerPlan`（SURFACE / ALL / FULL / 显式 Y / 组合） |
 | **增量更新** | 服务端 DISABLED / TICK / SCHEDULED 自动更新地图缓存 |
 | **自动同步** | 按服务端模式进服或在线自动拉取（可关）；手动 sync 始终可用 |
 | **并发转换** | `maxConcurrentRegions`：0=自动（逻辑核−2，上限 16） |
@@ -143,7 +143,7 @@ NeoForge / Fabric 配置文件位于 `config/` 目录下（NeoForge 为 `.toml`�
 ```toml
 dimension_configs = [
     "minecraft:overworld = SURFACE",
-    "minecraft:the_nether = SURFACE,63",
+    "minecraft:the_nether = SURFACE,ALL,FULL",
     "minecraft:the_end = SURFACE"
 ]
 ```
@@ -153,15 +153,16 @@ dimension_configs = [
 | 值 | 说明 |
 |----|------|
 | `SURFACE` | 仅地表。无顶盖为全列扫描；有顶盖（地狱）为逻辑顶以上（Y≥128） |
-| `ALL` | 维度高度范围内全部洞穴层 |
+| `ALL` | 维度可玩高度范围内全部洞穴层 |
+| `FULL` | Xaero “完整”洞穴模式的独立全深度层 |
 | `63` / `63,127` | 仅指定洞穴层（caveStart Y），不含地表 |
-| `SURFACE,63` / `SURFACE,ALL` / `ALL,63` | 组合；`ALL` 与显式 Y 按层号去重 |
+| `SURFACE,63` / `SURFACE,ALL,FULL` / `ALL,63` | 组合；`ALL` 与显式 Y 按层号去重 |
 
 - 仅写 `SURFACE` **不会**自动生成洞穴；需洞穴须写 Y 或 `ALL`
-- 地狱默认 `SURFACE,63`：逻辑顶以上地表 + 洞穴 Y=63（Xaero 层号 3 → `caves/3/`）
+- 地狱默认 `SURFACE,ALL,FULL`：关闭、分层和完整三种 Xaero 洞穴模式均有对应数据
 - 兼容：`维度|layerPlan`、旧多字段管道、Fabric 旧键；维度类型信息运行时从 API 获取，不写进配置
 
-**洞穴层号**：`caveStart >> 4`（Y=63 → 层 3 → `caves/3/`）。
+**洞穴层号**：`caveStart >> 4`（Y=63 → 层 3 → `caves/3/`）；`FULL` 写入 Xaero 的 `caves/-2147483648/` 独立层。
 
 ---
 

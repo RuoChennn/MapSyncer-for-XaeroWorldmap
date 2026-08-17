@@ -58,7 +58,7 @@ public final class PixelColumnProcessor {
             if (isCaveMode && ColumnScanContext.hasFluid(singleState, blockLookup)) {
                 ctx.onFluid(pos, true);
             }
-            if (!ctx.canProcessCaveBlock(pos, isCaveMode)) {
+            if (!ctx.canProcessCaveBlock(pos, isCaveMode, singleState, blockLookup)) {
                 return false;
             }
         }
@@ -98,7 +98,7 @@ public final class PixelColumnProcessor {
                 ctx.onFluid(pos, true);
             }
 
-            if (!ctx.canProcessCaveBlock(pos, isCaveMode)) {
+            if (!ctx.canProcessCaveBlock(pos, isCaveMode, state, blockLookup)) {
                 continue;
             }
 

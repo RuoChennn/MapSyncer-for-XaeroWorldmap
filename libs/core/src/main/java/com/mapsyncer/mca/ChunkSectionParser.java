@@ -394,17 +394,21 @@ public class ChunkSectionParser {
      * @param data 位数组数据
      * @return 每个条目的位数
      */
-    private static int calculateBitsPerEntry(int paletteSize, long[] data) {
+    static int calculateBitsPerEntry(int paletteSize, long[] data) {
         if (paletteSize <= 1) {
             return 0;  // 单方块section，无需data数组
         }
 
-        // Wiki规范：c ≤ 16 时 b = 4，否则 b = ceil(log2(c))
-        if (paletteSize <= 16) {
-            return 4;
+        int minimumBits = Math.max(4, 32 - Integer.numberOfLeadingZeros(paletteSize - 1));
+        if (data == null || data.length == 0) {
+            return minimumBits;
         }
-        // ceil(log2(c)) = 32 - numberOfLeadingZeros(c - 1)
-        return 32 - Integer.numberOfLeadingZeros(paletteSize - 1);
+
+        // Modern paletted containers may retain a wider bit width than the current palette needs.
+        // Xaero derives that width from the packed array; using palette size alone shifts entries
+        // into stripes and can turn valid blocks into air when the palette has shrunk.
+        int storedBits = data.length * Long.SIZE / 4096;
+        return Math.max(minimumBits, storedBits);
     }
 
     /**

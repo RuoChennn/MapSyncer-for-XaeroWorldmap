@@ -264,19 +264,20 @@ public class ChunkDataParser {
      * @param worldHeightRange 维度高度范围
      * @return 每个高度值的位数b
      */
-    private static int calculateBitsPerHeight(int longArrayLength, int worldHeightRange) {
-        // 优先使用维度高度范围计算（更准确）
-        if (worldHeightRange > 0) {
-            // b = ceil(log2(h))
-            return 32 - Integer.numberOfLeadingZeros(worldHeightRange - 1);
+    static int calculateBitsPerHeight(int longArrayLength, int worldHeightRange) {
+        // 与 Xaero/Minecraft 的 packed heightmap 对齐：由实际 LongArray 长度确定位宽。
+        // 256 高维度仍需表示偏移 256，所以是 9 bits，而不是 ceil(log2(256)) = 8。
+        if (longArrayLength > 0) {
+            int storedBits = longArrayLength / 4;
+            if (storedBits > 0) {
+                return storedBits;
+            }
         }
 
-        // 备用：从数组长度反推
-        // l = ceil(256/u) => u ≈ ceil(256/l)
-        // b = floor(64/u)
-        if (longArrayLength <= 0) return 0;
-        int u = (256 + longArrayLength - 1) / longArrayLength; // ceil(256/l)
-        return 64 / u;
+        // 无数组时的保守回退；高度偏移范围包含上界。
+        return worldHeightRange > 0
+            ? 32 - Integer.numberOfLeadingZeros(worldHeightRange)
+            : 0;
     }
 
     /**

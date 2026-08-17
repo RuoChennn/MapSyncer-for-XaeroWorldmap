@@ -30,3 +30,18 @@ dependencies {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+tasks.register('netherLayerPlanCheck', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.mapsyncer.config.NetherLayerPlanCheck'
+    enableAssertions = true
+}
+
+tasks.named('test').configure {
+    failOnNoDiscoveredTests = false
+}
+
+tasks.named('check').configure {
+    dependsOn netherLayerPlanCheck
+}

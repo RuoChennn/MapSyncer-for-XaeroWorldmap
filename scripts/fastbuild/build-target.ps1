@@ -35,13 +35,38 @@ $PropsBak = Join-Path $ProjectRoot "gradle.properties.bak"
 $script:SettingsSwitched = $false
 $script:PropsOverridden = $false
 
+function Test-JdkPath([string]$Path, [int]$Major) {
+    if (-not $Path -or -not (Test-Path (Join-Path $Path "bin\java.exe"))) { return $false }
+    $release = Join-Path $Path "release"
+    $versionPattern = '(?m)^JAVA_VERSION="{0}(?:\.|\")' -f $Major
+    return (Test-Path $release) -and (Get-Content $release -Raw) -match $versionPattern
+}
+
 function Get-JdkPath([int]$Major) {
-    switch ($Major) {
-        17 { return "C:/Program Files/Eclipse Adoptium/jdk-17.0.19.10-hotspot" }
-        21 { return "C:/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot" }
-        25 { return "C:/Program Files/Eclipse Adoptium/jdk-25.0.3.9-hotspot" }
-        default { throw "Unsupported JDK major version: $Major" }
+    $candidates = @(
+        [Environment]::GetEnvironmentVariable("JDK${Major}_HOME"),
+        [Environment]::GetEnvironmentVariable("JAVA${Major}_HOME"),
+        [Environment]::GetEnvironmentVariable("JAVA_HOME_${Major}_X64"),
+        $env:JAVA_HOME
+    )
+
+    $java = Get-Command java.exe -ErrorAction SilentlyContinue
+    if ($java) { $candidates += Split-Path -Parent (Split-Path -Parent $java.Source) }
+
+    foreach ($root in @("$env:ProgramFiles\Java", "$env:ProgramFiles\Eclipse Adoptium")) {
+        if (Test-Path $root) {
+            $candidates += Get-ChildItem $root -Directory -Filter "jdk-$Major*" |
+                Sort-Object Name -Descending | Select-Object -ExpandProperty FullName
+        }
     }
+
+    foreach ($candidate in $candidates | Where-Object { $_ } | Select-Object -Unique) {
+        if (Test-JdkPath $candidate $Major) {
+            return ([System.IO.Path]::GetFullPath($candidate) -replace '\\', '/')
+        }
+    }
+
+    throw "JDK $Major not found. Set JDK${Major}_HOME or JAVA${Major}_HOME."
 }
 
 function Switch-Settings([string]$Profile) {
@@ -96,7 +121,11 @@ function Set-PropsJdk([int]$Major) {
         Copy-Item $PropsFile $PropsBak -Force
     }
     $content = Get-Content $PropsFile -Raw
-    $updated = $content -replace 'org\.gradle\.java\.home=.*', "org.gradle.java.home=$jdkPath"
+    if ($content -match '(?m)^org\.gradle\.java\.home=') {
+        $updated = $content -replace '(?m)^org\.gradle\.java\.home=.*$', "org.gradle.java.home=$jdkPath"
+    } else {
+        $updated = $content.TrimEnd() + "`r`norg.gradle.java.home=$jdkPath`r`n"
+    }
     Set-Content $PropsFile $updated -NoNewline
     $script:PropsOverridden = $true
     $env:JAVA_HOME = $jdkPath -replace '/', '\'

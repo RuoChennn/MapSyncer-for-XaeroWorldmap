@@ -125,7 +125,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   Loader 胶水（Platform 实现、�
 ```toml
 dimension_configs = [
     "minecraft:overworld = SURFACE",
-    "minecraft:the_nether = SURFACE,63",
+    "minecraft:the_nether = SURFACE,ALL,FULL",
     "minecraft:the_end = SURFACE"
 ]
 ```
@@ -133,9 +133,10 @@ dimension_configs = [
 | layerPlan | 说明 |
 |-----------|------|
 | `SURFACE` | 仅地表；有顶盖维度扫逻辑顶以上（如地狱 Y≥128） |
-| `ALL` | 全高度洞穴层 |
+| `ALL` | 可玩高度范围内全部洞穴层 |
+| `FULL` | Xaero “完整”洞穴模式使用的独立全深度层（`caves/-2147483648/`） |
 | `63` / `63,127` | 显式洞穴层（不含地表） |
-| `SURFACE,63` 等 | 组合；层号 = `caveStart >> 4` → `caves/<层号>/` |
+| `SURFACE,ALL,FULL` 等 | 组合；显式层号 = `caveStart >> 4` → `caves/<层号>/` |
 
 **兼容**：`dimension|layerPlan`、旧多字段管道、Fabric 旧键 `dimensionConfig.N` / `dimensionConfigs=a;b`。维度类型信息运行时从服务器 API 获取，**不再写入配置**。
 

@@ -15,7 +15,8 @@ import java.util.Set;
  * 根据层计划与运行时维度类型，生成 region 的多 pass 扫描计划。
  *
  * <p>{@code SURFACE} 仅生成地表（有顶盖维度为逻辑顶以上，否则为全列地表）。
- * {@code ALL} 生成维度高度范围内的全部洞穴层。显式 Y 坐标与 {@code ALL} 按层号自动去重。</p>
+ * {@code ALL} 生成维度可玩高度范围内的全部分层洞穴层，{@code FULL} 生成 Xaero 完整洞穴层。
+ * 显式 Y 坐标与 {@code ALL} 按层号自动去重。</p>
  */
 public final class RegionGenerationPlanner {
 
@@ -73,7 +74,8 @@ public final class RegionGenerationPlanner {
     private static void addAllCaveLayers(List<RegionScanPass> passes, Set<Integer> seenLayers,
                                          DimensionTypeInfo info) {
         int minLayer = floorDiv(info.minY(), 16);
-        int maxLayer = floorDiv(info.maxY() - 1, 16);
+        int caveTopY = info.hasUpperZone() ? info.logicalTopY() : info.maxY() - 1;
+        int maxLayer = floorDiv(caveTopY, 16);
         for (int layer = minLayer; layer <= maxLayer; layer++) {
             addCaveLayerPass(passes, seenLayers, layer, info);
         }
@@ -91,8 +93,8 @@ public final class RegionGenerationPlanner {
         if (!seenLayers.add(layer)) {
             return;
         }
-        int depth = caveStart == Integer.MIN_VALUE
-            ? Math.max(30, caveStart - info.minY())
+        int depth = caveStart == LayerPlan.FULL_CAVE_START
+            ? 30
             : CAVE_LAYER_DEPTH;
         passes.add(new RegionScanPass(
             layer,

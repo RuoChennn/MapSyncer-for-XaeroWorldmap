@@ -85,7 +85,11 @@ public final class ChunkColumnScanner {
 
                     int scanBottomY;
                     int startY;
-                    if (isCaveMode) {
+                    if (fullCave) {
+                        startY = bounds.resolveSurfaceStartY(
+                            ChunkDataParser.getHeightmapStartY(chunk, lx, lz, worldTopY));
+                        scanBottomY = bounds.clampBottomY(minBuildHeight, minBuildHeight);
+                    } else if (isCaveMode) {
                         startY = bounds.clampStartY(caveStart);
                         scanBottomY = bounds.clampBottomY(minBuildHeight,
                             Math.max(caveStart - caveDepth, minBuildHeight));
