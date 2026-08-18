@@ -6,6 +6,22 @@
 
 ---
 
+## 开发日志
+
+### v1.0.4（相对 main 的增量）
+
+本版本核心是**多层洞穴渲染 + 自动同步系统 + 多版本构建架构**三大块：
+
+1. **多层洞穴 / 地狱地图** — LayerPlan 分层扫描（SURFACE / ALL / 显式 Y），单次 MCA 输出多层洞穴，对齐 Xaero 的 underair 状态机
+2. **自动同步增强** — 客户端 `autoSyncEnabled` 开关、TICK 周期同步（默认 5 分钟）、SCHEDULED 时间戳比对
+3. **性能优化** — 增量扫描并行转换、流式读取降内存、客户端同步异步化、多处热点消除
+4. **多版本工程重组** — G1-G4 锚点 + 胶水层，新增 mc-26.2（协议 776），恢复 Forge 与 26.x Fabric 构建
+5. **生态适配与工具** — Fabric / Forge / NeoForge 权限适配、接入 Fabric Mod Menu、增强 MapPackager
+
+> 完整更新日志见 [`CHANGELOG.md`](CHANGELOG.md)
+
+---
+
 ## 运行环境
 
 ### 平台支持
