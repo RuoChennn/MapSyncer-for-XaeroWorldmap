@@ -8,6 +8,22 @@ Chinese README: [`README.md`](README.md) · Full module list: [`docs/features.md
 
 ---
 
+## Dev Log
+
+### v1.0.3 -> v1.0.4 (untested)
+
+This release centers on **multi-layer cave rendering + auto-sync system + multi-version build architecture**:
+
+1. **Multi-layer cave / Nether maps** — LayerPlan layered scanning (SURFACE / ALL / explicit Y), single MCA pass outputs multiple cave layers, aligned with Xaero's underair state machine
+2. **Auto-sync enhancements** — client `autoSyncEnabled` toggle, TICK periodic sync (default 5 min), SCHEDULED timestamp comparison
+3. **Performance** — parallel incremental scan conversion, streaming reads to cut memory, async client sync, multiple hot-spot eliminations
+4. **Multi-version restructure** — G1-G4 anchor + glue layers, added mc-26.2 (protocol 776), restored Forge and 26.x Fabric builds
+5. **Ecosystem & tooling** — Fabric / Forge / NeoForge permission adaptation, Fabric Mod Menu integration, enhanced MapPackager
+
+> Full changelog: [`CHANGELOG.md`](CHANGELOG.md)
+
+---
+
 ## Platform Support
 
 > NeoForge before 1.20.4 and Forge on 26.x are not supported.
