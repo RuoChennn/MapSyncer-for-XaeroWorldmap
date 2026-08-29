@@ -48,6 +48,17 @@ public final class PlatformManager {
     }
 
     /**
+     * 获取服务端统一标识名（多入口复用同一地图缓存）。
+     * 返回空字符串表示未配置，客户端应回退到 IP 命名。
+     */
+    public static String getServerName() {
+        if (instance == null) {
+            return "";
+        }
+        return instance.getServerName();
+    }
+
+    /**
      * 重置平台实例（仅用于测试）
      */
     public static void reset() {

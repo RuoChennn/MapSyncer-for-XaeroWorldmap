@@ -322,6 +322,11 @@ public class FabricPlatform implements Platform {
         return "Multiplayer_Server";
     }
 
+    @Override
+    public String getServerName() {
+        return ModConfig.SERVER().getServerName();
+    }
+
     // ===== 日志 =====
 
     @Override

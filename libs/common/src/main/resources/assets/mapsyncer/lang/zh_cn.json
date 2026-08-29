@@ -14,6 +14,7 @@
   "mapsyncer.sync.partial": "部分区域已更新；写入失败或与本地探索冲突的区域可重试同步",
   "mapsyncer.sync.incomplete": "同步不完整：仅收到 %d/%d 个区域，请重新执行同步",
   "mapsyncer.sync.server_not_installed": "服务端没有安装 MapSyncer",
+  "mapsyncer.sync.server_unresponsive": "服务端多次无响应，同步已放弃，请稍后重试",
   "mapsyncer.sync.unloading_regions": "卸载 %d 个视野范围内区域准备更新",
 
   "mapsyncer.command.no_map_dir": "无法确定地图目录，您是否已连接到服务器？",

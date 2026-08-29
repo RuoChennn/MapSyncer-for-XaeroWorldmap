@@ -247,7 +247,7 @@ public class XaeroMapIntegrator {
      * @param rawIP 原始 IP 字符串
      * @return 清理后的 IP
      */
-    private static String cleanServerIP(String rawIP) {
+    public static String cleanServerIP(String rawIP) {
         int portDivider = rawIP.lastIndexOf(":");
         if (portDivider > 0 && rawIP.indexOf(":") != rawIP.lastIndexOf(":")) {
             portDivider = rawIP.lastIndexOf("]:") + 1;
@@ -272,7 +272,7 @@ public class XaeroMapIntegrator {
      *
      * @return 服务器 IP 字符串，如果未连接返回 null
      */
-    private static String getCurrentServerIP() {
+    public static String getCurrentServerIP() {
         Minecraft mc = Minecraft.getInstance();
         ClientPacketListener connection = mc.getConnection();
         if (connection == null) {
@@ -291,8 +291,49 @@ public class XaeroMapIntegrator {
     }
 
     /**
-     * 获取当前服务器的基础目录（null 目录）。
-     * 路径结构：&lt;worldMapDir&gt;/Multiplayer_&lt;server&gt;/null/
+     * 获取当前服务器的统一标识名（多入口复用同一地图缓存）。
+     * 优先使用服务端握手下发的 serverName，否则回退到 IP 命名。
+     *
+     * @return 清理后的服务器标识名，可直接用于目录名
+     */
+    private static String getCurrentServerName() {
+        // 优先使用服务端统一标识
+        String serverName = ClientSyncSession.get().getServerName();
+        if (serverName != null && !serverName.isEmpty()) {
+            return sanitizeForFileName(serverName);
+        }
+        // 回退到 IP
+        String ip = getCurrentServerIP();
+        if (ip == null || ip.isEmpty()) {
+            return "Unknown";
+        }
+        return cleanServerIP(ip);
+    }
+
+    /**
+     * 将服务端标识名清理为安全的文件名字符串。
+     * 替换文件系统不允许的字符，截断过长名称。
+     */
+    private static String sanitizeForFileName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "Server";
+        }
+        // 替换 Windows/Linux 文件系统不允许的字符
+        String safe = name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        // 去除首尾空格和点
+        safe = safe.replaceAll("^[ .]+|[ .]+$", "");
+        // 截断过长名称（限制 64 字符）
+        if (safe.length() > 64) {
+            safe = safe.substring(0, 64);
+        }
+        return safe.isEmpty() ? "Server" : safe;
+    }
+
+    /**
+     * 获取当前服务器基础目录（null 目录）。
+     * 路径结构：&lt;worldMapDir&gt;/Multiplayer_&lt;serverIP&gt;/&lt;dimension&gt;/mw$&lt;worldId&gt;/
+     * &lt;p&gt;注意：使用 IP 而非 serverName，因为 Xaero 地图模组本身按 IP 读取目录。&lt;/p&gt;
+     * &lt;p&gt;worldId 优先使用客户端 Xaero 已有的 mw$ 目录，避免与服务端 worldId 不匹配导致地图不显示。&lt;/p&gt;
      *
      * @return 服务器基础目录路径，如果未连接返回 null
      */
@@ -312,8 +353,9 @@ public class XaeroMapIntegrator {
         Path gameDir = mc.gameDirectory.toPath();
         Path worldMapDir = getWorldMapDir(gameDir);
 
+        // 使用 IP 命名目录（Xaero 按 IP 读取）
         String serverIP = getCurrentServerIP();
-        if (serverIP == null) {
+        if (serverIP == null || serverIP.isEmpty()) {
             return null;
         }
 
@@ -325,7 +367,7 @@ public class XaeroMapIntegrator {
                 if (worldMapDir.toFile().exists() && worldMapDir.toFile().isDirectory()) {
                     try (var stream = Files.list(worldMapDir)) {
                         stream.filter(p -> p.getFileName().toString().startsWith("Multiplayer_"))
-                            .filter(p -> Files.isDirectory(p))
+                            .filter(Files::isDirectory)
                             .forEach(p -> {
                                 Path candidateDim = p.resolve("null");
                                 if (candidateDim.toFile().exists()) {
@@ -338,7 +380,7 @@ public class XaeroMapIntegrator {
                 LOGGER.debug("Failed to scan world-map directory: {}", e.getMessage());
             }
 
-            if (serverIP.equals("Singleplayer") || serverIP.equals("LAN")) {
+            if ("Singleplayer".equals(serverIP) || "LAN".equals(serverIP)) {
                 LOGGER.info("Creating Xaero directory for {} mode: {}", serverIP, dimDir);
                 try {
                     Files.createDirectories(dimDir);
@@ -354,6 +396,7 @@ public class XaeroMapIntegrator {
 
     /**
      * 获取当前连接服务器的服务器目录（Multiplayer_&lt;serverIP&gt;）。
+     * 使用 IP 命名，与 Xaero 地图模组保持一致。
      *
      * @return 服务器目录路径，如果未连接返回 null
      */
@@ -365,8 +408,9 @@ public class XaeroMapIntegrator {
             return null;
         }
 
+        // 使用 IP 命名目录（Xaero 按 IP 读取）
         String serverIP = getCurrentServerIP();
-        if (serverIP == null) {
+        if (serverIP == null || serverIP.isEmpty()) {
             return null;
         }
 
@@ -399,12 +443,13 @@ public class XaeroMapIntegrator {
             return null;
         }
 
+        // 使用 IP 命名目录（Xaero 按 IP 读取）
         String serverIP = getCurrentServerIP();
-        if (serverIP == null) {
+        if (serverIP == null || serverIP.isEmpty()) {
             return null;
         }
 
-        LOGGER.info("Using server worldId: {}", serverWorldId);
+        LOGGER.info("Using server worldId: {}, serverIP: {}", serverWorldId, serverIP);
 
         Path gameDir = mc.gameDirectory.toPath();
         Path worldMapDir = getWorldMapDir(gameDir);
