@@ -8,13 +8,13 @@
 
 ## 开发日志
 
-### v1.0.4（2026-08-29，续）— 跨地址缓存复用 + 超时重发兜底
+### v1.0.4（2026-08-29）— 跨地址缓存复用 + 超时重发兜底
 
 本版本重点修复跨地址地图同步失败、同步超时无响应等问题：
 
 1. **零拷贝重命名方案** — `handleMultiEntryCacheReuse` 从复制整目录改为 `Files.move` 重命名，解决复制 5-6GB 地图耗时过长问题
 2. **空壳目录自动删除后重命名** — 修复根因 bug：原代码对空壳目录也返回 true 导致跳过复制
-3. **超时重发机制** — 服务端分包 20s 超时通知重发 + 客户端 6s 超时自动重发（最多 3 次）+ `request_partial_timeout` 即时重发
+3. **超时重发机制** — 服务端分包 20s 超时通知重发 + 客户端 60s 超时自动重发（最多 3 次）+ `request_partial_timeout` 即时重发
 4. **自动同步进度修复** — 删除 `handleProgressUpdate` 静默丢弃逻辑 + 修复 `incrementalUpdateMode` 默认 DISABLED
 
 > 完整更新日志见 [`CHANGELOG.md`](CHANGELOG.md)
