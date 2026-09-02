@@ -37,6 +37,17 @@ public class SyncProgressTracker {
     private static volatile ScheduledExecutorService timeoutChecker = null;
     private static volatile java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
 
+    /** 服务端在线但首次响应超时的回调（用于自动重发同步请求） */
+    public interface TimeoutCallback {
+        void onTimeout();
+    }
+
+    private static volatile TimeoutCallback timeoutCallback = null;
+
+    public static void setTimeoutCallback(TimeoutCallback callback) {
+        timeoutCallback = callback;
+    }
+
     public static void startHashScan(int total) {
         hashScanning = true;
         hashScanProcessed = 0;
@@ -265,6 +276,12 @@ public class SyncProgressTracker {
                         if (!MapPacketReceiver.isServerInstalled()) {
                             ClientMessageHelper.sendChatMessage(ChatUtils.error("mapsyncer.sync.server_not_installed"));
                             cancelTracking();
+                        } else {
+                            // 服务端在线但未响应：触发重发回调（穿透丢包/分包未到齐兜底）
+                            TimeoutCallback cb = timeoutCallback;
+                            if (cb != null) {
+                                cb.onTimeout();
+                            }
                         }
                     });
                 }

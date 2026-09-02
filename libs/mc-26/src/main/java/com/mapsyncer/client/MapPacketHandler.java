@@ -14,10 +14,17 @@ import com.mapsyncer.util.ChatUtils;
 import com.mapsyncer.util.ClientMessageHelper;
 import com.mapsyncer.util.DimensionPathMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.ServerData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -226,6 +233,7 @@ public class MapPacketHandler {
      * 清理所有同步状态、反射缓存、哈希计算线程池和时间戳缓存。
      */
     public static void onDisconnect() {
+        MapSyncerCommandLogic.resetSyncRetry();
         ClientLifecycleBridge.onClientDisconnect();
     }
 
@@ -242,12 +250,22 @@ public class MapPacketHandler {
         // 注册进度更新处理器
         handler.registerSyncProgressHandler(MapPacketHandler::handleProgressUpdate);
 
+        // 服务端在线但首次响应超时时，自动重发同步请求（穿透丢包/分包未到齐兜底）
+        SyncProgressTracker.setTimeoutCallback(MapSyncerCommandLogic::retryLastSyncRequest);
+
         // 注册服务端已安装通知处理器
         handler.registerServerInstalledHandler((payload, ctx) -> {
             ctx.enqueueWork(() -> {
                 try {
                 serverInstalled = true;
                 serverVersion = payload.version();
+                // 存储服务端统一标识名，供 XaeroMapIntegrator 复用同一地图缓存
+                if (payload.serverName() != null && !payload.serverName().isEmpty()) {
+                    ClientSyncSession.get().setServerName(payload.serverName());
+                    LOGGER.info("Server identity name: {}", payload.serverName());
+                } else {
+                    LOGGER.info("Server did not configure serverName, will use automatic directory matching");
+                }
                 int intervalMinutes = payload.autoSyncIntervalMinutes();
                 AutoSyncManager.configureFromServer(
                         payload.updateMode(), intervalMinutes, payload.incrementalUpdateIntervalTicks());
@@ -269,19 +287,24 @@ public class MapPacketHandler {
                         payload.lastGenerationTimestamp(), intervalMinutes);
                 LOGGER.info("shouldAutoSyncOnJoin result: {} (serverGenTime={}, intervalMinutes={})",
                         shouldJoinSync, payload.lastGenerationTimestamp(), intervalMinutes);
-                if (shouldJoinSync) {
-                    AutoSyncManager.schedule(() -> {
-                        Minecraft.getInstance().execute(() -> {
-                            if (Minecraft.getInstance().player != null
-                                    && !MapPacketHandler.isSyncInProgress()) {
-                                Minecraft.getInstance().player.sendSystemMessage(
-                                    ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")));
-                                AutoSyncManager.markStarted();
-                                MapSyncerCommandLogic.executeSyncAll(true);
-                            }
+
+                // 多入口缓存复用：在后台线程执行（扫描+复制可能耗时），
+                // 完成后回到主线程再触发进服自动同步，避免阻塞主线程导致"等待服务端响应"卡住
+                handleMultiEntryCacheReuseAsync(
+                        payload.serverName() != null ? payload.serverName() : "",
+                        () -> {
+                            Minecraft.getInstance().execute(() -> {
+                                if (shouldJoinSync) {
+                                    if (Minecraft.getInstance().player != null
+                                            && !MapPacketHandler.isSyncInProgress()) {
+                                        Minecraft.getInstance().player.sendSystemMessage(
+                                            ChatUtils.prefix().append(ChatUtils.desc("mapsyncer.autosync.start")));
+                                        AutoSyncManager.markStarted();
+                                        MapSyncerCommandLogic.executeSyncAll(true);
+                                    }
+                                }
+                            });
                         });
-                    }, 5);
-                }
 
                 AutoSyncManager.startTickPeriodicSync(() ->
                         Minecraft.getInstance().execute(() -> {
@@ -307,6 +330,339 @@ public class MapPacketHandler {
                 }
                 updatedRegionCoords.clear();
             });
+        });
+    }
+
+    /**
+     * 多入口地图缓存复用：在后台线程执行，避免阻塞主线程导致"等待服务端响应"卡死。
+     * 复制完成后回到主线程执行 onComplete 回调。
+     */
+    private static void handleMultiEntryCacheReuseAsync(String serverName, Runnable onComplete) {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            Path gameDir = mc.gameDirectory.toPath();
+            Path worldMapDir = XaeroMapIntegrator.getWorldMapDir(gameDir);
+            ClientPacketListener connection = mc.getConnection();
+            if (worldMapDir == null || !worldMapDir.toFile().exists() || connection == null) {
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+                return;
+            }
+            ServerData serverData = connection.getServerData();
+            if (serverData == null) {
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+                return;
+            }
+            String currentIP = XaeroMapIntegrator.cleanServerIP(serverData.ip);
+            if (currentIP == null || currentIP.isEmpty()) {
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+                return;
+            }
+
+            final String serverNameFinal = serverName;
+            final Path worldMapDirFinal = worldMapDir;
+            final String currentIPFinal = currentIP;
+
+            // 后台线程执行扫描 + 复制（可能耗时数秒到数十秒）
+            Thread worker = new Thread(() -> {
+                try {
+                    handleMultiEntryCacheReuse(worldMapDirFinal, currentIPFinal, serverNameFinal);
+                } catch (Exception e) {
+                    LOGGER.warn("Background cache reuse failed: {}", e.getMessage());
+                } finally {
+                    if (onComplete != null) {
+                        try {
+                            Minecraft.getInstance().execute(onComplete);
+                        } catch (Exception e) {
+                            LOGGER.debug("Failed to schedule onComplete: {}", e.getMessage());
+                        }
+                    }
+                }
+            }, "mapsyncer-cache-reuse");
+            worker.setDaemon(true);
+            worker.start();
+        } catch (Exception e) {
+            LOGGER.warn("Failed to start background cache reuse: {}", e.getMessage());
+            if (onComplete != null) {
+                onComplete.run();
+            }
+        }
+    }
+
+    /**
+     * 多入口地图缓存复用：如果之前通过其他 IP 连接过同一服务器，
+     * 将旧 IP 目录的地图数据复制到新 IP 目录，避免重新下载。
+     * <p>匹配策略（按优先级）：</p>
+     * <ol>
+     *   <li>服务端配置了 serverName → 匹配 mapsyncer_server_name.txt 标识</li>
+     *   <li>未配置 serverName 或未匹配到 → 自动扫描所有 Multiplayer_ 目录，
+     *       找包含最多 mw$ 地图数据的目录（按地图文件数/修改时间启发式）</li>
+     * </ol>
+     * <p>使用 CRC32 校验确保复制完整性，只复制新 IP 目录中不存在的文件。</p>
+     */
+    private static void handleMultiEntryCacheReuse(Path worldMapDir, String currentIP, String serverName) {
+        try {
+            Path currentIPDir = worldMapDir.resolve("Multiplayer_" + currentIP);
+
+            boolean hasServerName = serverName != null && !serverName.isEmpty();
+
+            // 1) 按 serverName 标识匹配旧 IP 目录
+            Path sourceDir = null;
+            if (hasServerName) {
+                sourceDir = findSourceByServerName(worldMapDir, currentIP, serverName);
+            }
+
+            // 2) 自动匹配：按地图数据量启发式选择
+            if (sourceDir == null) {
+                sourceDir = findBestMapSource(worldMapDir, currentIP);
+                if (sourceDir != null) {
+                    LOGGER.info("Auto-matched previous map directory: {} (no serverName configured)",
+                            sourceDir);
+                }
+            }
+
+            if (sourceDir == null) {
+                LOGGER.info("No previous IP directory found for serverName={}, skip cache reuse", serverName);
+                // 首次连接，写入 serverName 标识文件
+                writeServerNameIdentifier(currentIPDir, serverName);
+                return;
+            }
+
+            // 3) 判断当前 IP 目录状态
+            long currentCount = currentIPDir.toFile().exists() ? countMapFiles(currentIPDir) : 0L;
+            long sourceCount = countMapFiles(sourceDir);
+
+            if (currentCount >= sourceCount && currentCount > 0) {
+                // 当前目录数据完整，无需操作
+                LOGGER.debug("Current IP directory already has {} map files (source has {}), skip cache reuse",
+                        currentCount, sourceCount);
+                writeServerNameIdentifier(currentIPDir, serverName);
+                return;
+            }
+
+            // 4) 零拷贝：重命名目录（而非复制）
+            // 若 currentIPDir 存在但为空壳，先删除；然后重命名 sourceDir → currentIPDir
+            LOGGER.info("Renaming map directory: {} ({} files) → {} (current has {} files)",
+                    sourceDir, sourceCount, currentIPDir, currentCount);
+
+            if (currentIPDir.toFile().exists()) {
+                // 删除空壳目录
+                try {
+                    deleteDirectory(currentIPDir);
+                    LOGGER.debug("Removed empty shell directory: {}", currentIPDir);
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to remove empty shell directory {}: {}", currentIPDir, e.getMessage());
+                    return;
+                }
+            }
+
+            // 执行重命名（原子操作）
+            try {
+                Files.move(sourceDir, currentIPDir);
+                LOGGER.info("Directory renamed successfully: {} → {}", sourceDir, currentIPDir);
+            } catch (Exception e) {
+                LOGGER.error("Failed to rename directory {} → {}: {}", sourceDir, currentIPDir, e.getMessage());
+                return;
+            }
+
+            // 重命名后确保 serverName 标识文件存在
+            writeServerNameIdentifier(currentIPDir, serverName);
+
+        } catch (Exception e) {
+            LOGGER.warn("Failed to reuse cache for serverName={}: {}", serverName, e.getMessage());
+        }
+    }
+
+    /**
+     * 按 serverName 标识文件匹配旧 IP 目录。
+     */
+    private static Path findSourceByServerName(Path worldMapDir, String currentIP, String serverName) {
+        if (serverName == null || serverName.isEmpty()) {
+            return null;
+        }
+        try (var stream = Files.list(worldMapDir)) {
+            return stream
+                    .filter(p -> p.getFileName().toString().startsWith("Multiplayer_"))
+                    .filter(p -> !p.getFileName().toString().equals("Multiplayer_" + currentIP))
+                    .filter(Files::isDirectory)
+                    .filter(p -> {
+                        // 检查该目录是否属于同一 serverName
+                        Path nameFile = p.resolve("mapsyncer_server_name.txt");
+                        if (nameFile.toFile().exists()) {
+                            try {
+                                String name = new String(Files.readAllBytes(nameFile), StandardCharsets.UTF_8).trim();
+                                return serverName.equals(name);
+                            } catch (Exception e) {
+                                return false;
+                            }
+                        }
+                        return false;
+                    })
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            LOGGER.debug("findSourceByServerName failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 自动匹配最佳地图源目录：扫描所有 Multiplayer_ 目录，
+     * 选择包含最多 mw$ 地图数据（zip 文件）的目录，作为最可能的同服务器地图源。
+     */
+    private static Path findBestMapSource(Path worldMapDir, String currentIP) {
+        Path bestDir = null;
+        long bestScore = -1;
+        try (var stream = Files.list(worldMapDir)) {
+            var dirs = stream
+                    .filter(p -> p.getFileName().toString().startsWith("Multiplayer_"))
+                    .filter(p -> !p.getFileName().toString().equals("Multiplayer_" + currentIP))
+                    .filter(Files::isDirectory)
+                    .toList();
+            for (Path dir : dirs) {
+                // 跳过明显的非地图目录（没有 null 维度目录的）
+                Path nullDir = dir.resolve("null");
+                if (!nullDir.toFile().exists()) {
+                    continue;
+                }
+                long score = countMapFiles(dir);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestDir = dir;
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.debug("findBestMapSource failed: {}", e.getMessage());
+        }
+        if (bestDir != null && bestScore > 0) {
+            LOGGER.debug("Best map source: {} with {} map files", bestDir, bestScore);
+            return bestDir;
+        }
+        return null;
+    }
+
+    /**
+     * 统计目录中的地图数据文件数量（.zip 文件，排除缓存目录）。
+     * 只统计主世界 null/mw$* 下的数据（其他维度数据量少且遍历慢）。
+     */
+    private static long countMapFiles(Path dir) {
+        long[] count = {0};
+        try {
+            // 只扫描主世界维度目录（Xaero 地图数据在 null/mw$<worldId>/ 下）
+            Path nullDir = dir.resolve("null");
+            if (!nullDir.toFile().exists()) {
+                return 0;
+            }
+            Files.walkFileTree(nullDir, new SimpleFileVisitor<Path>() {
+                @Override
+                public java.nio.file.FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String name = file.getFileName().toString();
+                    if (name.endsWith(".zip") && !name.endsWith(".zip.temp")) {
+                        count[0]++;
+                    }
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            LOGGER.debug("countMapFiles failed for {}: {}", dir, e.getMessage());
+        }
+        return count[0];
+    }
+
+    /**
+     * 写入 serverName 标识文件，用于后续多入口缓存复用识别。
+     */
+    private static void writeServerNameIdentifier(Path serverDir, String serverName) {
+        try {
+            Files.createDirectories(serverDir);
+            Path nameFile = serverDir.resolve("mapsyncer_server_name.txt");
+            Files.write(nameFile, serverName.getBytes(StandardCharsets.UTF_8));
+            LOGGER.debug("Wrote serverName identifier to {}", nameFile);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to write serverName identifier: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 复制源目录到目标目录，使用 CRC32 校验跳过已存在且相同的文件。
+     * 返回复制的文件数量。
+     */
+    private static long copyDirectoryWithCrc32Check(Path source, Path target) throws IOException {
+        java.util.zip.CRC32 crc32 = new java.util.zip.CRC32();
+        final long[] copied = {0};
+
+        Files.walkFileTree(source, new SimpleFileVisitor<Path>() {
+            @Override
+            public java.nio.file.FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                Path relative = source.relativize(dir);
+                Path targetDir = target.resolve(relative);
+                Files.createDirectories(targetDir);
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public java.nio.file.FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path relative = source.relativize(file);
+                Path targetFile = target.resolve(relative);
+
+                // 跳过 serverName 标识文件（每个 IP 目录独立）
+                if (file.getFileName().toString().equals("mapsyncer_server_name.txt")) {
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+
+                // 如果目标文件已存在，比较 CRC32
+                if (targetFile.toFile().exists()) {
+                    String srcHash = computeCrc32(file, crc32);
+                    String tgtHash = computeCrc32(targetFile, crc32);
+                    if (srcHash.equals(tgtHash)) {
+                        return java.nio.file.FileVisitResult.CONTINUE; // 相同，跳过
+                    }
+                }
+
+                // 复制文件
+                Files.copy(file, targetFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                copied[0]++;
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        });
+
+        return copied[0];
+    }
+
+    /**
+     * 计算文件的 CRC32 哈希值。
+     */
+    private static String computeCrc32(Path file, java.util.zip.CRC32 crc32) throws IOException {
+        crc32.reset();
+        byte[] data = Files.readAllBytes(file);
+        crc32.update(data, 0, data.length);
+        return Long.toHexString(crc32.getValue());
+    }
+
+    /**
+     * 递归删除目录及其内容。
+     */
+    private static void deleteDirectory(Path dir) throws IOException {
+        if (!dir.toFile().exists()) {
+            return;
+        }
+        Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
+            @Override
+            public java.nio.file.FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public java.nio.file.FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                Files.delete(dir);
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
         });
     }
 
@@ -394,6 +750,7 @@ public class MapPacketHandler {
                 clearSyncData();
                 clearReflectionCache();
                 SyncProgressTracker.finishUptodate();
+                MapSyncerCommandLogic.resetSyncRetry();
                 finishJoinAutoSyncIfActive();
                 if (tsCache != null) {
                     tsCache.markSyncComplete();
@@ -563,6 +920,7 @@ public class MapPacketHandler {
                 ? SyncOutcome.PARTIAL_SUCCESS
                 : SyncOutcome.SUCCESS;
         session.setOutcome(finalOutcome);
+        MapSyncerCommandLogic.resetSyncRetry();
 
         if (!updatedRegionCoords.isEmpty()) {
             XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
@@ -615,9 +973,16 @@ public class MapPacketHandler {
     private static void handleProgressUpdate(SyncProgressPayload payload, PayloadContext context) {
         context.enqueueWork(() -> {
             String status = payload.status();
+            if (status != null && status.startsWith("request_")) {
+                // 服务端分包未到齐（穿透丢包）通知 → 取消当前跟踪并重发整个请求
+                SyncProgressTracker.cancelTracking();
+                MapSyncerCommandLogic.retryLastSyncRequest();
+                return;
+            }
             if (status != null && status.startsWith("aborted")) {
                 SyncProgressTracker.cancelTracking();
                 MapPacketHandler.clearSyncData();
+                MapSyncerCommandLogic.resetSyncRetry();
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player != null) {
                     if (status.contains("timeout")) {
@@ -631,9 +996,7 @@ public class MapPacketHandler {
                 return;
             }
 
-            // 自动同步时静默，不显示进度
-            if (AutoSyncManager.isActive()) return;
-
+            // 自动同步同样显示进度（action bar 展示），完成提示由 handleSyncResponse 单独处理
             // 进度去重：相同 (processed, total) 在 100ms 内到达视为重复
             int processed = payload.processed();
             int total = payload.total();

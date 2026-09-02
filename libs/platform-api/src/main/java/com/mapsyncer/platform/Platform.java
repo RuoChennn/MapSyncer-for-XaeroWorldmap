@@ -254,6 +254,15 @@ public interface Platform {
      */
     String getCurrentServerDirectoryName();
 
+    /**
+     * 获取服务端统一标识名（用于客户端存档目录命名）。
+     * 多入口/多 IP 的服务器可配置统一名字，使客户端复用同一份地图缓存。
+     * 返回空字符串时客户端回退到 IP 命名（兼容旧行为）。
+     */
+    default String getServerName() {
+        return "";
+    }
+
     // ===== 日志 =====
 
     /**

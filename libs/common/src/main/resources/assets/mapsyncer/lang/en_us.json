@@ -14,6 +14,7 @@
   "mapsyncer.sync.partial": "Some regions were updated; retry sync for any that failed to write or conflict with local exploration",
   "mapsyncer.sync.incomplete": "Sync incomplete: received %d/%d regions, please sync again",
   "mapsyncer.sync.server_not_installed": "Server doesn't have MapSyncer installed",
+  "mapsyncer.sync.server_unresponsive": "Server is unresponsive, sync aborted. Please try again later",
   "mapsyncer.sync.unloading_regions": "Unloading %d view distance regions for update",
 
   "mapsyncer.command.no_map_dir": "Unable to determine map directory. Are you connected to a server?",

@@ -165,7 +165,15 @@ public final class XaeroMapDataHandler {
     public static RegionWriteResult writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
         String xaeroDim = chunk.dimension;
         Path dimDir = serverDir.resolve(xaeroDim);
-        Path mwDir = dimDir.resolve("mw$" + worldId);
+
+        // 优先使用 Xaero 已有的 mw$ 目录（客户端 Xaero 生成的 worldId），避免与服务端 worldId 不匹配
+        Path mwDir = findExistingMwDir(dimDir);
+        if (mwDir == null) {
+            // 没有现有目录，使用服务端 worldId 创建
+            mwDir = dimDir.resolve("mw$" + worldId);
+        } else {
+            LOGGER.debug("Using existing Xaero mw$ directory: {} (server worldId={})", mwDir, worldId);
+        }
 
         Path targetDir;
         if (chunk.caveLayer == Integer.MAX_VALUE) {
@@ -246,6 +254,41 @@ public final class XaeroMapDataHandler {
             return xaeroDim + "/" + chunk.regionX + "_" + chunk.regionZ;
         } else {
             return xaeroDim + "/caves/" + chunk.caveLayer + "/" + chunk.regionX + "_" + chunk.regionZ;
+        }
+    }
+
+    /**
+     * 查找 Xaero 已经创建的 mw$ 目录。
+     * Xaero 启动时会自动创建 mw$<worldId> 目录，客户端应该复用这个目录，
+     * 而不是用服务端的 worldId 创建新目录（两者不匹配会导致地图不显示）。
+     *
+     * @param dimDir 维度目录（null/）
+     * @return 现有的 mw$ 目录路径，如果没有找到返回 null
+     */
+    private static Path findExistingMwDir(Path dimDir) {
+        if (dimDir == null || !dimDir.toFile().exists()) {
+            return null;
+        }
+        try {
+            // 查找所有 mw$ 目录
+            try (var stream = Files.list(dimDir)) {
+                return stream
+                        .filter(p -> p.getFileName().toString().startsWith("mw$"))
+                        .filter(Files::isDirectory)
+                        .max((a, b) -> {
+                            // 使用最后修改时间作为备选
+                            try {
+                                return Long.compare(Files.getLastModifiedTime(a).toMillis(),
+                                        Files.getLastModifiedTime(b).toMillis());
+                            } catch (IOException e) {
+                                return 0;
+                            }
+                        })
+                        .orElse(null);
+            }
+        } catch (IOException e) {
+            LOGGER.debug("Failed to search for existing mw$ directory: {}", e.getMessage());
+            return null;
         }
     }
 

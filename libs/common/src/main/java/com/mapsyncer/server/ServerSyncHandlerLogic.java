@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -213,6 +215,21 @@ public class ServerSyncHandlerLogic {
     /** 记录每个玩家当前组装请求的总分片数（用于判断是否到齐） */
     private static final Map<UUID, Integer> requestTotalParts = new ConcurrentHashMap<>();
 
+    /** 分包最后活动时间：playerId → 最后一次收到分包的时刻（用于穿透丢包兜底） */
+    private static final Map<UUID, Long> requestPartLastActivity = new ConcurrentHashMap<>();
+
+    /** 分包组装超时（毫秒）：超过此时长未到齐，通知客户端重发整个请求 */
+    private static final long PART_ASSEMBLY_TIMEOUT_MS = 20_000;
+
+    /** 定时扫描间隔（毫秒） */
+    private static final long PART_ASSEMBLY_CHECK_INTERVAL_MS = 5_000;
+
+    /** 服务器引用（定时线程向玩家发通知用），由 handleSyncRequest 更新 */
+    private static volatile MinecraftServer currentServer = null;
+
+    /** 分包超时检查定时器（懒启动） */
+    private static volatile ScheduledExecutorService partAssemblyTimer = null;
+
     /**
      * 轻量级的 region 同步信息。
      * 只存储路径和元数据，不包含实际数据，节省内存。
@@ -281,8 +298,8 @@ public class ServerSyncHandlerLogic {
         return syncingPlayers.contains(playerId);
     }
 
-    private static final long PLAYER_VALIDATION_TIMEOUT_SEC = 15;
-    private static final int PLAYER_VALIDATION_MAX_ATTEMPTS = 2;
+    private static final long PLAYER_VALIDATION_TIMEOUT_SEC = 60;
+    private static final int PLAYER_VALIDATION_MAX_ATTEMPTS = 3;
 
     private enum PlayerCheckResult {
         VALID, INVALID, TIMEOUT
@@ -339,6 +356,79 @@ public class ServerSyncHandlerLogic {
                 NetworkManager.sendToPlayer(player, new SyncProgressPayload(0, 0, "aborted:" + reason)));
     }
 
+    /**
+     * 懒启动分包超时检查定时器。
+     * 客户端同步请求拆分为多包发送，若穿透隧道丢包导致服务端永远等不齐，
+     * 客户端会一直显示"等待服务器响应"。此定时器检测长时间未到齐的分包，
+     * 清空缓冲并通知客户端重发整个请求，实现穿透丢包兜底。
+     */
+    private static void ensurePartAssemblyTimer() {
+        ScheduledExecutorService timer = partAssemblyTimer;
+        if (timer != null && !timer.isShutdown()) {
+            return;
+        }
+        synchronized (ServerSyncHandlerLogic.class) {
+            if (partAssemblyTimer != null && !partAssemblyTimer.isShutdown()) {
+                return;
+            }
+            timer = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "mapsyncer-part-assembly-timer");
+                t.setDaemon(true);
+                return t;
+            });
+            partAssemblyTimer = timer;
+            timer.scheduleWithFixedDelay(ServerSyncHandlerLogic::checkPartAssemblyTimeouts,
+                    PART_ASSEMBLY_TIMEOUT_MS, PART_ASSEMBLY_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
+            LOGGER.info("Part assembly timeout checker started (timeout={}ms, interval={}ms)",
+                    PART_ASSEMBLY_TIMEOUT_MS, PART_ASSEMBLY_CHECK_INTERVAL_MS);
+        }
+    }
+
+    /**
+     * 定时扫描分包缓冲：发现超过 {@link #PART_ASSEMBLY_TIMEOUT_MS} 未到齐的分包，
+     * 清空并通知客户端重发整个请求。
+     */
+    private static void checkPartAssemblyTimeouts() {
+        if (requestPartBuffer.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        MinecraftServer server = currentServer;
+        for (Map.Entry<UUID, Long> entry : requestPartLastActivity.entrySet()) {
+            UUID playerId = entry.getKey();
+            if (now - entry.getValue() < PART_ASSEMBLY_TIMEOUT_MS) {
+                continue;
+            }
+            Map<Integer, SyncRequestPayload> parts = requestPartBuffer.remove(playerId);
+            if (parts == null) {
+                requestPartLastActivity.remove(playerId);
+                continue;
+            }
+            Integer total = requestTotalParts.get(playerId);
+            requestTotalParts.remove(playerId);
+            requestPartLastActivity.remove(playerId);
+            LOGGER.warn("SyncRequest parts incomplete for player {} ({} of {} parts received), notifying retry",
+                    playerId, parts.size(), total == null ? -1 : total);
+            notifyClientRetry(playerId, server);
+        }
+    }
+
+    /**
+     * 在主线程上向指定玩家发送"分包未到齐，请重发"通知。
+     */
+    private static void notifyClientRetry(UUID playerId, MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        server.execute(() -> {
+            ServerPlayer sp = server.getPlayerList().getPlayer(playerId);
+            if (sp != null) {
+                LOGGER.info("Notifying player {} to retry sync request (partial timeout)", playerId);
+                NetworkManager.sendToPlayer(sp, new SyncProgressPayload(0, 0, "request_partial_timeout"));
+            }
+        });
+    }
+
     private static boolean isPlayerStillValid(MinecraftServer server, UUID playerId,
             ResourceKey<Level> startDimension, int syncVersion) {
         if (!isSyncStillActive(playerId, syncVersion)) {
@@ -346,7 +436,13 @@ public class ServerSyncHandlerLogic {
         }
         PlayerCheckResult result = checkPlayerOnMainThread(server, playerId, startDimension, syncVersion);
         if (result == PlayerCheckResult.TIMEOUT) {
-            notifySyncAborted(server, playerId, syncVersion, "timeout");
+            // 主线程繁忙（autosave/区块生成/实体卡顿）导致校验任务排队超时。
+            // 此时玩家通常仍在游戏内，不应中断正在进行的同步；
+            // 记录日志并跳过本次校验，下一次循环再验证。
+            // 若玩家真的断开/切换维度，后续任务执行后会返回 INVALID 并正常停止同步。
+            LOGGER.warn("Player {} validation timed out, skipping check (sync continues)",
+                    playerId);
+            return true;
         }
         return result == PlayerCheckResult.VALID;
     }
@@ -541,6 +637,16 @@ public class ServerSyncHandlerLogic {
 
         UUID playerId = serverPlayer.getUUID();
 
+        // 保存服务器引用（分包超时定时线程向玩家发通知用）
+        MinecraftServer server = PlayerLevelApiHelper.getServer(serverPlayer);
+        if (server != null) {
+            currentServer = server;
+        }
+
+        // 记录分包活动时间 + 懒启动分包超时检查定时器（穿透丢包兜底）
+        requestPartLastActivity.put(playerId, System.currentTimeMillis());
+        ensurePartAssemblyTimer();
+
         // 组装分片 SyncRequestPayload
         if (payload.totalParts() > 1) {
             Integer existingTotal = requestTotalParts.get(playerId);
@@ -588,6 +694,9 @@ public class ServerSyncHandlerLogic {
             LOGGER.debug("SyncRequest assembled from {} parts, {} entries total", parts.size(), merged.size());
         }
 
+        // 请求已进入处理流程（单包或多包到齐），清除分包超时跟踪
+        requestPartLastActivity.remove(playerId);
+
         // 递增版本号，用于标记此次请求（旧请求的 server.execute() 任务会通过版本号自过滤）
         int syncVersion = globalSyncVersion.incrementAndGet();
 
@@ -597,7 +706,6 @@ public class ServerSyncHandlerLogic {
         ServerSyncSession.assignVersion(playerId, syncVersion);
 
         ResourceKey<Level> startDimension = serverPlayer.level().dimension();
-        MinecraftServer server = PlayerLevelApiHelper.getServer(serverPlayer);
 
         // Mark player as syncing and record starting dimension (在主线程快速完成)
         syncingPlayers.add(playerId);
@@ -1087,6 +1195,12 @@ public class ServerSyncHandlerLogic {
         speedLimitCycleStart.clear();
         requestPartBuffer.clear();
         requestTotalParts.clear();
+        requestPartLastActivity.clear();
+        ScheduledExecutorService timer = partAssemblyTimer;
+        if (timer != null) {
+            timer.shutdownNow();
+            partAssemblyTimer = null;
+        }
         LOGGER.debug("ServerSyncHandler tracking data cleared");
     }
 

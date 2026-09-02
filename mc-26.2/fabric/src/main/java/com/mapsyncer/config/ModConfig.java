@@ -318,6 +318,13 @@ public class ModConfig {
         private volatile int maxSyncPacketSize = 262144;
         private volatile int syncSpeedLimitKBps = 1024;
 
+        /**
+         * 服务端统一标识名（多入口复用同一地图缓存）。
+         * 客户端用此名而非 IP 命名存档目录，多个入口/域名/IP 映射到同一份地图缓存。
+         * 留空则客户端回退到 IP 命名（兼容旧行为）。
+         */
+        private volatile String serverName = "";
+
         // ========== 增量更新设置 ==========
         private volatile UpdateMode incrementalUpdateMode = UpdateMode.DISABLED;
         private volatile int incrementalUpdateIntervalTicks = 6000;
@@ -383,6 +390,9 @@ public class ModConfig {
                         PropertiesHelper.get(props, "maxSyncPacketSize", "max_sync_packet_size", "262144"));
                 syncSpeedLimitKBps = Integer.parseInt(
                         PropertiesHelper.get(props, "syncSpeedLimitKBps", "sync_speed_limit_kbps", "1024"));
+
+                // 服务端统一标识名（多入口复用同一地图缓存）
+                serverName = PropertiesHelper.get(props, "serverName", "server_name", "");
 
                 incrementalUpdateMode = UpdateMode.valueOf(
                         PropertiesHelper.get(props, "incrementalUpdateMode", "incremental_update_mode", "DISABLED"));
@@ -481,6 +491,20 @@ public class ModConfig {
                 sb.append("# Default: 1024 (1MiB/s), Range: 0 - 10240\n");
                 sb.append("syncSpeedLimitKBps=" + syncSpeedLimitKBps + "\n");
                 sb.append("\n");
+                sb.append("# ========================================\n");
+                sb.append("# 多入口地图缓存复用 / Multi-Entry Cache Reuse\n");
+                sb.append("# ========================================\n");
+                sb.append("#\n");
+                sb.append("# 服务端统一标识名（多入口复用同一地图缓存）\n");
+                sb.append("# 客户端用此名而非 IP 命名存档目录，多个入口/域名/IP 映射到同一份地图缓存\n");
+                sb.append("# 留空则客户端回退到 IP 命名（兼容旧行为）\n");
+                sb.append("#\n");
+                sb.append("# Server identity name for multi-entry cache reuse\n");
+                sb.append("# Client uses this name instead of IP for save directory\n");
+                sb.append("# Multiple entry points/domains/IPs share the same map cache\n");
+                sb.append("# Leave empty to fall back to IP naming (backward compatible)\n");
+                sb.append("serverName=" + serverName + "\n");
+                sb.append("\n");
 
                 // ========== 增量更新设置 ==========
                 sb.append("# ========================================\n");
@@ -547,6 +571,14 @@ public class ModConfig {
 
         public int getSyncSpeedLimitKBps() {
             return syncSpeedLimitKBps;
+        }
+
+        /**
+         * 获取服务端统一标识名（多入口复用同一地图缓存）。
+         * 留空表示未配置，客户端应回退到 IP 命名。
+         */
+        public String getServerName() {
+            return serverName;
         }
 
         public UpdateMode getIncrementalUpdateMode() {

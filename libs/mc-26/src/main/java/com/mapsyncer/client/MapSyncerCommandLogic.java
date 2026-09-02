@@ -34,6 +34,19 @@ public class MapSyncerCommandLogic {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MapSyncerCommandLogic.class);
 
+    /** 同步请求最大重发次数（穿透丢包/服务端无响应时自动重发） */
+    public static final int MAX_SYNC_RETRY = 3;
+
+    /** 上次同步请求上下文（供自动重发） */
+    private static String retryDimensionId = null;
+    private static boolean retrySyncAll = false;
+    private static boolean retrySilent = false;
+    private static Path retryServerDir = null;
+    private static ClientTimestampCache retryTsCache = null;
+    private static String retryXaeroDim = null;
+    private static Map<String, ClientMeta> retryMetaMap = null;
+    private static int retryCount = 0;
+
     /**
      * 显示命令帮助信息。
      *
@@ -213,6 +226,8 @@ public class MapSyncerCommandLogic {
      * 发送同步请求到服务端。
      */
     public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll, boolean silent) {
+        // 新请求，重置自动重发计数
+        resetSyncRetry();
         if (MapPacketHandler.isSyncInProgress() || ClientHashManager.isComputingMeta()) {
             if (mc.player != null) {
                 mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.in_progress"));
@@ -289,6 +304,15 @@ public class MapSyncerCommandLogic {
             return;
         }
 
+        // 保存请求上下文，供服务端无响应/分包丢失时自动重发
+        retryDimensionId = dimensionId;
+        retrySyncAll = syncAll;
+        retrySilent = silent;
+        retryServerDir = serverDir;
+        retryTsCache = tsCache;
+        retryXaeroDim = xaeroDim;
+        retryMetaMap = metaMap;
+
         LOGGER.debug("Sending sync request with {} entries (serverDir={})", metaMap.size(), serverDir);
 
         if (tsCache != null) {
@@ -308,6 +332,43 @@ public class MapSyncerCommandLogic {
             NetworkManager.sendToServer(part);
         }
         SyncProgressTracker.startTracking();
+    }
+
+    /**
+     * 重发上次的同步请求（服务端在线但无响应 / 服务端通知分包未到齐时调用）。
+     *
+     * <p>用保存的 metaMap 直接 dispatch，跳过重复哈希扫描。
+     * 达到 {@link #MAX_SYNC_RETRY} 次后放弃并提示用户。</p>
+     */
+    public static void retryLastSyncRequest() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            return;
+        }
+        if (retryMetaMap == null || retryServerDir == null) {
+            LOGGER.debug("No previous sync request to retry");
+            return;
+        }
+        if (retryCount >= MAX_SYNC_RETRY) {
+            SyncProgressTracker.cancelTracking();
+            retryMetaMap = null;
+            resetSyncRetry();
+            if (mc.player != null) {
+                mc.player.sendSystemMessage(ChatUtils.error("mapsyncer.sync.server_unresponsive"));
+            }
+            LOGGER.warn("Sync request retry limit reached ({}), giving up", MAX_SYNC_RETRY);
+            return;
+        }
+        retryCount++;
+        SyncProgressTracker.cancelTracking();
+        LOGGER.info("Retrying sync request ({}/{})", retryCount, MAX_SYNC_RETRY);
+        dispatchSyncRequest(mc, retryDimensionId, retrySyncAll, retryServerDir,
+                retryTsCache, retryXaeroDim, retryMetaMap, retrySilent);
+    }
+
+    /** 同步成功 / 收到 abort / 断线 / 新请求时重置自动重发计数 */
+    public static void resetSyncRetry() {
+        retryCount = 0;
     }
 
     /**

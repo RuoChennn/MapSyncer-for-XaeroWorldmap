@@ -19,12 +19,19 @@ public record ServerInstalledPayload(
         long lastGenerationTimestamp,
         int autoSyncIntervalMinutes,
         UpdateMode updateMode,
-        int incrementalUpdateIntervalTicks) {
+        int incrementalUpdateIntervalTicks,
+        String serverName) {
 
     public static final String ID = NetworkHandler.SERVER_INSTALLED_ID;
 
-    /** 兼容旧构造：未指定模式时视为 DISABLED */
+    /** 兼容旧构造：未指定模式时视为 DISABLED，serverName 为空 */
     public ServerInstalledPayload(String version, long lastGenerationTimestamp, int autoSyncIntervalMinutes) {
-        this(version, lastGenerationTimestamp, autoSyncIntervalMinutes, UpdateMode.DISABLED, 0);
+        this(version, lastGenerationTimestamp, autoSyncIntervalMinutes, UpdateMode.DISABLED, 0, "");
+    }
+
+    /** 兼容旧构造：未指定 serverName 时视为空 */
+    public ServerInstalledPayload(String version, long lastGenerationTimestamp, int autoSyncIntervalMinutes,
+                                   UpdateMode updateMode, int incrementalUpdateIntervalTicks) {
+        this(version, lastGenerationTimestamp, autoSyncIntervalMinutes, updateMode, incrementalUpdateIntervalTicks, "");
     }
 }

@@ -16,6 +16,9 @@ public final class ServerInstalledWireCodec {
         buf.writeInt(payload.autoSyncIntervalMinutes());
         buf.writeByte(payload.updateMode().ordinal());
         buf.writeInt(payload.incrementalUpdateIntervalTicks());
+        // serverName: 服务端统一标识，客户端用它命名存档目录（多入口复用同一目录）
+        String serverName = payload.serverName();
+        buf.writeUtf(serverName != null ? serverName : "");
     }
 
     public static ServerInstalledPayload read(FriendlyByteBuf buf) {
@@ -24,7 +27,16 @@ public final class ServerInstalledWireCodec {
         int intervalMinutes = buf.readInt();
         UpdateMode mode = readUpdateMode(buf.readByte());
         int intervalTicks = buf.readInt();
-        return new ServerInstalledPayload(version, lastGen, intervalMinutes, mode, intervalTicks);
+        // 兼容旧协议：旧客户端无 serverName 字段时读不到数据，用空字符串兜底
+        String serverName = "";
+        try {
+            if (buf.readableBytes() > 0) {
+                serverName = buf.readUtf();
+            }
+        } catch (Exception e) {
+            // 旧版数据包无此字段，忽略
+        }
+        return new ServerInstalledPayload(version, lastGen, intervalMinutes, mode, intervalTicks, serverName);
     }
 
     private static UpdateMode readUpdateMode(int ordinal) {

@@ -37,8 +37,9 @@ public class PlayerJoinHandlerLogic {
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
         int intervalTicks = PlatformManager.getPlatform().getIncrementalUpdateIntervalTicks();
         int autoInterval = AutoSyncConfig.computeInterval(mode, intervalTicks);
+        String serverName = PlatformManager.getServerName();
         NetworkManager.sendToPlayer(player,
-            new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval, mode, intervalTicks));
+            new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval, mode, intervalTicks, serverName));
 
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {
             IncrementalUpdateHandlerLogic.getInstance().start(server);

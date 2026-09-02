@@ -20,6 +20,9 @@ public final class ClientSyncSession {
     private volatile boolean reflectionFailed = false;
     private volatile SyncOutcome outcome = SyncOutcome.NONE;
 
+    /** 服务端统一标识名（多入口复用同一地图缓存），由握手包下发 */
+    private volatile String serverName = "";
+
     private ClientSyncSession() {}
 
     public static ClientSyncSession get() {
@@ -44,6 +47,16 @@ public final class ClientSyncSession {
 
     public SyncOutcome outcome() {
         return outcome;
+    }
+
+    /** 获取服务端统一标识名（空串表示未配置，客户端应回退到 IP 命名） */
+    public String getServerName() {
+        return serverName;
+    }
+
+    /** 设置服务端统一标识名（由握手包处理器调用） */
+    public void setServerName(String name) {
+        this.serverName = name != null ? name : "";
     }
 
     public boolean isCurrent(int gen) {
