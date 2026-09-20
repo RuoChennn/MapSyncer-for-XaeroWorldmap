@@ -101,6 +101,7 @@ public final class McaRegionLoader {
             throws IOException {
         ChunkDataParser.ChunkInfo[][] grid =
             new ChunkDataParser.ChunkInfo[ConvertConstants.CHUNKS_PER_REGION][ConvertConstants.CHUNKS_PER_REGION];
+        int failedChunks = 0;
 
         for (int localX = 0; localX < ConvertConstants.CHUNKS_PER_REGION; localX++) {
             for (int localZ = 0; localZ < ConvertConstants.CHUNKS_PER_REGION; localZ++) {
@@ -115,8 +116,18 @@ public final class McaRegionLoader {
                 if (nbt == null) {
                     continue;
                 }
-                grid[localX][localZ] = ChunkDataParser.parseChunk(localX, localZ, nbt, worldHeightRange);
+                try {
+                    grid[localX][localZ] = ChunkDataParser.parseChunk(localX, localZ, nbt, worldHeightRange);
+                } catch (RuntimeException e) {
+                    // 单个区块解析失败不应中断整个区域的转换
+                    failedChunks++;
+                    LOGGER.warn("Failed to parse chunk ({}, {}), skipping: {}",
+                            localX, localZ, e.toString());
+                }
             }
+        }
+        if (failedChunks > 0) {
+            LOGGER.warn("Skipped {} unparsable chunks in region file", failedChunks);
         }
         return grid;
     }

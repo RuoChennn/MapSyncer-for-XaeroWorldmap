@@ -27,6 +27,11 @@ import java.util.Set;
 public class ChunkSectionParser {
 
     /**
+     * 无法识别方块名称时的回退名称，保证调色板索引与位置数组仍然对齐。
+     */
+    private static final String DEFAULT_BLOCK_NAME = "minecraft:air";
+
+    /**
      * 花朵方块名称集合
      *
      * <p>使用 Set 常量替代多次字符串比较，提高判断效率。</p>
@@ -263,8 +268,7 @@ public class ChunkSectionParser {
             if (blockStates.contains("palette", Tag.TAG_LIST)) {
                 Tag.ListTag paletteList = blockStates.getList("palette", Tag.TAG_COMPOUND);
                 for (int i = 0; i < paletteList.items().size(); i++) {
-                    Tag.Compound stateTag = (Tag.Compound) paletteList.items().get(i);
-                    BlockState blockState = parseBlockState(stateTag);
+                    BlockState blockState = parsePaletteEntry(paletteList.items().get(i));
                     blockPalette.add(blockState);
                     blockNames.add(blockState.name());
                 }
@@ -287,12 +291,14 @@ public class ChunkSectionParser {
         if (sectionTag.contains("biomes", Tag.TAG_COMPOUND)) {
             Tag.Compound biomes = sectionTag.getCompound("biomes");
 
-            // 解析palette (biome palette元素是String类型)
+            // 解析palette (biome palette元素为String类型)
             if (biomes.contains("palette", Tag.TAG_LIST)) {
                 Tag.ListTag paletteList = biomes.getList("palette", Tag.TAG_STRING);
                 for (int i = 0; i < paletteList.items().size(); i++) {
-                    Tag.StringTag biomeTag = (Tag.StringTag) paletteList.items().get(i);
-                    biomePalette.add(biomeTag.value());
+                    Tag item = paletteList.items().get(i);
+                    if (item instanceof Tag.StringTag biomeTag) {
+                        biomePalette.add(biomeTag.value());
+                    }
                 }
             }
 
@@ -346,24 +352,42 @@ public class ChunkSectionParser {
     }
 
     /**
+     * 解析调色板条目，兼容多种写入形态。
+     *
+     * <p>标准格式（Minecraft 1.18+）为 {@code {"Name": "...", "Properties": {...}}}；
+     * 部分第三方区块序列化实现会把条目改写成紧凑形式（键名 {@code id} / {@code properties}，
+     * 或在无属性时丢失键名变成空键），无属性的单一方块状态甚至直接退化为字符串列表。
+     * 这里统一归一化，避免因非标准格式导致整维度转换失败。</p>
+     *
+     * @param entry 调色板条目（字符串标签或复合标签）
+     * @return 解析后的方块状态，无法识别时回退为空气方块
+     */
+    private static BlockState parsePaletteEntry(Tag entry) {
+        if (entry instanceof Tag.StringTag str) {
+            return new BlockState(str.value(), BlockState.EMPTY_PROPERTIES);
+        }
+        if (entry instanceof Tag.Compound compound) {
+            return parseBlockState(compound);
+        }
+        return new BlockState(DEFAULT_BLOCK_NAME, BlockState.EMPTY_PROPERTIES);
+    }
+
+    /**
      * 解析单个方块状态的NBT
      *
-     * <p>格式: {Name: "minecraft:grass_block", Properties: {snowy: "false"}}</p>
+     * <p>支持三种键名形态：标准 {@code Name} / {@code Properties}，紧凑 {@code id} / {@code properties}，
+     * 以及键名丢失时空键名的退化形态。</p>
      *
      * @param stateTag 方块状态的NBT复合标签
      * @return 解析后的BlockState对象
      */
     private static BlockState parseBlockState(Tag.Compound stateTag) {
-        String name = stateTag.getString("Name");
-
-        if (!stateTag.contains("Properties", Tag.TAG_COMPOUND)) {
-            return new BlockState(name, BlockState.EMPTY_PROPERTIES);
+        String name = resolveBlockName(stateTag);
+        if (name.isEmpty()) {
+            return new BlockState(DEFAULT_BLOCK_NAME, BlockState.EMPTY_PROPERTIES);
         }
 
-        Tag.Compound propsTag = stateTag.getCompound("Properties");
-        if (propsTag.children().isEmpty()) {
-            return new BlockState(name, BlockState.EMPTY_PROPERTIES);
-        }
+        Tag.Compound propsTag = resolvePropertiesTag(stateTag);
 
         Map<String, String> properties = new LinkedHashMap<>();
         for (Map.Entry<String, Tag> entry : propsTag.children().entrySet()) {
@@ -378,6 +402,37 @@ public class ChunkSectionParser {
         }
 
         return new BlockState(name, properties);
+    }
+
+    /**
+     * 依次尝试标准键名 {@code Name}、紧凑键名 {@code id} 与键名丢失时的空键名。
+     *
+     * @param stateTag 方块状态的NBT复合标签
+     * @return 方块名称，均不存在时返回空字符串
+     */
+    private static String resolveBlockName(Tag.Compound stateTag) {
+        String name = stateTag.getString("Name");
+        if (!name.isEmpty()) {
+            return name;
+        }
+        name = stateTag.getString("id");
+        if (!name.isEmpty()) {
+            return name;
+        }
+        return stateTag.getString("");
+    }
+
+    /**
+     * 依次尝试标准属性键名 {@code Properties} 与紧凑属性键名 {@code properties}。
+     *
+     * @param stateTag 方块状态的NBT复合标签
+     * @return 属性复合标签，均不存在时返回空复合标签
+     */
+    private static Tag.Compound resolvePropertiesTag(Tag.Compound stateTag) {
+        if (stateTag.contains("Properties", Tag.TAG_COMPOUND)) {
+            return stateTag.getCompound("Properties");
+        }
+        return stateTag.getCompound("properties");
     }
 
     /**

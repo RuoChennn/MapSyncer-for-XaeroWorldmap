@@ -158,7 +158,10 @@ public class ChunkDataParser {
         if (rootTag.contains("sections", Tag.TAG_LIST)) {
             Tag.ListTag sectionsList = rootTag.getList("sections", Tag.TAG_COMPOUND);
             for (int i = 0; i < sectionsList.items().size(); i++) {
-                Tag.Compound sectionTag = (Tag.Compound) sectionsList.items().get(i);
+                Tag item = sectionsList.items().get(i);
+                if (!(item instanceof Tag.Compound sectionTag)) {
+                    continue;
+                }
                 ChunkSectionParser.SectionData section = ChunkSectionParser.parseSection(sectionTag);
                 sections.add(section);
             }
