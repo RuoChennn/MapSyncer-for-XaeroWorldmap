@@ -1,6 +1,6 @@
 # Minecraft 权限生态调研与 MapSyncer 适配指引
 
-> 范围：MC **1.20.1 → 26.2**，Loader：**Fabric / Forge / NeoForge**  
+> 范围：MC **1.20.1 → 26.3**，Loader：**Fabric / Forge / NeoForge**  
 > 用途：后续实现 MapSyncer 细粒度权限（LuckPerms / FTB Ranks 等）时的对照文档  
 > 调研日期：2026-07-21（线上资料：CurseForge / Modrinth / GitHub / Fabric API javadoc）
 
@@ -28,16 +28,16 @@ MapSyncer 当前矩阵（见 `.cursor/skills/mc-multi-version/SKILL.md`）：
 | 1.20.1 | ✅ | ✅ | — |
 | 1.21.1 | ✅ | ✅ | ✅ |
 | 1.21.11 | ✅ | ✅ | ✅ |
-| 26.1 / 26.2 | ✅ | ❌（本项目不维护） | ✅ |
+| 26.1 / 26.2 / 26.3 | ✅ | ❌（本项目不维护） | ✅ |
 
 ### 2.1 推荐对接目标（按 Loader）
 
 | Loader | MC 区间 | 推荐 Check API | 主流 Provider |
 |--------|---------|----------------|---------------|
 | Fabric | 1.20.1 – 1.21.11 | **lucko `fabric-permissions-api`**（可 `include` 进 JAR） | LuckPerms；可选 Player Roles |
-| Fabric | 26.1 – 26.2 | **优先 Fabric API `permission-v1`**（官方，Experimental）；可并存/过渡 lucko API | LuckPerms；Player Roles 1.9+ |
+| Fabric | 26.1 – 26.3 | **优先 Fabric API `permission-v1`**（官方，Experimental）；可并存/过渡 lucko API | LuckPerms；Player Roles 1.9+ |
 | Forge | 1.20.1 – 1.21.11 | **Forge `PermissionAPI`**（`net.minecraftforge.server.permission`） | LuckPerms；1.20.1 还有 FTB Ranks Forge |
-| NeoForge | 1.21.1 – 26.2 | **NeoForge `PermissionAPI`**（`net.neoforged.neoforge.server.permission`） | LuckPerms；FTB Ranks NeoForge |
+| NeoForge | 1.21.1 – 26.3 | **NeoForge `PermissionAPI`**（`net.neoforged.neoforge.server.permission`） | LuckPerms；FTB Ranks NeoForge |
 
 LuckPerms 在 Modrinth/CurseForge 上已提供 **Fabric / Forge / NeoForge** 构建，并声明覆盖至 **26.2**（例：v5.5.57）。Forge 26.x 有 LP 构建，但 MapSyncer 本身不发 Forge 26 包。
 
@@ -189,7 +189,7 @@ Forge vs NeoForge（适配视角）：
 
 ## 5. 差异总表（给实现用）
 
-| 维度 | Fabric ≤1.21.11 | Fabric 26.x | Forge 1.20.1–1.21.11 | NeoForge 1.21.1–26.2 |
+| 维度 | Fabric ≤1.21.11 | Fabric 26.x | Forge 1.20.1–1.21.11 | NeoForge 1.21.1–26.3 |
 |------|-----------------|-------------|----------------------|----------------------|
 | Check API | lucko FPA | FAPI `permission-v1`（+ 可选 lucko） | Forge PermissionAPI | NeoForge PermissionAPI |
 | 节点形式 | `String` | `Identifier` / `PermissionNode` | 静态 `PermissionNode` + 注册 | 同左（包名不同） |

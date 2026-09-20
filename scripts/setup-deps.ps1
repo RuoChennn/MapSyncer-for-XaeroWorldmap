@@ -267,7 +267,8 @@ function Prefetch-MavenDependencies([hashtable]$Jdks) {
         ":mc-1.21.1:neoforge:compileJava",
         ":mc-1.21.11:neoforge:compileJava",
         ":mc-26.1:neoforge:compileJava",
-        ":mc-26.2:neoforge:compileJava"
+        ":mc-26.2:neoforge:compileJava",
+        ":mc-26.3:neoforge:compileJava"
     )
     Write-Ok "Default platform dependencies prefetched"
 
@@ -329,7 +330,8 @@ function Prefetch-MavenDependencies([hashtable]$Jdks) {
         Invoke-GradleWrapper @(
             "--no-daemon", "-x", "test",
             ":mc-26.1:fabric:compileJava",
-            ":mc-26.2:fabric:compileJava"
+            ":mc-26.2:fabric:compileJava",
+            ":mc-26.3:fabric:compileJava"
         )
         Write-Ok "Fabric 26.x dependencies prefetched"
     } finally {

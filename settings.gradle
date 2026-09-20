@@ -60,3 +60,7 @@ include 'mc-26.1:neoforge'
 // MC 26.2（协议 776）
 include 'mc-26.2:neoforge'
 // include 'mc-26.2:fabric'  // Loom 隔离，使用 settings-26.gradle
+
+// MC 26.3（协议 777）
+include 'mc-26.3:neoforge'
+// include 'mc-26.3:fabric'  // Loom 隔离，使用 settings-26.gradle

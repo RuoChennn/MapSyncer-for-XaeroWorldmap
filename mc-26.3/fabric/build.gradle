@@ -1,0 +1,76 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.16-SNAPSHOT'
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+version = mod_version + '-fabric-' + g4_263_jar_suffix
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    maven { url = 'https://maven.shedaniel.me/' }
+}
+
+sourceSets.main.java.srcDirs(
+    "${rootProject.projectDir}/libs/mc-26/src/main/java",
+    "${rootProject.projectDir}/libs/common/src/main/java",
+    'src/main/java',
+)
+sourceSets.main.resources.srcDirs(
+    "${rootProject.projectDir}/libs/mc-26/src/main/resources",
+    "${rootProject.projectDir}/libs/common/src/main/resources",
+    'src/main/resources',
+)
+
+apply from: rootProject.file('gradle/fabric-lz4-shadow.gradle')
+apply from: rootProject.file('gradle/fabric-modmenu-stub.gradle')
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_263_version}"
+    implementation "net.fabricmc:fabric-loader:0.19.2"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_263_version}"
+    implementation "me.shedaniel.cloth:cloth-config-fabric:${cloth_config_263_version}"
+
+    implementation project(':libs:core')
+    implementation project(':libs:platform-api')
+    shadowBundle project(':libs:core')
+    shadowBundle project(':libs:platform-api')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    inputs.property "version", project.version
+    inputs.property "minecraft_range_fabric", g4_263_minecraft_range_fabric
+    inputs.property "loader_version", "0.19.2"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_range_fabric": g4_263_minecraft_range_fabric,
+                "loader_version": "0.19.2"
+    }
+}
+
+publishing {
+    publications {
+        register('fabric263MavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}

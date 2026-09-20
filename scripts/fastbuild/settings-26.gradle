@@ -26,8 +26,10 @@ include 'libs:platform-api'
 include 'libs:common'
 include 'libs:mc-26'
 
-// ── MC 26.x 胶水（协议 775 = 26.1，776 = 26.2；共用 libs/mc-26 源码）──
+// ── MC 26.x 胶水（协议 775 = 26.1，776 = 26.2，777 = 26.3；共用 libs/mc-26 源码）──
 include 'mc-26.1:neoforge'
 include 'mc-26.1:fabric'
 include 'mc-26.2:neoforge'
 include 'mc-26.2:fabric'
+include 'mc-26.3:neoforge'
+include 'mc-26.3:fabric'
