@@ -848,7 +848,10 @@ public class MapPacketHandler {
                                 if (shouldProcess && !session.reflectionFailed()) {
                                     if (inViewDistance) {
                                         triggerSingleRegionLoad(coord, assembled.caveLayer, true);
-                                    } else {
+                                    } else if (XaeroReflectionHelper.getLeafMapRegion(
+                                            assembled.caveLayer, coord.x(), coord.z(), false) != null) {
+                                        // 仅重载 Xaero 中已存在的区域（曾加载、内存有旧数据）；
+                                        // 从未加载的区域交由 Xaero 在玩家靠近时自动加载，避免全量同步时 OOM
                                         RegionPipelineTracker.onDeferredLoadQueued(
                                                 coord.x(), coord.z(), assembled.caveLayer);
                                         pendingRegionLoads.add(new PendingRegionLoad(
