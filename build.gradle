@@ -33,6 +33,7 @@ afterEvaluate {
         dependsOn ':mc-1.21.11:neoforge:build'
         dependsOn ':mc-26.1:neoforge:build'
         dependsOn ':mc-26.2:neoforge:build'
+        dependsOn ':mc-26.3:neoforge:build'
         finalizedBy 'collectJars'
     }
 }

@@ -5,7 +5,7 @@ plugins {
 group = mod_group_id
 version = mod_version
 
-// G4 — MC 26.x API 源码（锚点 26.1，覆盖 26.1.x + 26.2）
+// G4 — MC 26.x API 源码（锚点 26.1，覆盖 26.1.x + 26.2 + 26.3）
 // source-only；由 mc-26.1/{fabric,neoforge} 胶水模块提供 Minecraft 依赖
 
 tasks.withType(JavaCompile).configureEach {

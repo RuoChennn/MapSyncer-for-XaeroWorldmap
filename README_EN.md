@@ -35,6 +35,7 @@ This release centers on **multi-layer cave rendering + auto-sync system + multi-
 | 1.21.11 | ✅ | ✅ | ✅ |
 | 26.1 | — | ✅ | ✅ |
 | 26.2 | — | ✅ | ✅ |
+| 26.3 | — | ✅ | ✅ |
 
 ### Client Dependencies
 

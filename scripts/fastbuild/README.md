@@ -22,6 +22,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # Loader 胶水层
 | G3 | 1.21.11 | `mc-1.21.11/fabric` | `mc-1.21.11/forge` | `mc-1.21.11/neoforge` | `1.0.4-fabric-1.21.11` |
 | G4 | 26.1 | `mc-26.1/fabric` | — | `mc-26.1/neoforge` | `1.0.4-fabric-26.1` |
 | G4′ | 26.2 | `mc-26.2/fabric` | — | `mc-26.2/neoforge` | `1.0.4-fabric-26.2` |
+| G4″ | 26.3 | `mc-26.3/fabric` | — | `mc-26.3/neoforge` | `1.0.4-fabric-26.3` |
 
 元数据 MC 范围按锚点组放宽（如 G2 `>=1.21 <1.22`），二进制仍按上表锚点编译。
 

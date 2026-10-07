@@ -1,5 +1,22 @@
 # MapSyncer 更新日志
 
+## 未发布 — MC 26.3 适配（协议 777）
+
+新增 Minecraft 26.3（协议 777）平台支持，与 26.1 / 26.2 共用 G4 锁定锚点 `libs/mc-26`，仅新增胶水层。
+
+### 新平台
+- **mc-26.3 Fabric / NeoForge 胶水层** — 复用 G4 锚点源码，Java 25
+- **26.2 元数据范围收紧** — 由 `>=26.2 <27` / `[26.2,27)` 改为 `>=26.2 <26.3` / `[26.2,26.3)`，避免协议 776 的构建被加载到协议 777 的 26.3
+
+### 构建
+- `gradle.properties` 新增 `g4_263_*` 变量组（NeoForge `26.3.0.7-beta`、Fabric API `0.161.0+26.3`、Cloth Config `26.3.158+fabric`、FML loader `12.0.0`）
+- `gradle/versions.toml` 新增 `[g4_263]` 段（`protocol = "777"`）
+- `settings.gradle` / `scripts/fastbuild/settings-26.gradle` 接入 `mc-26.3`
+- 新增 `scripts/fastbuild/build-fabric-26.3.bat`、`build-neoforge-26.3.bat`
+- ModDevGradle 插件由 `2.0.141` 升级至 `2.0.147` — 旧版在 MC 26.3 的 `createMinecraftArtifacts`（反编译并重编译 Minecraft 源码）阶段失败，26.1 / 26.2 / 26.3 已统一版本并回归编译通过
+
+---
+
 ## v1.0.4（2026-08-29）— 跨地址缓存复用 + 超时重发兜底
 
 本版本重点修复跨地址地图同步失败、同步超时无响应等问题，新增零拷贝重命名方案。

@@ -107,7 +107,7 @@ call "%COPY_JARS%" mc-1.21.11\fabric\build\libs
 echo   Phase 3: done
 
 :: ============================================================
-:: Phase 4: MC 26.x (settings-26.gradle: 26.1 Fabric + 26.2 Fabric/NeoForge)
+:: Phase 4: MC 26.x (settings-26.gradle: 26.1 Fabric + 26.2/26.3 Fabric+NeoForge)
 :: ============================================================
 echo.
 echo [Phase 4/5] Building MC 26.x (settings-26.gradle)...
@@ -118,12 +118,14 @@ call "%PROJECT_ROOT%\gradlew.bat" ^
     :mc-26.1:fabric:clean :mc-26.1:fabric:build ^
     :mc-26.2:fabric:clean :mc-26.2:fabric:build ^
     :mc-26.2:neoforge:clean :mc-26.2:neoforge:build ^
+    :mc-26.3:fabric:clean :mc-26.3:fabric:build ^
+    :mc-26.3:neoforge:clean :mc-26.3:neoforge:build ^
     -x test
 set FABRIC26_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
 if %FABRIC26_RESULT% neq 0 echo   MC 26.x builds had errors
-call "%COPY_JARS%" mc-26.1\fabric\build\libs mc-26.2\fabric\build\libs mc-26.2\neoforge\build\libs
+call "%COPY_JARS%" mc-26.1\fabric\build\libs mc-26.2\fabric\build\libs mc-26.2\neoforge\build\libs mc-26.3\fabric\build\libs mc-26.3\neoforge\build\libs
 echo   Phase 4: done
 
 :: ============================================================
