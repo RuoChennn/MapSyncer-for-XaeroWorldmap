@@ -54,7 +54,7 @@ echo.
 echo ============================================
 echo   BUILD SUCCESSFUL
 echo ============================================
-dir /b output\*-26.3*.jar 2>nul | findstr /v /i "-slim"
+dir /b output\*-26.3*.jar 2>nul | findstr /v /i /c:"-slim"
 exit /b 0
 
 :fail

@@ -46,6 +46,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # 胶水层（Loader + 网络注册
 | 1.21.11 | `mc-1.21.11/fabric` | `mc-1.21.11/forge` | `mc-1.21.11/neoforge` | Fabric → `settings-12111.gradle`；Forge → settings-forge |
 | 26.1 | `mc-26.1/fabric` | **无 Forge** | `mc-26.1/neoforge` | Fabric → `settings-26.gradle` |
 | 26.2 | `mc-26.2/fabric` | **无 Forge** | `mc-26.2/neoforge` | 协议 776；同 `libs/mc-26` 源码 |
+| 26.3 | `mc-26.3/fabric` | **无 Forge** | `mc-26.3/neoforge` | 协议 777；同 `libs/mc-26` 源码；NeoForge 26.3.0.90，Fabric Loader 0.19.5 |
 
 **Forge 说明：** 1.20.1 用 `ForgeLegacyPlatform`；1.21.x Forge 与 NeoForge 并存但 API 近 NeoForge；26.x 仅 NeoForge（无 Forge 官方线）。
 

@@ -84,7 +84,7 @@ echo.
 echo ============================================
 echo   Forge BUILD SUCCESSFUL
 echo ============================================
-dir /b "%OUTPUT_DIR%\*.jar" 2>nul | findstr /v /i "-slim"
+dir /b "%OUTPUT_DIR%\*.jar" 2>nul | findstr /v /i /c:"-slim"
 echo.
 echo ============================================
 exit /b 0

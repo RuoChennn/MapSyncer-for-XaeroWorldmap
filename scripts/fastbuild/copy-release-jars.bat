@@ -16,7 +16,7 @@ if not exist "%~1" (
 )
 for %%f in ("%~1\*.jar") do (
     set "fname=%%~nxf"
-    echo !fname! | findstr /i /c:"-slim.jar" /c:"-sources.jar" /c:"-javadoc.jar" >nul
+    echo !fname! | findstr /i /c:"-slim.jar" /c:"-sources.jar" /c:"-javadoc.jar" /c:"-dev-all.jar" >nul
     if errorlevel 1 copy /y "%%f" "output\" >nul
 )
 :next

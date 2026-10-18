@@ -164,6 +164,16 @@ Get-ChildItem -LiteralPath 'E:\Game\服务器端' -Directory |
 5. 执行 A/B/C/D 全矩阵；不要把旧版本结果复制成新版本结果。
 6. 记录新版本的 jar SHA256、C2ME 版本、RCON 输出风格。
 
+### 26.3 实测基线
+
+- NeoForge 必须使用 `26.3.0.90` 或更新版本；`26.3.0.7-beta` 会与 C2ME 的
+  MixinExtras/ASM 组合冲突，启动即 `ClassCastException`。
+- NeoForge 26.3 的服务端配置类型是 `ModConfig.Type.SYNCED`，配置文件为
+  `config/mapsyncer-synced.toml`。
+- Fabric 使用 Loader `0.19.5`；Fabric API 0.161 要求至少 0.19.3，而 0.19.3
+  仍会与 C2ME 0.106 的 MixinExtras 冲突。
+- C2ME 26.3 基线：Fabric `0.4.2-alpha.0.106`，NeoForge `0.4.2-alpha.0.105`。
+
 详细说明：
 
 - [RCON 与 C2ME 规范](references/rcon-and-c2me.md)

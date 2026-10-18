@@ -137,7 +137,7 @@ public class DimensionRegistry {
      */
     public static void resetRegistration() {
         hasRegistered = false;
-        DimensionPathMapping.resetInstance();
+        DimensionPathMapping.getInstance().resetMappings();
         LOGGER.info("Dimension registration state reset");
     }
 

@@ -49,5 +49,5 @@ echo Collecting JARs...
 if not exist output mkdir output
 call "%~dp0copy-release-jars.bat" mc-1.20.1\forge\build\libs
 echo Output:
-dir /b output\*.jar 2>nul | findstr /v /i "-slim"
+dir /b output\*.jar 2>nul | findstr /v /i /c:"-slim"
 exit /b 0

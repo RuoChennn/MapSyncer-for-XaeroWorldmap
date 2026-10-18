@@ -181,6 +181,19 @@ public class DimensionPathMapping {
         LOGGER.info("DimensionPathMapping instance reset");
     }
 
+    /**
+     * 清除运行时检测到的文件夹映射，但保留当前 Minecraft 版本信息。
+     *
+     * <p>用于 {@code reloadconfig} 等需要重新探测维度的场景。直接丢弃单例会
+     * 让新实例回退到默认的 1.21 目录格式，导致 26.x 世界在重载后找不到
+     * {@code dimensions/} 下的 region 目录。</p>
+     */
+    public void resetMappings() {
+        pathToFolder.clear();
+        LOGGER.info("DimensionPathMapping mappings reset (version: {}, new format: {})",
+                majorVersion, useNewFormatForVanilla);
+    }
+
     // ========== 文件系统目录检测 ==========
 
     /**

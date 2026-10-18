@@ -98,14 +98,12 @@ public class ModConfig {
 
     public static void reloadServerFromDisk() {
         if (boundServerConfig != null) {
-            Path path = boundServerConfig.getFullPath();
-            CommentedFileConfig disk = CommentedFileConfig.of(path);
-            disk.load();
-            try {
-                SERVER_SPEC.acceptConfig(disk);
-            } finally {
-                disk.close();
-            }
+            // Let Forge replace the loaded config data through its own tracker.
+            // Reading into a temporary config and calling acceptConfig() would bind
+            // the spec to a file object that is closed immediately afterwards.
+            Path base = boundServerConfig.getFullPath().getParent();
+            net.minecraftforge.fml.config.ConfigTracker.INSTANCE.loadConfigs(
+                    net.minecraftforge.fml.config.ModConfig.Type.SERVER, base);
         }
         DimensionConfigParser.invalidateCache();
     }

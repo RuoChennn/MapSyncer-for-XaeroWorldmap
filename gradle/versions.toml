@@ -80,4 +80,4 @@ minecraft_range_fabric = ">=26.3 <27"
 minecraft_range_forge = "[26.3,27)"
 protocol = "777"
 glue = ["mc-26.3/fabric", "mc-26.3/neoforge"]
-build_notes = "Same G4 source as 26.1/26.2; separate glue for protocol 777"
+build_notes = "Same G4 source as 26.1/26.2; protocol 777; NeoForge 26.3.0.90; Fabric Loader 0.19.5"

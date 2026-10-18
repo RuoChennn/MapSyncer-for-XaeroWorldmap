@@ -19,5 +19,5 @@ call "%~dp0copy-release-jars.bat" mc-26.1\neoforge\build\libs
 
 echo.
 echo Output: output\
-dir /b output\*-neoforge-26*.jar 2>nul | findstr /v /i "-slim"
+dir /b output\*-neoforge-26*.jar 2>nul | findstr /v /i /c:"-slim"
 exit /b 0

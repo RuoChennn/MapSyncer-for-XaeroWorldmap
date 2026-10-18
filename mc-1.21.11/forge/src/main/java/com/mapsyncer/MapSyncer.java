@@ -21,9 +21,9 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.eventbus.api.bus.BusGroup;
 import net.minecraftforge.eventbus.api.bus.EventBus;
 import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
-import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
@@ -31,6 +31,7 @@ import net.minecraftforge.fml.config.ModConfig.Type;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.event.TickEvent;
 import org.slf4j.Logger;
@@ -49,7 +50,9 @@ public class MapSyncer {
     public static String VERSION = "unknown";
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
 
-    public MapSyncer(EventBus modBus, ModContainer modContainer) {
+    public MapSyncer(FMLJavaModLoadingContext context) {
+        BusGroup modBusGroup = context.getModBusGroup();
+        var modContainer = context.getContainer();
         VERSION = modContainer.getModInfo().getVersion().toString();
 
         // 初始化 Platform（FML 3.0 / eventbus 7.0 实现）
@@ -63,11 +66,8 @@ public class MapSyncer {
         // 注册配置（FML 3.0 / eventbus 7.0 仍使用 ModLoadingContext）
         ModLoadingContext.get().registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
         ModLoadingContext.get().registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
-        modBus.addListener(event -> {
-            if (event instanceof ModConfigEvent.Loading loading) {
-                ModConfig.bindServerConfig(loading.getConfig());
-            }
-        });
+        EventBus.create(modBusGroup, ModConfigEvent.Loading.class)
+                .addListener(event -> ModConfig.bindServerConfig(event.getConfig()));
 
         // 创建网络处理器实例
         ForgeNetworkHandler networkHandler = new ForgeNetworkHandler();
