@@ -84,6 +84,13 @@ shadowJar {
     configureLz4ShadowExcludes(it)
 }
 
+// Forge 1.20.1 运行时要求 mod 编译为 SRG 名（Minecraft 1.20.1 官方 jar 仍是混淆名，
+// FML 在运行时把 SRG 名映射到混淆名）。默认 reobf 只作用于 jar 任务，shadowJar 产物不会
+// 被 reobf，仍是 mojmap 名，导致运行时 NoSuchMethodError: Commands.literal。这里显式启用。
+reobf {
+    shadowJar {}
+}
+
 tasks.named('jar') {
     archiveClassifier.set('slim')
     dependsOn shadowJar
