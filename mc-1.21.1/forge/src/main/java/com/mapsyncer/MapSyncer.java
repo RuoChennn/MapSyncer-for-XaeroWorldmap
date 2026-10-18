@@ -28,6 +28,7 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.fml.config.ModConfig.Type;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -48,7 +49,9 @@ public class MapSyncer {
     public static String VERSION = "unknown";
     public static final Logger LOGGER = LoggerFactory.getLogger(MapSyncer.class);
 
-    public MapSyncer(IEventBus modBus, ModContainer modContainer) {
+    public MapSyncer() {
+        IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
+        ModContainer modContainer = ModLoadingContext.get().getActiveContainer();
         VERSION = modContainer.getModInfo().getVersion().toString();
 
         // 初始化 Platform（Forge 1.21.1 实现）
