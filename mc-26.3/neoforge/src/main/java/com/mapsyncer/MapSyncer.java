@@ -65,7 +65,7 @@ public class MapSyncer {
         NetworkManager.initialize(networkHandler);
         LOGGER.info("NetworkManager initialized");
 
-        modContainer.registerConfig(Type.SERVER, ModConfig.SERVER_SPEC);
+        modContainer.registerConfig(Type.SYNCED, ModConfig.SERVER_SPEC);
         modContainer.registerConfig(Type.CLIENT, ModConfig.CLIENT_SPEC);
         modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Loading event) ->
                 ModConfig.bindServerConfig(event.getConfig()));

@@ -228,7 +228,11 @@ Same layout as the Chinese README (`server_map_cache/`, `xaero/world-map/` with 
 ./gradlew :mc-1.21.1:forge:build -x test
 ./gradlew buildPackager
 scripts/fastbuild/build-all.bat
-scripts/fastbuild/build-target.ps1 all -NoTest
+scripts/fastbuild/build-target.bat all
+
+# Linux / WSL
+bash scripts/fastbuild/build-all.sh
+bash scripts/fastbuild/build-packager.sh
 ```
 
 Mod JARs: each module `build/libs/` · collected under root `output/` for packager / `buildAll`.

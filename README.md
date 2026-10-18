@@ -399,7 +399,11 @@ mc-26.3/                26.3 胶水层（协议 777，复用 libs/mc-26）
 scripts/fastbuild/build-all.bat              # 构建全部活跃平台
 scripts/fastbuild/build-forge-1.20.1.bat     # 构建指定平台
 scripts/fastbuild/build-packager.bat         # 构建 MapPackager
-scripts/fastbuild/build-target.ps1 all -NoTest  # PowerShell 构建全部
+scripts/fastbuild/build-target.bat all       # 通用 cmd 入口，构建全部
+
+# Linux / WSL
+bash scripts/fastbuild/build-all.sh
+bash scripts/fastbuild/build-packager.sh
 ```
 
 产物输出：mod JAR 到各平台模块的 `build/libs/` 目录，`buildPackager` 和 `buildAll` 额外收集到根目录 `output/`。

@@ -37,7 +37,7 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # Loader 胶水层
 
 ## 产物收集
 
-所有 `scripts/fastbuild/*.bat` 通过 `copy-release-jars.ps1` / `copy-release-jars.bat` 收集 JAR 到 `output/`，**自动排除** `-slim.jar`、`-sources.jar`、`-javadoc.jar`。
+Windows 脚本通过 `copy-release-jars.bat` 收集 JAR，Linux/WSL 由 `build-all.sh` 用原生 `cp` 收集；两者都会**自动排除** `-slim.jar`、`-sources.jar`、`-javadoc.jar`。
 
 根项目 `./gradlew collectJars` 仅收集**当前 settings 已 include** 的模块产物（不含 Forge / 隔离 Fabric）。
 
@@ -47,43 +47,40 @@ mc-{精确版本}/{fabric|forge|neoforge}/   # Loader 胶水层
 
 安装 JDK 17/21/25、下载 Gradle 8.9、引导 Wrapper，并预拉取 Maven / MC 工件：
 
-```powershell
-.\scripts\setup-deps.ps1              # 完整部署（含 Maven 预拉取，耗时较长）
-.\scripts\setup-deps.ps1 -Quick       # 仅 JDK 检测 + Gradle 8.9 + Wrapper
+```batch
+cmd /c scripts\setup-deps.bat          # 完整部署（含 Maven 预拉取，耗时较长）
+cmd /c scripts\setup-deps.bat -Quick   # 仅 JDK 检测 + Gradle 8.9 + Wrapper
 ```
 
-或双击 `scripts\setup-deps.bat`。
+也可双击 `scripts\setup-deps.bat`；Windows 脚本全部为 cmd，不依赖 PowerShell。
 
-### PowerShell（推荐）
-
-```powershell
-# 单目标
-.\scripts\fastbuild\build-target.ps1 fabric-1.21.1 -Clean -NoTest
-.\scripts\fastbuild\build-target.ps1 forge-1.20.1 -NoTest
-.\scripts\fastbuild\build-target.ps1 fabric-1.21.11 -NoTest
-.\scripts\fastbuild\build-target.ps1 fabric-26.1 -NoTest
-
-# 全平台（等同 build-all.bat）
-.\scripts\fastbuild\build-target.ps1 all -NoTest
-
-# MapPackager 工具
-.\scripts\fastbuild\build-target.ps1 packager
-```
-
-### Windows 批处理
+### Windows 批处理（cmd，推荐）
 
 ```batch
-scripts\fastbuild\build-forge-1.20.1.bat
-scripts\fastbuild\build-all.bat
-scripts\fastbuild\build-packager.bat
+cmd /c scripts\fastbuild\build-fabric-1.21.1.bat
+cmd /c scripts\fastbuild\build-forge-1.20.1.bat
+cmd /c scripts\fastbuild\build-26.1.bat
+cmd /c scripts\fastbuild\build-all.bat
+cmd /c scripts\fastbuild\build-packager.bat
+
+rem 通用入口（按 target 分派到对应 .bat）
+cmd /c scripts\fastbuild\build-target.bat fabric-1.21.1
+cmd /c scripts\fastbuild\build-target.bat forge-1.20.1
 ```
 
-### Linux / WSL
+缺少目标组合时，按现有 `.bat` 风格新增脚本，不要改用 PowerShell。
+
+### Linux / WSL（bash）
+
+Linux 使用标准的 bash 脚本，`build-all.sh` 内部不调用 PowerShell：
 
 ```bash
 bash scripts/fastbuild/build-all.sh
 bash scripts/fastbuild/build-packager.sh
 ```
+
+Forge 构建需要可用的 `gradle-8.9/bin/gradle`；缺少时会跳过 Forge 阶段。
+如果 `gradlew` 没有执行权限，先运行 `chmod +x gradlew scripts/fastbuild/*.sh`。
 
 ## Forge 构建前提
 

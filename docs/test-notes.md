@@ -7,6 +7,10 @@
 - Xaero's World Map mod（最低版本 1.37.0）
 - 服务端和客户端均安装 MapSyncer
 
+**测试环境路径**：
+- 服务端：`E:\Game\服务器端`（按 loader + MC 版本分目录，日志在各自 `logs/latest.log`）
+- 客户端：`E:\Game\pcl\.minecraft\versions`
+
 ---
 
 ## 一、服务端生成功能测试

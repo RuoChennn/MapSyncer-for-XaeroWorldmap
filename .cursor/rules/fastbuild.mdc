@@ -1,0 +1,11 @@
+---
+description: Windows 用 cmd 跑 .bat，Linux/WSL 用 bash 跑 .sh，不留 PowerShell，缺组合就补对应脚本，修到编译通过，产物为自包含单文件 JAR
+alwaysApply: true
+---
+
+# 快速编译与产物
+
+- 编译验证优先用 `scripts/fastbuild/` 的快速脚本：Windows 只用 cmd 运行 `.bat`（如 `cmd /c scripts\fastbuild\build-target.bat fabric-1.21.1`），Linux/WSL 用 bash 运行 `.sh`；不要直接跑完整 `gradlew build`。
+- 目标组合（Loader + MC 版本）无现成脚本时，Windows 按既有 cmd 风格新增 `.bat`，Linux/WSL 同步补对应 bash `.sh`；复用 settings 切换、JDK 切换与产物收集逻辑，不要临时手写一次性命令。
+- 不允许引入 `.ps1` 或 PowerShell 调用；编译报错先修复对应脚本（含其调用的 Gradle / settings 配置），再重跑，直到成功为止。
+- 交付产物必须是无需外部依赖的单文件 JAR：依赖 shade / 内联，禁止 `-slim.jar`、分离依赖包或多文件分发；经 `copy-release-jars.bat` 收进 `output/` 后确认可独立加载。

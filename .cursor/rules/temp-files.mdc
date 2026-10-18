@@ -1,0 +1,13 @@
+---
+description: 所有临时测试文件统一放在仓库根目录 cache/，不向仓库外写入
+alwaysApply: true
+---
+
+# 临时文件位置
+
+- 临时测试文件、脚本、日志、反编译输出、下载物、测试数据一律放在 `cache/`；临时目录用 `cache/tmp/<任务名>/`。
+- 设置 `TMPDIR` / `TEMP` / `TMP` / `java.io.tmpdir` 时指向 `cache/tmp/`；Gradle 可用 `--project-cache-dir cache/gradle-project-cache`。
+- 禁止写入 `%TEMP%`、`$HOME`、桌面、文档、下载目录或仓库外任意路径；确需如此时先征得用户同意。
+- 清理时只删 `cache/` 内对应子目录，保留 `cache/` 本身。
+
+常规构建输出（`build/`、`.gradle/`、`output/`）不受此限。

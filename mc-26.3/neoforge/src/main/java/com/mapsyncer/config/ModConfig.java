@@ -91,7 +91,7 @@ public class ModConfig {
 
     /** 从磁盘重新加载服务端 TOML 配置 */
     public static void bindServerConfig(net.neoforged.fml.config.ModConfig config) {
-        if (config.getType() == net.neoforged.fml.config.ModConfig.Type.SERVER) {
+        if (config.getType() == net.neoforged.fml.config.ModConfig.Type.SYNCED) {
             boundServerConfig = config;
         }
     }

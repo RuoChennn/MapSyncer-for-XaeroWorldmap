@@ -64,3 +64,12 @@ outputs/
 
 # Temporary decompilation artifacts
 .tmpfml/
+
+# 本地临时测试产物（统一存放，不参与构建与提交）
+/cache/*
+!/cache/README.md
+
+# Java / Python 本地分析产物
+*.class
+__pycache__/
+*.pyc

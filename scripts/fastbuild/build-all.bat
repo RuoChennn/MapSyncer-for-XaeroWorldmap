@@ -56,8 +56,13 @@ echo [Phase 2/5] Building Forge platforms (Gradle 8.9)...
 :: Override gradle.properties JDK (Gradle 8.9 incompatible with JDK 25)
 if exist "%PROPS_BAK%" del "%PROPS_BAK%"
 copy "%PROPS_FILE%" "%PROPS_BAK%" >nul
-powershell -NoProfile -Command ^
-  "$c = Get-Content '%PROPS_FILE%' -Raw; $c = $c -replace 'org\.gradle\.java\.home=.*', 'org.gradle.java.home=C:/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot'; Set-Content '%PROPS_FILE%' -Value $c -NoNewline"
+call "%~dp0set-gradle-jdk.bat" 21
+if errorlevel 1 (
+    echo   JDK 21 not found; skipping Forge phase
+    if exist "%PROPS_FILE%" del "%PROPS_FILE%"
+    if exist "%PROPS_BAK%" ren "%PROPS_BAK%" "%PROPS_FILE%"
+    goto :phase3
+)
 
 :: Switch to forge settings
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
@@ -65,8 +70,12 @@ ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_FORGE%" "%SETTINGS_FILE%" >nul
 
 :: 1.20.1 (JDK 17)
-set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot
-set PATH=%JAVA_HOME%\bin;%PATH%
+call "%~dp0set-gradle-jdk.bat" 17
+set "JDK17_RC=%errorlevel%"
+if %JDK17_RC% neq 0 echo   JDK 17 not found; skipping 1.20.1 Forge
+if %JDK17_RC% neq 0 goto :forge_121x
+set "JAVA_HOME=%GRADLE_JDK_HOME%"
+set "PATH=%JAVA_HOME%\bin;%PATH%"
 call %GRADLE_89% --stop >nul 2>&1
 call %GRADLE_89% :mc-1.20.1:forge:clean :mc-1.20.1:forge:build -x test --no-daemon
 if %errorlevel% neq 0 echo   1.20.1 Forge had errors, continuing...
@@ -74,8 +83,13 @@ if %errorlevel% neq 0 echo   1.20.1 Forge had errors, continuing...
 call "%COPY_JARS%" mc-1.20.1\forge\build\libs
 
 :: 1.21.1 + 1.21.11 (JDK 21)
-set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot
-set PATH=%JAVA_HOME%\bin;%PATH%
+:forge_121x
+call "%~dp0set-gradle-jdk.bat" 21
+set "JDK21_RC=%errorlevel%"
+if %JDK21_RC% neq 0 echo   JDK 21 not found; skipping 1.21.x Forge
+if %JDK21_RC% neq 0 goto :forge_done
+set "JAVA_HOME=%GRADLE_JDK_HOME%"
+set "PATH=%JAVA_HOME%\bin;%PATH%"
 call %GRADLE_89% --stop >nul 2>&1
 call %GRADLE_89% :mc-1.21.1:forge:clean :mc-1.21.1:forge:build :mc-1.21.11:forge:clean :mc-1.21.11:forge:build -x test --no-daemon
 if %errorlevel% neq 0 echo   1.21.x Forge had errors, continuing...
@@ -84,6 +98,7 @@ call "%COPY_JARS%" mc-1.21.1\forge\build\libs
 call "%COPY_JARS%" mc-1.21.11\forge\build\libs
 
 :: Restore settings and gradle.properties
+:forge_done
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
 if exist "%PROPS_FILE%" del "%PROPS_FILE%"
@@ -93,6 +108,7 @@ echo   Phase 2: done
 :: ============================================================
 :: Phase 3: Fabric 1.21.11 (isolated, Loom 1.15.4)
 :: ============================================================
+:phase3
 echo.
 echo [Phase 3/5] Building mc-1.21.11:fabric (isolated, Loom 1.15.4)...
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"

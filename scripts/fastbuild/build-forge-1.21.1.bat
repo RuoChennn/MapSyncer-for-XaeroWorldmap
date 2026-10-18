@@ -14,16 +14,22 @@ echo   Building: Forge 1.21.1 (JDK 21)
 echo ============================================
 
 :: Override JDK in gradle.properties (Gradle 8.9 max is JDK 23)
+if exist "%PROPS_BAK%" del "%PROPS_BAK%"
 copy "%PROPS_FILE%" "%PROPS_BAK%" >nul
-powershell -NoProfile -Command ^
-  "$c = Get-Content '%PROPS_FILE%' -Raw; $c = $c -replace 'org\.gradle\.java\.home=.*', 'org.gradle.java.home=C:/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot'; Set-Content '%PROPS_FILE%' -Value $c -NoNewline"
+call "%~dp0set-gradle-jdk.bat" 21
+if errorlevel 1 (
+    echo [ERROR] JDK 21 not found
+    if exist "%PROPS_FILE%" del "%PROPS_FILE%"
+    if exist "%PROPS_BAK%" ren "%PROPS_BAK%" "%PROPS_FILE%"
+    exit /b 1
+)
 
 :: Switch settings
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_FORGE%" "%SETTINGS_FILE%" >nul
 
-set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot
-set PATH=%JAVA_HOME%\bin;%PATH%
+set "JAVA_HOME=%GRADLE_JDK_HOME%"
+set "PATH=%JAVA_HOME%\bin;%PATH%"
 call %GRADLE_89% --stop >nul 2>&1
 call %GRADLE_89% :mc-1.21.1:forge:build -x test --no-daemon
 set RESULT=%errorlevel%
