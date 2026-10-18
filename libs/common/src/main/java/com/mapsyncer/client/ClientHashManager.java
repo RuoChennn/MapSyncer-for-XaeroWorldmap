@@ -218,16 +218,17 @@ public class ClientHashManager {
 
                                     String relativePath = buildRelativePath(zipPath, serverDir);
                                     TimestampHashEntry cached = cachedTimestamps.get(relativePath);
+                                    if (cached == null) {
+                                        // Xaero 本地生成、尚未由 MapSyncer 同步过的文件不能上报，
+                                        // 否则其较新的文件时间会触发服务端 timestamp skip，
+                                        // 导致对应服务端缓存永远无法下发。
+                                        return;
+                                    }
                                     String hash = resolveSyncHash(zipPath, cached);
 
                                     long timestampSeconds = resolveSyncTimestamp(zipPath, cached);
-                                    if (cached != null) {
-                                        LOGGER.debug("Region {}: ts={}s, hash={} (cache-first)",
-                                                relativePath, timestampSeconds, hash);
-                                    } else {
-                                        LOGGER.debug("Region {}: ts={}s, hash={} (no cache)",
-                                                relativePath, timestampSeconds, hash);
-                                    }
+                                    LOGGER.debug("Region {}: ts={}s, hash={} (cache-first)",
+                                            relativePath, timestampSeconds, hash);
 
                                     metaMap.put(relativePath, new ClientMeta(timestampSeconds, hash));
 

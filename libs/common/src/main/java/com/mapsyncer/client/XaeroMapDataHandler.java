@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.CheckedOutputStream;
@@ -183,7 +182,6 @@ public final class XaeroMapDataHandler {
         }
 
         Path outputFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip");
-        Path tempFile = targetDir.resolve(chunk.regionX + "_" + chunk.regionZ + ".zip.temp");
 
         if (!HashUtils.isValidRegionZip(chunk.data)) {
             LOGGER.error("Refusing to write invalid region zip: {} ({} bytes)", outputFile, chunk.data.length);
@@ -191,22 +189,61 @@ public final class XaeroMapDataHandler {
         }
 
         CRC32 crc32 = new CRC32();
+        Path tempFile = null;
         try {
             Files.createDirectories(targetDir);
 
+            // 绝不能用固定的 <region>.zip.temp：Xaero 自身也使用同名临时文件，
+            // 两个写入方会互相 move 掉对方的 temp，导致 NoSuchFileException。
+            tempFile = Files.createTempFile(targetDir,
+                    chunk.regionX + "_" + chunk.regionZ + ".zip.", ".mapsyncer.tmp");
             try (OutputStream fileOut = Files.newOutputStream(tempFile);
                  CheckedOutputStream checkedOut = new CheckedOutputStream(fileOut, crc32)) {
                 checkedOut.write(chunk.data);
             }
-            Files.move(tempFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
+            moveReplacing(tempFile, outputFile);
+            tempFile = null;
             LOGGER.debug("Wrote map file: {} (layer={}, {} bytes)", outputFile,
                 chunk.isSurfaceLayer() ? "surface" : chunk.caveLayer, chunk.data.length);
         } catch (IOException e) {
             LOGGER.error("Failed to write map file: {}", outputFile, e);
             return null;
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException e) {
+                    LOGGER.debug("Failed to delete temporary map file: {}", tempFile, e);
+                }
+            }
         }
 
         return new RegionWriteResult(mwDir, outputFile, String.format("%08x", crc32.getValue()));
+    }
+
+    /**
+     * 替换最终 zip。Windows 上 Xaero 可能短暂持有目标文件，做有限次重试。
+     */
+    private static void moveReplacing(Path source, Path target) throws IOException {
+        final int maxAttempts = 8;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+                return;
+            } catch (IOException e) {
+                if (attempt >= maxAttempts || !Files.exists(source)) {
+                    throw e;
+                }
+                LOGGER.debug("Retrying map file replace (attempt {}/{}): {} -> {}",
+                        attempt, maxAttempts, source, target);
+                try {
+                    Thread.sleep(100L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
     }
 
     /**

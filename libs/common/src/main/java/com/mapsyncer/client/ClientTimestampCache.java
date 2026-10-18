@@ -174,45 +174,30 @@ public class ClientTimestampCache {
     /**
      * 保存缓存到文件（包含状态和区域时间戳）。
      */
-    public void save() {
+    public synchronized void save() {
         try {
             Files.createDirectories(cacheFile.getParent());
 
-            Properties props = new Properties();
-
-            // 保存状态信息
+            // 先写入状态信息
+            StringBuilder content = new StringBuilder();
+            content.append("# Sync timestamps cache\n");
+            content.append("# ==================== STATE ====================\n");
             if (syncState != null) {
-                props.setProperty(KEY_STATE, syncState);
+                content.append(KEY_STATE).append("=").append(syncState).append("\n");
             }
-            props.setProperty(KEY_DIMENSIONS, String.join(",", syncDimensions));
-            props.setProperty(KEY_COMMAND, syncCommand);
+            content.append(KEY_DIMENSIONS).append("=").append(String.join(",", syncDimensions)).append("\n");
+            content.append(KEY_COMMAND).append("=").append(syncCommand).append("\n");
+            content.append("\n");
+            content.append("# ==================== TIMESTAMP CACHE ====================\n");
+            content.append("# Format: dimension/region_x_z = timestamp_seconds:hash\n");
 
-            // 保存区域缓存
+            // 写入区域缓存
             for (Map.Entry<String, TimestampHashEntry> entry : cache.entrySet()) {
-                props.setProperty(entry.getKey(), entry.getValue().format());
+                content.append(entry.getKey()).append("=").append(entry.getValue().format()).append("\n");
             }
 
-            try (var out = Files.newOutputStream(cacheFile)) {
-                // 先写入状态信息
-                StringBuilder content = new StringBuilder();
-                content.append("# Sync timestamps cache\n");
-                content.append("# ==================== STATE ====================\n");
-                if (syncState != null) {
-                    content.append(KEY_STATE).append("=").append(syncState).append("\n");
-                }
-                content.append(KEY_DIMENSIONS).append("=").append(String.join(",", syncDimensions)).append("\n");
-                content.append(KEY_COMMAND).append("=").append(syncCommand).append("\n");
-                content.append("\n");
-                content.append("# ==================== TIMESTAMP CACHE ====================\n");
-                content.append("# Format: dimension/region_x_z = timestamp_seconds:hash\n");
-
-                // 写入区域缓存
-                for (Map.Entry<String, TimestampHashEntry> entry : cache.entrySet()) {
-                    content.append(entry.getKey()).append("=").append(entry.getValue().format()).append("\n");
-                }
-
-                out.write(content.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            }
+            PropertiesCacheIO.writeAtomically(cacheFile,
+                    content.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             LOGGER.debug("Saved cache: state={}, regions={}", syncState, cache.size());
         } catch (IOException e) {

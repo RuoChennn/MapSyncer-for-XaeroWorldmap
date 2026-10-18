@@ -234,6 +234,10 @@ public class IncrementalUpdateHandlerLogic {
      * @param reason 更新原因描述
      */
     private void performScheduledUpdate(String reason) {
+        if (ServerSyncHandlerLogic.isSyncActive()) {
+            LOGGER.debug("Map sync in progress, deferring incremental update");
+            return;
+        }
         if (!updateInProgress.compareAndSet(false, true)) {
             LOGGER.debug("Scheduled update already in progress, skipping");
             return;

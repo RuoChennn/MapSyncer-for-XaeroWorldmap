@@ -1,6 +1,7 @@
 {
   "mapsyncer.sync.start": "Starting sync...",
   "mapsyncer.sync.waiting": "Waiting for server...",
+  "mapsyncer.sync.waiting_generation": "Waiting for server map generation to finish...",
   "mapsyncer.sync.completed": "Sync complete: %d regions updated (%ds)",
   "mapsyncer.sync.in_progress": "Receiving or writing map data, please wait before syncing again",
   "mapsyncer.sync.progress": "Download progress: %d/%d (%d%%)",

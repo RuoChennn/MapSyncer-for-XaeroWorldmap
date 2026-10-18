@@ -5,6 +5,7 @@ out/
 
 # Build outputs
 output/
+outputs/
 
 # IDE
 .idea/
@@ -59,15 +60,15 @@ crc32.bat
 CRC32Tool.java
 CRC32Tool.class
 
-# Build outputs
-outputs/
-
 # Temporary decompilation artifacts
 .tmpfml/
 
 # 本地临时测试产物（统一存放，不参与构建与提交）
 /cache/*
 !/cache/README.md
+
+# 根目录构建日志（本地调试产物）
+/*.log
 
 # Java / Python 本地分析产物
 *.class

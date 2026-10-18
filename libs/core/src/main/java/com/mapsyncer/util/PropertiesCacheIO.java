@@ -5,9 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -22,6 +22,9 @@ import java.util.function.Function;
 public final class PropertiesCacheIO {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PropertiesCacheIO.class);
+
+    /** Windows 上并发 REPLACE_EXISTING 可能抛 FileAlreadyExistsException，串行化最终替换。 */
+    private static final Object CACHE_FILE_LOCK = new Object();
 
     /**
      * 私有构造方法，防止实例化
@@ -80,21 +83,50 @@ public final class PropertiesCacheIO {
             return;
         }
 
+        // 同步线程与增量转换线程可能同时保存同一个缓存；串行化并原子替换，
+        // 避免 Properties.store 直接写目标文件时出现截断或交叉覆盖。
+        synchronized (PropertiesCacheIO.class) {
+            try {
+                Files.createDirectories(cacheFile.getParent());
+
+                Properties props = new Properties();
+                for (Map.Entry<String, T> entry : cache.entrySet()) {
+                    props.setProperty(entry.getKey(), formatter.apply(entry.getValue()));
+                }
+
+                java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                props.store(buffer, header != null ? header : "Cache file");
+                writeAtomically(cacheFile, buffer.toByteArray());
+
+                LOGGER.info("Saved {} entries to cache file: {}", cache.size(), cacheFile.getFileName());
+            } catch (IOException e) {
+                LOGGER.error("Failed to save cache file: {}", cacheFile, e);
+            }
+        }
+    }
+
+    /**
+     * 先写同目录唯一临时文件再替换目标文件，避免并发/崩溃留下半截缓存。
+     */
+    public static void writeAtomically(Path target, byte[] data) throws IOException {
+        Path parent = target.getParent();
+        if (parent == null) {
+            throw new IOException("Cache file has no parent directory: " + target);
+        }
+        Files.createDirectories(parent);
+
+        Path temp = Files.createTempFile(parent, target.getFileName().toString() + ".", ".tmp");
         try {
-            Files.createDirectories(cacheFile.getParent());
-
-            Properties props = new Properties();
-            for (Map.Entry<String, T> entry : cache.entrySet()) {
-                props.setProperty(entry.getKey(), formatter.apply(entry.getValue()));
+            Files.write(temp, data);
+            synchronized (CACHE_FILE_LOCK) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
             }
-
-            try (OutputStream os = Files.newOutputStream(cacheFile)) {
-                props.store(os, header != null ? header : "Cache file");
+        } finally {
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+                // 目标已替换成功时临时文件通常已不存在
             }
-
-            LOGGER.info("Saved {} entries to cache file: {}", cache.size(), cacheFile.getFileName());
-        } catch (IOException e) {
-            LOGGER.error("Failed to save cache file: {}", cacheFile, e);
         }
     }
 

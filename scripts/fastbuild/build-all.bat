@@ -5,6 +5,19 @@ setlocal enabledelayedexpansion
 for %%I in ("%~dp0..\..") do set "PROJECT_ROOT=%%~sI"
 cd /d "%PROJECT_ROOT%"
 
+rem Gradle 8.9 cannot accept the CJK project path as java.io.tmpdir.
+rem Use the already-resolved 8.3 short path and make sure the directory exists.
+set "BUILD_TEMP=%PROJECT_ROOT%\cache\tmp\client-command-matrix\build-temp"
+if not exist "%BUILD_TEMP%" mkdir "%BUILD_TEMP%" >nul 2>&1
+if not exist "%BUILD_TEMP%" (
+    echo [ERROR] Unable to create build temp directory: %BUILD_TEMP%
+    exit /b 1
+)
+set "TEMP=%BUILD_TEMP%"
+set "TMP=%BUILD_TEMP%"
+set "TMPDIR=%BUILD_TEMP%"
+if /i "%MAPSYNCER_BUILD_OFFLINE%"=="1" set "GRADLE_OFFLINE=--offline"
+
 set SETTINGS_BAK=settings.bak.gradle
 set SETTINGS_FILE=settings.gradle
 set SETTINGS_26=scripts\fastbuild\settings-26.gradle
@@ -36,7 +49,7 @@ call "%PROJECT_ROOT%\gradlew.bat" ^
     :mc-1.21.1:neoforge:clean  :mc-1.21.1:neoforge:build ^
     :mc-1.21.11:neoforge:clean :mc-1.21.11:neoforge:build ^
     :mc-26.1:neoforge:clean   :mc-26.1:neoforge:build ^
-    -x test --parallel
+    -x test --parallel %GRADLE_OFFLINE%
 if %errorlevel% neq 0 echo   Phase 1 had errors, continuing...
 
 call "%COPY_JARS%" mc-1.20.1\fabric\build\libs
@@ -77,7 +90,7 @@ if %JDK17_RC% neq 0 goto :forge_121x
 set "JAVA_HOME=%GRADLE_JDK_HOME%"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 call %GRADLE_89% --stop >nul 2>&1
-call %GRADLE_89% :mc-1.20.1:forge:clean :mc-1.20.1:forge:build -x test --no-daemon
+call %GRADLE_89% :mc-1.20.1:forge:clean :mc-1.20.1:forge:build -x test --no-daemon %GRADLE_OFFLINE%
 if %errorlevel% neq 0 echo   1.20.1 Forge had errors, continuing...
 
 call "%COPY_JARS%" mc-1.20.1\forge\build\libs
@@ -91,7 +104,7 @@ if %JDK21_RC% neq 0 goto :forge_done
 set "JAVA_HOME=%GRADLE_JDK_HOME%"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 call %GRADLE_89% --stop >nul 2>&1
-call %GRADLE_89% :mc-1.21.1:forge:clean :mc-1.21.1:forge:build :mc-1.21.11:forge:clean :mc-1.21.11:forge:build -x test --no-daemon
+call %GRADLE_89% :mc-1.21.1:forge:clean :mc-1.21.1:forge:build :mc-1.21.11:forge:clean :mc-1.21.11:forge:build -x test --no-daemon %GRADLE_OFFLINE%
 if %errorlevel% neq 0 echo   1.21.x Forge had errors, continuing...
 
 call "%COPY_JARS%" mc-1.21.1\forge\build\libs
@@ -114,7 +127,7 @@ echo [Phase 3/5] Building mc-1.21.11:fabric (isolated, Loom 1.15.4)...
 if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_12111%" "%SETTINGS_FILE%" >nul
-call "%PROJECT_ROOT%\gradlew.bat" :mc-1.21.11:fabric:clean :mc-1.21.11:fabric:build -x test
+call "%PROJECT_ROOT%\gradlew.bat" :mc-1.21.11:fabric:clean :mc-1.21.11:fabric:build -x test %GRADLE_OFFLINE%
 set FABRIC12111_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"
@@ -136,7 +149,7 @@ call "%PROJECT_ROOT%\gradlew.bat" ^
     :mc-26.2:neoforge:clean :mc-26.2:neoforge:build ^
     :mc-26.3:fabric:clean :mc-26.3:fabric:build ^
     :mc-26.3:neoforge:clean :mc-26.3:neoforge:build ^
-    -x test
+    -x test %GRADLE_OFFLINE%
 set FABRIC26_RESULT=%errorlevel%
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"
 ren "%SETTINGS_BAK%" "%SETTINGS_FILE%"

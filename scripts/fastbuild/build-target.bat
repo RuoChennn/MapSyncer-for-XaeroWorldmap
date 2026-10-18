@@ -15,12 +15,29 @@ setlocal EnableExtensions EnableDelayedExpansion
 for %%I in ("%~dp0..\..") do set "PROJECT_ROOT=%%~sI"
 set "SCRIPT_DIR=%~dp0"
 
+rem Gradle 8.9 cannot accept the CJK project path as java.io.tmpdir.
+rem Use the already-resolved 8.3 short path and make sure the directory exists.
+set "BUILD_TEMP=%PROJECT_ROOT%\cache\tmp\client-command-matrix\build-temp"
+if not exist "%BUILD_TEMP%" mkdir "%BUILD_TEMP%" >nul 2>&1
+if not exist "%BUILD_TEMP%" (
+    echo [ERROR] Unable to create build temp directory: %BUILD_TEMP%
+    exit /b 1
+)
+set "TEMP=%BUILD_TEMP%"
+set "TMP=%BUILD_TEMP%"
+set "TMPDIR=%BUILD_TEMP%"
+
 if "%~1"=="" goto :usage
 set "TARGET=%~1"
 shift
 
 :parse_flags
 if "%~1"=="" goto :dispatch
+if /i "%~1"=="-Offline" (
+    set "GRADLE_OFFLINE=--offline"
+    shift
+    goto :parse_flags
+)
 if /i "%~1"=="-Clean" (
     set "CLEAN=1"
     shift

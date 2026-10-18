@@ -48,7 +48,8 @@ public class MapPacketHandler {
     public static boolean isSyncInProgress() {
         return session.phase() == SyncPhase.RECEIVING
                 || ClientSyncWriteQueue.hasPendingWrites()
-                || pendingWriteApplyCallbacks.get() > 0;
+                || pendingWriteApplyCallbacks.get() > 0
+                || SyncProgressTracker.isTracking();
     }
 
     /** 是否有视距外 region 重载仍在后台排队/排空 */
@@ -999,6 +1000,14 @@ public class MapPacketHandler {
                 return;
             }
 
+            // 服务端在等待区域生成时也会发进度心跳，必须停止首包超时重发。
+            SyncProgressTracker.onServerResponded();
+            if ("waiting_for_generation".equals(status)) {
+                SyncProgressTracker.update(0, 0,
+                        ChatUtils.desc("mapsyncer.sync.waiting_generation").getString());
+                return;
+            }
+
             // 自动同步同样显示进度（action bar 展示），完成提示由 handleSyncResponse 单独处理
             // 进度去重：相同 (processed, total) 在 100ms 内到达视为重复
             int processed = payload.processed();
@@ -1054,7 +1063,9 @@ public class MapPacketHandler {
         if (RegionLoadThrottle.isViewOnly(intervalTicks) || pendingRegionLoads.isEmpty()) {
             pendingRegionLoads.clear();
             clearReflectionCache();
-            resumeChunkUpdatesIfIdle();
+            if (session.phase() != SyncPhase.IDLE) {
+                session.completeSession();
+            }
             return;
         }
         session.beginDrainingReload();

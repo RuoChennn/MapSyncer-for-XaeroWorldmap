@@ -208,6 +208,15 @@ public class ServerSyncHandlerLogic {
     /** 全局递增版本号，用于标记每次同步请求 */
     private static final AtomicInteger globalSyncVersion = new AtomicInteger(0);
 
+    /** 正在处理的同步请求数；用于阻止增量生成在同步过程中改动服务端缓存 */
+    private static final AtomicInteger activeSyncCount = new AtomicInteger(0);
+
+    /** 等待生成完成时向客户端发送心跳的间隔 */
+    private static final long GENERATION_WAIT_HEARTBEAT_MS = 10_000;
+
+    /** 等待生成完成的最长时间，避免异常转换让同步线程永久挂起 */
+    private static final long GENERATION_WAIT_TIMEOUT_MS = 30 * 60 * 1000L;
+
     /** 每个玩家当前的同步版本号由 {@link ServerSyncSession} 管理 */
 
     /** SyncRequestPayload 分片组装缓冲区：playerId → { partIndex → payload } */
@@ -257,6 +266,13 @@ public class ServerSyncHandlerLogic {
         NetworkManager.getHandler().registerSyncRequestHandler(
             (payload, context) -> context.enqueueWork(() -> handleSyncRequest(payload, context))
         );
+    }
+
+    /**
+     * 是否有同步请求正在处理（含等待服务端生成完成阶段）。
+     */
+    public static boolean isSyncActive() {
+        return activeSyncCount.get() > 0;
     }
 
     /**
@@ -725,13 +741,81 @@ public class ServerSyncHandlerLogic {
         boolean silent = payload.silent();
 
         // 将耗时操作移到异步线程执行，避免阻塞主线程
-        Thread syncThread = new Thread(() -> processSyncAsync(server, playerId, clientMeta, syncAll, targetDimension,
-                startDimension, syncVersion, startBlockX, startBlockZ, viewDistanceRegions, worldId, silent),
-                "mapsyncer-sync-" + playerId);
+        Thread syncThread = new Thread(() -> {
+            activeSyncCount.incrementAndGet();
+            try {
+                if (!awaitGenerationIdle(server, playerId, syncVersion)) {
+                    return;
+                }
+                processSyncAsync(server, playerId, clientMeta, syncAll, targetDimension,
+                        startDimension, syncVersion, startBlockX, startBlockZ,
+                        viewDistanceRegions, worldId, silent);
+            } catch (RuntimeException e) {
+                LOGGER.error("Unhandled error while processing sync for player {}", playerId, e);
+            } finally {
+                activeSyncCount.updateAndGet(value -> Math.max(0, value - 1));
+            }
+        }, "mapsyncer-sync-" + playerId);
         syncThread.setDaemon(true);
         syncThreads.put(playerId, syncThread);  // 存储线程引用，用于断线时中断
         syncThread.start();
         LOGGER.debug("Started async sync thread for player {} (v{})", serverPlayer.getName().getString(), syncVersion);
+    }
+
+    /**
+     * 等待正在进行的区域生成结束后再计算同步差异。
+     *
+     * <p>增量生成会持续向 generation cache 增加 region。若同步与生成并行，
+     * 客户端每完成一轮又会看到生成期间新增的区域，表现为 857 → 81 → 342
+     * 这样永远无法收敛。等待期间发送进度心跳，避免客户端 60 秒无响应重发。</p>
+     */
+    private static boolean awaitGenerationIdle(MinecraftServer server, UUID playerId, int syncVersion) {
+        boolean announced = false;
+        long lastHeartbeat = 0L;
+        long deadline = System.currentTimeMillis() + GENERATION_WAIT_TIMEOUT_MS;
+
+        try {
+            // 给刚入队的增量任务一个启动窗口，避免在检查与任务启动之间漏判。
+            Thread.sleep(250L);
+            while (true) {
+                if (!ServerSyncSession.isCurrent(playerId, syncVersion)
+                        || !Thread.currentThread().isAlive()) {
+                    return false;
+                }
+                if (!ConversionOrchestrator.isRunning()) {
+                    // 转换结束与下一轮调度之间留出窗口，确认没有新任务紧接着启动。
+                    Thread.sleep(500L);
+                    if (!ConversionOrchestrator.isRunning()) {
+                        return true;
+                    }
+                    continue;
+                }
+                if (!announced) {
+                    announced = true;
+                    LOGGER.info("Sync for player {} is waiting for in-progress map generation to finish",
+                            playerId);
+                }
+
+                long now = System.currentTimeMillis();
+                if (now - lastHeartbeat >= GENERATION_WAIT_HEARTBEAT_MS) {
+                    lastHeartbeat = now;
+                    enqueueIfCurrent(server, playerId, syncVersion, player ->
+                            NetworkManager.sendToPlayer(player,
+                                    new SyncProgressPayload(0, 0, "waiting_for_generation")));
+                }
+
+                if (now >= deadline) {
+                    LOGGER.warn("Timed out waiting for map generation to finish for player {}, "
+                            + "continuing with current cache snapshot", playerId);
+                    return true;
+                }
+                Thread.sleep(500L);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOGGER.debug("Generation wait interrupted for player {}", playerId);
+            return false;
+        }
     }
 
     /**
@@ -1196,6 +1280,7 @@ public class ServerSyncHandlerLogic {
         requestPartBuffer.clear();
         requestTotalParts.clear();
         requestPartLastActivity.clear();
+        activeSyncCount.set(0);
         ScheduledExecutorService timer = partAssemblyTimer;
         if (timer != null) {
             timer.shutdownNow();

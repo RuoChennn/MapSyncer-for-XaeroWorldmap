@@ -25,13 +25,14 @@ if errorlevel 1 (
 )
 
 :: Switch settings
+if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_FORGE%" "%SETTINGS_FILE%" >nul
 
 set "JAVA_HOME=%GRADLE_JDK_HOME%"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 call %GRADLE_89% --stop >nul 2>&1
-call %GRADLE_89% :mc-1.21.11:forge:build -x test --no-daemon
+call %GRADLE_89% :mc-1.21.11:forge:build -x test --no-daemon %GRADLE_OFFLINE%
 set RESULT=%errorlevel%
 
 :: Restore

@@ -87,7 +87,7 @@ public class GenerationCache {
      *
      * 使用PropertiesCacheIO保存缓存数据。
      */
-    public void save() {
+    public synchronized void save() {
         PropertiesCacheIO.save(cacheFile, new HashMap<>(cache), TimestampHashEntry::format,
             "Generation cache for map regions\nFormat: dimension/region_x_z = timestamp_seconds:hash\nHash is CRC32 of file content");
     }

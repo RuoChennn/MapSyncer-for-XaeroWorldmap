@@ -940,6 +940,10 @@ public class ConversionOrchestrator {
      * 基于主线程预采集的快照执行增量扫描（可在后台线程调用）。
      */
     public static void performIncrementalScan(List<IncrementalScanSnapshot> snapshots) {
+        if (ServerSyncHandlerLogic.isSyncActive()) {
+            LOGGER.debug("Map sync in progress, deferring incremental scan");
+            return;
+        }
         if (!isRunning.compareAndSet(false, true)) {
             LOGGER.debug("Conversion already in progress, skipping incremental scan");
             return;
