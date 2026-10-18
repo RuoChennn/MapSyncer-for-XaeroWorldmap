@@ -32,9 +32,6 @@ public final class McaContentProbe {
         }
         try {
             long size = Files.size(mcaPath);
-            if (size == 0) {
-                return false;
-            }
             if (size <= HEADER_ONLY_SIZE) {
                 return false;
             }
@@ -47,18 +44,18 @@ public final class McaContentProbe {
             if (raf.length() < HEADER_ONLY_SIZE) {
                 return false;
             }
-            for (int localX = 0; localX < CHUNKS_PER_REGION; localX++) {
-                for (int localZ = 0; localZ < CHUNKS_PER_REGION; localZ++) {
-                    int index = (localX + localZ * CHUNKS_PER_REGION) * 4;
-                    raf.seek(index);
-                    int b0 = raf.readUnsignedByte();
-                    int b1 = raf.readUnsignedByte();
-                    int b2 = raf.readUnsignedByte();
-                    int offsetSectors = (b0 << 16) | (b1 << 8) | b2;
-                    int sectorCount = raf.readUnsignedByte();
-                    if (offsetSectors > 0 && sectorCount > 0) {
-                        return true;
-                    }
+            // 一次性读入 4096 字节 location 表，避免对 1024 个 slot 逐个 seek。
+            byte[] locationTable = new byte[SECTOR_SIZE];
+            raf.seek(0);
+            raf.readFully(locationTable);
+            for (int i = 0; i < CHUNKS_PER_REGION * CHUNKS_PER_REGION; i++) {
+                int index = i * 4;
+                int offsetSectors = ((locationTable[index] & 0xFF) << 16)
+                                  | ((locationTable[index + 1] & 0xFF) << 8)
+                                  | (locationTable[index + 2] & 0xFF);
+                int sectorCount = locationTable[index + 3] & 0xFF;
+                if (offsetSectors > 0 && sectorCount > 0) {
+                    return true;
                 }
             }
             return false;

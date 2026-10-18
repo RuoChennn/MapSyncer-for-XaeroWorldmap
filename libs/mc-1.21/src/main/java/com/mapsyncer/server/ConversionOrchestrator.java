@@ -879,20 +879,20 @@ public class ConversionOrchestrator {
     ) {}
 
     /**
-     * 在主线程构建增量扫描快照（访问 ServerLevel / dimensionType）。
+     * 在主线程构建增量扫描快照（仅采集维度元数据，不做磁盘扫描，避免阻塞 Server 线程）。
      */
     public static List<IncrementalScanSnapshot> buildIncrementalScanSnapshots(MinecraftServer server) {
-        List<DimensionRegions> allRegions = RegionScanner.scanAllDimensions(server);
         List<IncrementalScanSnapshot> snapshots = new ArrayList<>();
+        Set<ResourceKey<Level>> seenDimensions = new HashSet<>();
 
-        for (DimensionRegions dimRegions : allRegions) {
-            ServerLevel level = server.getLevel(dimRegions.dimension());
-            if (level == null) {
+        for (ServerLevel level : server.getAllLevels()) {
+            ResourceKey<Level> dimKey = level.dimension();
+            if (!seenDimensions.add(dimKey)) {
                 continue;
             }
 
-            String fullDimId = dimRegions.dimension().location().toString();
-            String dimPath = dimRegions.dimension().location().getPath();
+            String fullDimId = dimKey.location().toString();
+            String dimPath = dimKey.location().getPath();
 
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
