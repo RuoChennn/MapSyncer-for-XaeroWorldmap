@@ -70,6 +70,7 @@
   "mapsyncer.server.sync_start": "Downloading %d regions",
   "mapsyncer.server.sync_complete": "Map sync complete: sent %d updated regions",
   "mapsyncer.server.sync_partial": "Map sync partially complete: sent %d regions, %d read failures (of %d planned)",
+  "mapsyncer.generate.integrated_hint": "This is a singleplayer world or a LAN integrated server. The host is advised to use Xaero World Map's Convert All Regions to generate native map data. MapSyncer generation commands remain available.",
   "mapsyncer.generate.start_full": "Starting full map generation...",
   "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions, %d dimensions completed: %s",
   "mapsyncer.generate.start_dim": "Starting map generation for dimension: %s",

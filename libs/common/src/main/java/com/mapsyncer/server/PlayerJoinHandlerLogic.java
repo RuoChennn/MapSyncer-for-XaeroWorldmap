@@ -32,6 +32,8 @@ public class PlayerJoinHandlerLogic {
     public static void onPlayerJoin(ServerPlayer player, MinecraftServer server) {
         if (server == null) return;
 
+        CacheCommandHandler.showIntegratedServerHint(server, player::sendSystemMessage);
+
         // 发送 ServerInstalled 通知（跨加载器兼容：无论客户端使用什么加载器都能接收）
         long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir()).getLastGenerationTime();
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();

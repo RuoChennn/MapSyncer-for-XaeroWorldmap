@@ -37,6 +37,14 @@ public class CacheCommandHandler {
         return PlatformManager.getPlatform().getServerCommandPrefix();
     }
 
+    /** 本地世界优先使用 Xaero 原生转换；仅提示，不限制 MapSyncer 生成。 */
+    public static void showIntegratedServerHint(MinecraftServer server,
+            Consumer<net.minecraft.network.chat.Component> sender) {
+        if (server != null && !server.isDedicatedServer()) {
+            sender.accept(ChatUtils.message("mapsyncer.generate.integrated_hint"));
+        }
+    }
+
     /**
      * 显示帮助信息（使用当前平台命令前缀）
      */

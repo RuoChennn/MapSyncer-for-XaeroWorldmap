@@ -54,6 +54,8 @@ python scripts/testing/client-regression.py client --session <session.json>
 
 专用服阶段结束后先正常停止服务端，确认 25565/RCON 释放。保留客户端，进入固定实例中的测试存档 A，通过“对局域网开放”公开端口。
 
+进入 A 时应显示建议房主通过 Xaero“转换所有区块”生成原生地图数据的提示。未开放 LAN 的单人世界同样提示。执行全量、单维度、强制单维度和单区域生成命令时均应先显示该提示，再按原流程执行；不能因提示直接返回、禁用生成或改变自动增量配置。专用服务器不显示此提示。此策略是建议，后续 MapSyncer 生成／同步结果不能记为 Xaero 原生转换结果。
+
 1. 房主与访客均有本轮 MapSyncer，访客连接实际公开端口。核对两端握手，分别执行首次同步、立即重复同步、指定维度、sync all、自定义维度和 radius 1→0。
 2. 房主地图写入 Xaero `MapWorld.getMainId()` / `MapSaveLoad.getRootFolder()` 返回的目录；访客写入它自己的 Xaero 多人目录。不得生成或复用 `Multiplayer_Singleplayer`。房主转换缓存必须位于 `saves/<A>/server_map_cache`，不能覆盖 Xaero 实时地图。
 3. 房主离开 A，再进入 B，并生成地图；核对 B 的 MCA 时间戳、维度配置和生成目录不复用 A 的实例。返回 A 再同步验证可用。

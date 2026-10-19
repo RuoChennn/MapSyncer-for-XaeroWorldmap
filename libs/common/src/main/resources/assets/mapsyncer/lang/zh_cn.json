@@ -70,6 +70,7 @@
   "mapsyncer.server.sync_start": "即将下载 %d 个区域",
   "mapsyncer.server.sync_complete": "地图同步完成，已发送 %d 个需更新区域",
   "mapsyncer.server.sync_partial": "地图同步部分完成：已发送 %d 个区域，%d 个读取失败（共计划 %d 个）",
+  "mapsyncer.generate.integrated_hint": "当前为单人世界或局域网内置服务器。建议房主优先通过 Xaero 世界地图的“转换所有区块”生成原生地图数据；MapSyncer 生成命令仍可正常使用。",
   "mapsyncer.generate.start_full": "开始全量地图生成...",
   "mapsyncer.generate.full_complete": "地图生成完成：%d/%d 个区域，已完成 %d 个维度：%s",
   "mapsyncer.generate.start_dim": "开始生成维度地图：%s",
