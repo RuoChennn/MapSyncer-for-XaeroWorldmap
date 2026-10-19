@@ -14,6 +14,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 for %%I in ("%~dp0..\..") do set "PROJECT_ROOT=%%~sI"
 set "SCRIPT_DIR=%~dp0"
+if not defined GRADLE_USER_HOME set "GRADLE_USER_HOME=%USERPROFILE%\.gradle"
 
 rem Gradle 8.9 cannot accept the CJK project path as java.io.tmpdir.
 rem Use the already-resolved 8.3 short path and make sure the directory exists.
@@ -52,6 +53,10 @@ echo [ERROR] Unknown option: %~1
 goto :usage
 
 :dispatch
+if /i "%TARGET%"=="regression" (
+    call "%SCRIPT_DIR%build-regression.bat"
+    exit /b !errorlevel!
+)
 if /i "%TARGET%"=="all" (
     call "%SCRIPT_DIR%build-all.bat"
     set "RC=!errorlevel!"

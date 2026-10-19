@@ -24,11 +24,11 @@ if %errorlevel% equ 0 (
 )
 
 echo [2/5] Building mc-26.2:fabric...
-call gradlew.bat :mc-26.2:fabric:clean :mc-26.2:fabric:build -x test
+call gradlew.bat :mc-26.2:fabric:clean :mc-26.2:fabric:build -x test %GRADLE_OFFLINE% --project-cache-dir cache/gradle-project-cache
 set FABRIC_RESULT=%errorlevel%
 
 echo [3/5] Building mc-26.2:neoforge...
-call gradlew.bat :mc-26.2:neoforge:clean :mc-26.2:neoforge:build -x test
+call gradlew.bat :mc-26.2:neoforge:clean :mc-26.2:neoforge:build -x test %GRADLE_OFFLINE% --project-cache-dir cache/gradle-project-cache
 set NEO_RESULT=%errorlevel%
 
 if %SWITCHED% equ 1 (

@@ -14,7 +14,7 @@ if exist "%SETTINGS_BAK%" del "%SETTINGS_BAK%"
 ren "%SETTINGS_FILE%" "%SETTINGS_BAK%"
 copy "%SETTINGS_12111%" "%SETTINGS_FILE%" >nul
 
-call gradlew.bat :mc-1.21.11:fabric:clean :mc-1.21.11:fabric:build -x test
+call gradlew.bat :mc-1.21.11:fabric:clean :mc-1.21.11:fabric:build -x test %GRADLE_OFFLINE% --project-cache-dir cache/gradle-project-cache
 set RESULT=%errorlevel%
 
 if exist "%SETTINGS_FILE%" del "%SETTINGS_FILE%"

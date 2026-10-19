@@ -6,7 +6,7 @@ echo ============================================
 echo   Building: NeoForge 1.21.1
 echo ============================================
 
-call gradlew.bat :mc-1.21.1:neoforge:clean :mc-1.21.1:neoforge:build -x test
+call gradlew.bat :mc-1.21.1:neoforge:clean :mc-1.21.1:neoforge:build -x test %GRADLE_OFFLINE% --project-cache-dir cache/gradle-project-cache
 if %errorlevel% neq 0 (
     echo Build failed!
     exit /b 1

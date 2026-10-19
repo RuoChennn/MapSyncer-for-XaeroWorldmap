@@ -6,7 +6,7 @@ echo ============================================
 echo   Building: Fabric 1.20.1
 echo ============================================
 
-call gradlew.bat :mc-1.20.1:fabric:clean :mc-1.20.1:fabric:build -x test
+call gradlew.bat :mc-1.20.1:fabric:clean :mc-1.20.1:fabric:build -x test %GRADLE_OFFLINE% --project-cache-dir cache/gradle-project-cache
 if %errorlevel% neq 0 (
     echo Build failed!
     exit /b 1

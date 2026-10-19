@@ -31,8 +31,9 @@ copy "%SETTINGS_FORGE%" "%SETTINGS_FILE%" >nul
 
 set "JAVA_HOME=%GRADLE_JDK_HOME%"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
+if defined GRADLE_OFFLINE set "FORGE_OFFLINE_CHECK=-Dnet.minecraftforge.gradle.check.certs=false"
 call %GRADLE_89% --stop >nul 2>&1
-call %GRADLE_89% :mc-1.20.1:forge:build -x test --no-daemon %GRADLE_OFFLINE%
+call %GRADLE_89% :mc-1.20.1:forge:build -x test --no-daemon %GRADLE_OFFLINE% %FORGE_OFFLINE_CHECK% --project-cache-dir cache/gradle-project-cache
 set RESULT=%errorlevel%
 
 :: Restore
