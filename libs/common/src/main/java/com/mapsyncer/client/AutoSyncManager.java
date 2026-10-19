@@ -269,6 +269,7 @@ public class AutoSyncManager {
 
     /** 停止 TICK 在线周期同步（客户端关闭自动同步时调用） */
     public static void stopPeriodicSync() {
+        cancelPending();
         cancelPeriodic();
     }
 

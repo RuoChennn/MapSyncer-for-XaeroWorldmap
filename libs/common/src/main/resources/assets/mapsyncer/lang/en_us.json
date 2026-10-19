@@ -17,7 +17,6 @@
   "mapsyncer.sync.server_not_installed": "Server doesn't have MapSyncer installed",
   "mapsyncer.sync.server_unresponsive": "Server is unresponsive, sync aborted. Please try again later",
   "mapsyncer.sync.unloading_regions": "Unloading %d view distance regions for update",
-
   "mapsyncer.command.no_map_dir": "Unable to determine map directory. Are you connected to a server?",
   "mapsyncer.command.sync_dimension": "Starting sync for dimension: %s",
   "mapsyncer.command.sync_all": "Starting sync for all dimensions...",
@@ -30,15 +29,12 @@
   "mapsyncer.command.help_sync_all": "/mapsyncer sync all - Sync all dimensions",
   "mapsyncer.command.help_autosync": "/mapsyncer autosync [on|off] - View or toggle client auto-sync",
   "mapsyncer.command.help_dimension_note": "Dimension names: overworld, the_nether, the_end or full ID like twilightforest:twilight_forest",
-
   "mapsyncer.cache.all_cleared": "All caches cleared, no reload needed",
   "mapsyncer.cache.direct_reload": "Direct reload: %d regions",
   "mapsyncer.cache.reload_failed": "Failed to trigger map reload",
   "mapsyncer.cache.status": "Cache: %d cleared, %d reload",
   "mapsyncer.cache.cleared": "Cache cleared",
-
   "mapsyncer.prefix": "[MapSyncer]",
-
   "mapsyncer.help.server.header": "Server Commands Help:",
   "mapsyncer.help.server.generate": "/%s generate - Generate map cache for all dimensions",
   "mapsyncer.help.server.generate_dim": "/%s generate <dim> - Generate cache for specified dimension (incremental)",
@@ -52,18 +48,14 @@
   "mapsyncer.help.server.reloadconfig": "/%s reloadconfig - Reload server configuration from disk",
   "mapsyncer.command.config_reloaded": "Server configuration reloaded successfully",
   "mapsyncer.command.config_reload_failed": "Failed to reload server configuration, check server log for details",
-
   "mapsyncer.chunk.paused": "Chunk updates paused...",
   "mapsyncer.chunk.resumed": "Chunk updates resumed",
-
   "mapsyncer.sync.dimension_not_available": "Dimension %s map not generated or dimension does not exist, please ask admin to run generation command",
-
   "mapsyncer.command.unknown_dimension": "Unknown dimension: %s",
   "mapsyncer.command.region_not_found": "Region (%d, %d) does not exist in dimension %s, please verify coordinates",
   "mapsyncer.command.generating_region": "Starting generation for region (%d, %d) in dimension %s...",
   "mapsyncer.command.region_converted": "Region conversion completed",
   "mapsyncer.command.region_conversion_failed": "Region (%d, %d) conversion failed",
-
   "mapsyncer.command.incremental_disabled": "Incremental updates disabled",
   "mapsyncer.command.incremental_tick_set": "Incremental updates set to TICK mode (interval: %d ticks = %.1f seconds)",
   "mapsyncer.command.incremental_tick_interval": "Incremental updates set to TICK mode with interval %d ticks (%.1f seconds)",
@@ -72,14 +64,12 @@
   "mapsyncer.command.incremental_status_tick": "Current incremental mode: TICK (interval %d ticks = %.1f s), next update in about %d min %d sec",
   "mapsyncer.command.incremental_status_scheduled": "Current incremental mode: SCHEDULED (daily at %02d:%02d)",
   "mapsyncer.command.incremental_status_hint": "Subcommands: /%s incremental off | tick [interval] | scheduled [hour] [min]",
-
   "mapsyncer.server.no_cache": "No map cache available. Run /%s generate first.",
   "mapsyncer.server.dim_not_available": "Dimension '%s' map data not available. Run /%s generate %s first.",
   "mapsyncer.server.map_uptodate": "Map is up-to-date, nothing to download",
   "mapsyncer.server.sync_start": "Downloading %d regions",
   "mapsyncer.server.sync_complete": "Map sync complete: sent %d updated regions",
   "mapsyncer.server.sync_partial": "Map sync partially complete: sent %d regions, %d read failures (of %d planned)",
-
   "mapsyncer.generate.start_full": "Starting full map generation...",
   "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions, %d dimensions completed: %s",
   "mapsyncer.generate.start_dim": "Starting map generation for dimension: %s",
@@ -95,13 +85,11 @@
   "mapsyncer.status.tick_mode": "Incremental updates: TICK mode, next update in %d min %d sec",
   "mapsyncer.status.scheduled_mode": "Incremental updates: SCHEDULED mode, daily at %02d:%02d",
   "mapsyncer.status.cache_detail": "Cache stats: %s dimensions, %s regions, %s MB\n%s",
-
   "mapsyncer.sync.resume_header": "Sync Resume Available",
   "mapsyncer.sync.resume_prompt": "%s. Click below to continue:",
   "mapsyncer.sync.state_cleared": "Sync state cleared",
   "mapsyncer.sync.reflection_failed": "Xaero map reflection failed. Files were saved but the map may not refresh — ensure a compatible Xaero's World Map is installed",
   "mapsyncer.sync.interrupted": "Sync was interrupted, resume available",
-
   "mapsyncer.autosync.start": "Auto-syncing maps (skips download when already up-to-date)...",
   "mapsyncer.autosync.complete": "Auto-sync complete",
   "mapsyncer.autosync.status.disabled": "Auto-sync: Disabled",
@@ -110,14 +98,12 @@
   "mapsyncer.autosync.status.client_disabled": "Auto-sync: Disabled on client",
   "mapsyncer.autosync.client.enabled": "Client auto-sync: Enabled",
   "mapsyncer.autosync.client.disabled": "Client auto-sync: Disabled",
-
   "mapsyncer.autosync.periodic.start": "Periodic sync: waiting for server...",
   "mapsyncer.autosync.periodic.hash_computing": "Periodic sync: scanning local maps...",
   "mapsyncer.autosync.periodic.hash_progress": "Periodic sync: scanning %d/%d (%d%%)",
   "mapsyncer.autosync.periodic.progress": "Periodic sync: %d/%d (%d%%)",
   "mapsyncer.autosync.periodic.complete": "Periodic sync complete: %d regions (%ds)",
   "mapsyncer.autosync.periodic.uptodate": "Periodic sync: map already up-to-date",
-
   "title.mapsyncer.config": "MapSyncer Server Config",
   "title.mapsyncer.client_config": "MapSyncer Client Config",
   "category.mapsyncer.general": "General",
@@ -144,5 +130,7 @@
   "option.mapsyncer.update_mode.tooltip": "Server-side map cache incremental update strategy.\n\nDISABLED - No incremental updates, also disables client auto-sync.\nTICK - Periodic tick-based updates. Client auto-syncs on join (with cooldown) and on the same interval while online.\nSCHEDULED - Daily scheduled update. Client auto-syncs on join when local timestamps are older than the server cache.",
   "option.mapsyncer.interval_ticks.tooltip": "Update interval in TICK mode. 20 ticks = 1 second (default 6000 = 5 minutes, min 2400 = 2 minutes). Also determines the client online periodic sync interval.",
   "option.mapsyncer.scheduled_hour.tooltip": "Hour of day (0-23) for incremental updates and auto-sync in SCHEDULED mode.",
-  "option.mapsyncer.scheduled_minute.tooltip": "Minute of hour (0-59) for incremental updates and auto-sync in SCHEDULED mode."
+  "option.mapsyncer.scheduled_minute.tooltip": "Minute of hour (0-59) for incremental updates and auto-sync in SCHEDULED mode.",
+  "mapsyncer.help.server.radius": "/%s radius [regions] - Player-centered square radius; 0 disables the limit",
+  "mapsyncer.command.radius_status": "Sync radius: %s region(s) (0 = unlimited; otherwise current dimension only). Applies to new requests."
 }

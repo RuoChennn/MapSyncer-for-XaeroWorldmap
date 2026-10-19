@@ -29,15 +29,19 @@ public final class SyncRequestWireCodec {
             buf.writeUtf(payload.targetDimension());
         }
         buf.writeBoolean(payload.silent());
+        buf.writeLong(payload.requestId());
     }
 
     public static SyncRequestPayload read(FriendlyByteBuf buf) {
         int size = buf.readInt();
+        if (size < 0 || size > SyncRequestPayload.MAX_ENTRIES_PER_PART) {
+            throw new IllegalArgumentException("Invalid sync metadata size: " + size);
+        }
         Map<String, ClientMeta> metaMap = new HashMap<>();
         for (int i = 0; i < size; i++) {
-            String path = buf.readUtf();
+            String path = buf.readUtf(SyncRequestPayload.MAX_META_STRING_LENGTH);
             long timestampSeconds = buf.readLong();
-            String hash = buf.readUtf();
+            String hash = buf.readUtf(64);
             metaMap.put(path, new ClientMeta(timestampSeconds, hash));
         }
 
@@ -56,7 +60,7 @@ public final class SyncRequestWireCodec {
         if (buf.readableBytes() > 0) {
             syncAll = buf.readBoolean();
             if (!syncAll && buf.readableBytes() > 0) {
-                targetDimension = buf.readUtf();
+                targetDimension = buf.readUtf(SyncRequestPayload.MAX_META_STRING_LENGTH);
             }
         } else if (metaMap.isEmpty()) {
             syncAll = true;
@@ -67,6 +71,9 @@ public final class SyncRequestWireCodec {
             silent = buf.readBoolean();
         }
 
-        return new SyncRequestPayload(metaMap, partIndex, totalParts, syncAll, targetDimension, silent);
+        long requestId = buf.readableBytes() >= Long.BYTES ? buf.readLong() : 0;
+        SyncRequestPayload result = new SyncRequestPayload(metaMap, partIndex, totalParts, syncAll, targetDimension, silent, requestId);
+        if (!result.hasValidPartBounds()) throw new IllegalArgumentException("Invalid sync request part bounds");
+        return result;
     }
 }

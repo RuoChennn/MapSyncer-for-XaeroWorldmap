@@ -159,6 +159,12 @@ public class ForgeLegacyPlatform implements Platform {
     // ===== 配置系统：Forge 使用 ForgeConfigSpec =====
 
     @Override
+    public int getSyncRadiusRegions() { return ModConfig.SERVER.syncRadiusRegions.get(); }
+
+    @Override
+    public void setSyncRadiusRegions(int radius) { ModConfig.SERVER.syncRadiusRegions.set(radius); }
+
+    @Override
     public int getSyncSpeedLimitKBps() {
         return ModConfig.SERVER.syncSpeedLimitKBps.get();
     }

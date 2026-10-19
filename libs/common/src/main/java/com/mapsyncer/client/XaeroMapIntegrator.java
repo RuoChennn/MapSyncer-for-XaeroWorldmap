@@ -359,7 +359,7 @@ public class XaeroMapIntegrator {
             return null;
         }
 
-        Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
+        Path serverDir = resolveWorldDirectory(worldMapDir, serverIP);
         Path dimDir = serverDir.resolve("null");
 
         if (!dimDir.toFile().exists()) {
@@ -400,6 +400,32 @@ public class XaeroMapIntegrator {
      *
      * @return 服务器目录路径，如果未连接返回 null
      */
+    private static Path resolveWorldDirectory(Path worldMapDir, String serverIP) {
+        if (XaeroReflectionHelper.initialize()) {
+            Object world = XaeroReflectionHelper.getMapWorld();
+            if (world != null) {
+                try {
+                    String mainId = (String) world.getClass().getMethod("getMainId").invoke(world);
+                    if (mainId != null && !mainId.isBlank()) {
+                        Path root = (Path) Class.forName("xaero.map.file.MapSaveLoad")
+                                .getMethod("getRootFolder", String.class).invoke(null, mainId);
+                        if (root != null) return root;
+
+                    }
+                } catch (ReflectiveOperationException e) {
+                    LOGGER.debug("Unable to read Xaero world directory", e);
+                }
+            }
+        }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
+            Path save = mc.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                    .toAbsolutePath().normalize();
+            return worldMapDir.resolve(save.getFileName().toString());
+        }
+        return worldMapDir.resolve("Multiplayer_" + serverIP);
+    }
+
     public static Path getCurrentServerDirectory() {
         Minecraft mc = Minecraft.getInstance();
         ClientPacketListener connection = mc.getConnection();
@@ -416,7 +442,7 @@ public class XaeroMapIntegrator {
 
         Path gameDir = mc.gameDirectory.toPath();
         Path worldMapDir = getWorldMapDir(gameDir);
-        Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
+        Path serverDir = resolveWorldDirectory(worldMapDir, serverIP);
         LOGGER.debug("Server directory: {}", serverDir);
         return serverDir;
     }
@@ -437,11 +463,6 @@ public class XaeroMapIntegrator {
             return null;
         }
 
-        ServerData serverData = connection.getServerData();
-        if (serverData == null) {
-            LOGGER.error("No server data available");
-            return null;
-        }
 
         // 使用 IP 命名目录（Xaero 按 IP 读取）
         String serverIP = getCurrentServerIP();
@@ -453,9 +474,10 @@ public class XaeroMapIntegrator {
 
         Path gameDir = mc.gameDirectory.toPath();
         Path worldMapDir = getWorldMapDir(gameDir);
-        Path serverDir = worldMapDir.resolve("Multiplayer_" + serverIP);
+        Path serverDir = resolveWorldDirectory(worldMapDir, serverIP);
 
-        return XaeroMapDataHandler.writeMapData(chunks, serverDir, serverWorldId);
+        return XaeroMapDataHandler.writeMapData(chunks, serverDir, serverWorldId,
+                mc.hasSingleplayerServer(), XaeroReflectionHelper::getSelectedMultiworld);
     }
 
     /**
@@ -471,7 +493,8 @@ public class XaeroMapIntegrator {
             LOGGER.warn("无法获取服务器目录");
             return null;
         }
-        return XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId);
+        return XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId,
+                Minecraft.getInstance().hasSingleplayerServer(), XaeroReflectionHelper.getSelectedMultiworld(chunk.dimension));
     }
 
     /**

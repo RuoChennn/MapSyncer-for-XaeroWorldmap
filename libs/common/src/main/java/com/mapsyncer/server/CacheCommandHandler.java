@@ -56,6 +56,7 @@ public class CacheCommandHandler {
         sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_region", prefix));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.generate_force", prefix));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.status", prefix));
+        sender.accept(ChatUtils.desc("mapsyncer.help.server.radius", prefix));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental", prefix));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_off", prefix));
         sender.accept(ChatUtils.desc("mapsyncer.help.server.incremental_tick", prefix));

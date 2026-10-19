@@ -250,7 +250,7 @@ public class DimensionPathMapping {
         }
 
         // 4. Mod 维度：尝试 dimensions/<namespace>/<path>/ 新格式
-        if (normalized.contains(":")) {
+        if (!isVanillaDimension(normalized)) {
             String newFormatFolder = buildNewFormatPath(normalized);
             if (newFormatFolder != null) {
                 Path regionDir = resolveRegionDir(worldRoot, newFormatFolder);
@@ -375,7 +375,7 @@ public class DimensionPathMapping {
         // 新格式：dimensions/<namespace>/<path> → namespace:path
         if (folderName.startsWith("dimensions/")) {
             String remaining = folderName.substring("dimensions/".length());
-            String[] parts = remaining.split("/");
+            String[] parts = remaining.split("/", 2);
             if (parts.length == 2) {
                 return parts[0] + ":" + parts[1];
             }
@@ -425,7 +425,7 @@ public class DimensionPathMapping {
         if (normalized.contains(":")) {
             String[] parts = normalized.split(":");
             if (parts.length == 2) {
-                return parts[0] + "$" + parts[1];
+                return parts[0] + "$" + encodeXaeroPath(parts[1]);
             }
         }
 
@@ -453,7 +453,8 @@ public class DimensionPathMapping {
 
         // Mod 维度：namespace$path → namespace:path
         if (xaeroFolder.contains("$")) {
-            return xaeroFolder.replace('$', ':');
+            int divider = xaeroFolder.indexOf('$');
+            return xaeroFolder.substring(0, divider) + ":" + decodeXaeroPath(xaeroFolder.substring(divider + 1));
         }
 
         return xaeroFolder;
@@ -472,6 +473,7 @@ public class DimensionPathMapping {
             return "overworld";
         }
 
+        if (clientDim.contains("$")) return getPathFromXaero(clientDim);
         String normalized = normalizeDimPath(clientDim);
 
         // Xaero 原版维度转换
@@ -533,6 +535,28 @@ public class DimensionPathMapping {
         return "minecraft:" + normalized;
     }
 
+    private static String encodeXaeroPath(String path) {
+        String result = path.replace('/', '%');
+        int end = result.length();
+        while (end > 0 && result.charAt(end - 1) == '.') end--;
+        return result.substring(0, end) + ",".repeat(result.length() - end);
+    }
+
+    private static String decodeXaeroPath(String path) {
+        String result = path.replace('%', '/');
+        int end = result.length();
+        while (end > 0 && result.charAt(end - 1) == ',') end--;
+        return result.substring(0, end) + ".".repeat(result.length() - end);
+    }
+
+    /** Only one safe Xaero directory component is accepted from the wire. */
+    public static boolean isSafeXaeroFolder(String folder) {
+        if (folder == null || folder.isEmpty()) return false;
+        if (folder.equals("null") || folder.equals("DIM-1") || folder.equals("DIM1")) return true;
+        return folder.matches("[a-z0-9_.-]+\\$[a-z0-9_.%,/-]+")
+                && folder.indexOf('/') < 0 && !folder.endsWith(".");
+    }
+
     // ========== 辅助方法 ==========
 
     /**
@@ -547,7 +571,7 @@ public class DimensionPathMapping {
         }
 
         // 移除 minecraft: 前缀
-        if (dimPath.startsWith("minecraft:")) {
+        if (dimPath.startsWith("minecraft:") && isVanillaDimension(dimPath.substring(10))) {
             dimPath = dimPath.substring(10);
         }
 
@@ -643,7 +667,7 @@ public class DimensionPathMapping {
         // 新格式路径：dimensions/<namespace>/<path>
         if (folderName.startsWith("dimensions/")) {
             String remaining = folderName.substring("dimensions/".length());
-            String[] parts = remaining.split("/");
+            String[] parts = remaining.split("/", 2);
             if (parts.length == 2) {
                 // 26.1+ 原版维度：使用 Xaero 预设映射
                 String normalized = normalizeDimPath(dimPath);
@@ -651,7 +675,7 @@ public class DimensionPathMapping {
                     return VANILLA_XAERO_MAPPINGS.get(normalized);
                 }
                 // Mod 维度：使用 namespace$path 格式
-                return parts[0] + "$" + parts[1];
+                return parts[0] + "$" + encodeXaeroPath(parts[1]);
             }
         }
 
@@ -745,26 +769,16 @@ public class DimensionPathMapping {
                         .forEach(namespaceDir -> {
                             String namespace = namespaceDir.getFileName().toString();
 
-                            // 1.21.X：跳过 minecraft 命名空间（原版维度使用传统格式）
-                            // 26.1+：扫描 minecraft 命名空间（所有维度使用新格式）
-                            if ("minecraft".equals(namespace) && !useNewFormatForVanilla) {
-                                LOGGER.debug("Skipping minecraft namespace in dimensions/ (1.21.X vanilla dims use traditional format)");
-                                return;
-                            }
-
-                            try (Stream<Path> dimStream = Files.list(namespaceDir)) {
+                            try (Stream<Path> dimStream = Files.walk(namespaceDir)) {
                                 dimStream.filter(Files::isDirectory)
-                                    .forEach(dimDir -> {
-                                        String dimName = dimDir.getFileName().toString();
-                                        Path regionDir = dimDir.resolve("region");
-                                        if (Files.exists(regionDir)) {
-                                            String dimPath = namespace + ":" + dimName;
-                                            if (!pathToFolder.containsKey(dimPath)) {
-                                                String folderPath = "dimensions/" + namespace + "/" + dimName;
-                                                registerMapping(dimPath, folderPath);
-                                                LOGGER.info("Auto-registered dimension: {} -> {}", dimPath, folderPath);
-                                            }
-                                        }
+                                    .filter(p -> p.getFileName().toString().equals("region"))
+                                    .forEach(regionDir -> {
+                                        String dimName = namespaceDir.relativize(regionDir.getParent())
+                                                .toString().replace('\\', '/');
+                                        if (dimName.isEmpty()) return;
+                                        String dimPath = normalizeDimPath(namespace + ":" + dimName);
+                                        String folderPath = "dimensions/" + namespace + "/" + dimName;
+                                        registerMapping(dimPath, folderPath);
                                     });
                             } catch (IOException e) {
                                 LOGGER.warn("Error scanning namespace directory: {}", namespace, e);

@@ -37,6 +37,7 @@ public final class ServerLifecycleBridge {
         ClientHashManager.shutdown();
 
         ServerSyncHandlerLogic.cleanup();
+        DimensionRegistry.resetRegistration();
 
         LOGGER.info("Singleton cache cleanup completed");
     }

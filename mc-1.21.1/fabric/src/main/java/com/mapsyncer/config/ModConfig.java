@@ -318,6 +318,7 @@ public class ModConfig {
         private volatile int maxConcurrentRegions = ConcurrentRegionsConfig.AUTO;
         private volatile int maxSyncPacketSize = 262144;
         private volatile int syncSpeedLimitKBps = 1024;
+        private volatile int syncRadiusRegions = 0;
 
         // ========== 增量更新设置 ==========
         private volatile UpdateMode incrementalUpdateMode = UpdateMode.DISABLED;
@@ -382,6 +383,8 @@ public class ModConfig {
                         PropertiesHelper.get(props, "maxConcurrentRegions", "max_concurrent_regions", "0")));
                 maxSyncPacketSize = Integer.parseInt(
                         PropertiesHelper.get(props, "maxSyncPacketSize", "max_sync_packet_size", "262144"));
+                syncRadiusRegions = Math.max(0, Integer.parseInt(
+                        PropertiesHelper.get(props, "syncRadiusRegions", "sync_radius_regions", "0")));
                 syncSpeedLimitKBps = Integer.parseInt(
                         PropertiesHelper.get(props, "syncSpeedLimitKBps", "sync_speed_limit_kbps", "1024"));
 
@@ -481,6 +484,8 @@ public class ModConfig {
                 sb.append("# 默认：1024（1MiB/s），范围：0 - 10240\n");
                 sb.append("# Default: 1024 (1MiB/s), Range: 0 - 10240\n");
                 sb.append("syncSpeedLimitKBps=" + syncSpeedLimitKBps + "\n");
+                sb.append("# Player-centered region radius (square), current dimension only; 0 = unlimited\n");
+                sb.append("syncRadiusRegions=" + syncRadiusRegions + "\n");
                 sb.append("\n");
 
                 // ========== 增量更新设置 ==========
@@ -545,6 +550,10 @@ public class ModConfig {
         public int getMaxSyncPacketSize() {
             return maxSyncPacketSize;
         }
+
+        public int getSyncRadiusRegions() { return syncRadiusRegions; }
+
+        public void setSyncRadiusRegions(int value) { syncRadiusRegions = Math.max(0, value); }
 
         public int getSyncSpeedLimitKBps() {
             return syncSpeedLimitKBps;

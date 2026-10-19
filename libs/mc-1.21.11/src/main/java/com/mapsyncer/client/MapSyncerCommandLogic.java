@@ -67,47 +67,14 @@ public class MapSyncerCommandLogic {
         Set<String> added = new HashSet<>();
 
         Minecraft mc = Minecraft.getInstance();
-        ClientLevel level = mc.level;
-        if (level != null) {
-            ResourceKey<Level> currentDim = level.dimension();
-            Identifier currentLoc = currentDim.identifier();
-            if (!"minecraft".equals(currentLoc.getNamespace())) {
-                String suggestion = currentLoc.toString();
-                builder.suggest(suggestion);
-                added.add(suggestion);
+        if (mc.getConnection() != null) {
+            for (ResourceKey<Level> key : mc.getConnection().levels()) {
+                String suggestion = com.mapsyncer.util.DimensionApiHelper.getDimId(key);
+                if (added.add(suggestion)) builder.suggest(suggestion);
             }
-
-            level.registryAccess().lookup(Registries.DIMENSION_TYPE).ifPresent(registry -> {
-                for (var key : registry.registryKeySet()) {
-                    Identifier loc = key.identifier();
-                    String namespace = loc.getNamespace();
-                    if ("minecraft".equals(namespace)) continue;
-
-                    String path = loc.getPath();
-                    String dimPath = path.endsWith("_type") ? path.substring(0, path.length() - 5) : path;
-                    String suggestion = namespace + ":" + dimPath;
-                    if (!added.contains(suggestion)) {
-                        builder.suggest(suggestion);
-                        added.add(suggestion);
-                    }
-                }
-            });
-
-            level.registryAccess().lookup(Registries.LEVEL_STEM).ifPresent(registry -> {
-                for (var key : registry.registryKeySet()) {
-                    Identifier loc = key.identifier();
-                    String namespace = loc.getNamespace();
-                    if ("minecraft".equals(namespace)) continue;
-                    String suggestion = loc.toString();
-                    if (!added.contains(suggestion)) {
-                        builder.suggest(suggestion);
-                        added.add(suggestion);
-                    }
-                }
-            });
         }
 
-        Path baseDir = XaeroMapIntegrator.getCurrentServerBaseDirectory();
+        Path baseDir = XaeroMapIntegrator.getCurrentServerDirectory();
         if (baseDir != null) {
             try (Stream<Path> dirs = Files.list(baseDir)) {
                 dirs.filter(Files::isDirectory)
@@ -133,7 +100,7 @@ public class MapSyncerCommandLogic {
         if ("null".equals(dirName)) return "overworld";
         if ("DIM-1".equals(dirName)) return "the_nether";
         if ("DIM1".equals(dirName)) return "the_end";
-        if (dirName.contains("$")) return dirName.replace('$', ':');
+        if (dirName.contains("$")) return DimensionPathMapping.getInstance().getPathFromXaero(dirName);
         if (dirName.startsWith("DIM")) return "";
         return dirName;
     }
@@ -192,18 +159,17 @@ public class MapSyncerCommandLogic {
 
         if (input.contains(":")) return input;
 
-        var optRegistry = level.registryAccess().lookup(Registries.DIMENSION_TYPE);
-        if (optRegistry.isPresent()) {
-            var registry = optRegistry.get();
-            for (var key : registry.registryKeySet()) {
-                Identifier loc = key.identifier();
-                if ("minecraft".equals(loc.getNamespace())) continue;
-                String path = loc.getPath();
-                String dimPath = path.endsWith("_type") ? path.substring(0, path.length() - 5) : path;
-                if (dimPath.equals(input) || path.equals(input)) {
-                    return loc.getNamespace() + ":" + dimPath;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.getConnection() != null) {
+            String match = null;
+            for (ResourceKey<Level> key : mc.getConnection().levels()) {
+                String id = com.mapsyncer.util.DimensionApiHelper.getDimId(key);
+                if (id.substring(id.indexOf(':') + 1).equals(input)) {
+                    if (match != null) return "minecraft:" + input; // ambiguous: require full ID
+                    match = id;
                 }
             }
+            if (match != null) return match;
         }
 
         return "minecraft:" + input;
@@ -259,9 +225,12 @@ public class MapSyncerCommandLogic {
             return;
         }
 
+        final int hashGeneration = ClientSyncSession.get().generation();
+        final var hashConnection = mc.getConnection();
         ClientHashManager.computeMetaForSyncAsync(scanDir, result ->
                 mc.execute(() -> {
-                    if (mc.player == null) {
+                    if (mc.player == null || mc.getConnection() != hashConnection
+                            || !ClientSyncSession.get().isCurrent(hashGeneration)) {
                         return;
                     }
                     if (!result.isSuccess()) {
@@ -314,11 +283,17 @@ public class MapSyncerCommandLogic {
      * 在维度目录下查找 mw$worldId 目录。
      */
     public static Path findMwDir(Path dimDir) {
-        if (dimDir == null || !dimDir.toFile().exists()) return null;
+        if (dimDir == null) return null;
+        String selected = com.mapsyncer.platform.XaeroReflectionHelper.getSelectedMultiworld(dimDir.getFileName().toString());
+        if (selected != null && (selected.isEmpty() || XaeroMapDataHandler.isSafeMultiworld(selected))) {
+            return selected.isEmpty() ? dimDir : dimDir.resolve(selected);
+        }
+        if (!dimDir.toFile().exists()) return null;
         try (var dirs = Files.list(dimDir)) {
-            return dirs.filter(p -> p.getFileName().toString().startsWith("mw$"))
-                    .findFirst()
-                    .orElse(null);
+            Path mw = dirs.filter(p -> p.getFileName().toString().startsWith("mw$") && Files.isDirectory(p))
+                    .findFirst().orElse(null);
+            if (Minecraft.getInstance().hasSingleplayerServer()) return dimDir;
+            return mw;
         } catch (IOException e) {
             return null;
         }

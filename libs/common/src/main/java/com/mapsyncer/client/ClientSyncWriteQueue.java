@@ -23,7 +23,7 @@ public final class ClientSyncWriteQueue {
 
     private static volatile ExecutorService executor = null;
 
-    private static final AtomicInteger pendingWrites = new AtomicInteger(0);
+    private static volatile AtomicInteger pendingWrites = new AtomicInteger(0);
 
     private ClientSyncWriteQueue() {}
 
@@ -57,12 +57,15 @@ public final class ClientSyncWriteQueue {
      * @param callback 写盘完成回调（在 IO 线程或当前线程调用）
      */
     public static void submit(ChunkMapData chunk, Path serverDir, int worldId,
-            ClientTimestampCache tsCache, Consumer<XaeroMapDataHandler.RegionWriteResult> callback) {
-        pendingWrites.incrementAndGet();
+            ClientTimestampCache tsCache, boolean integratedHost,
+            String selectedMultiworld,
+            Consumer<XaeroMapDataHandler.RegionWriteResult> callback) {
+        final AtomicInteger writeCounter = pendingWrites;
+        writeCounter.incrementAndGet();
         Runnable task = () -> {
             XaeroMapDataHandler.RegionWriteResult result = null;
             try {
-                result = XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId);
+                result = XaeroMapDataHandler.writeChunkData(chunk, serverDir, worldId, integratedHost, selectedMultiworld);
                 if (result != null) {
                     if (tsCache != null) {
                         tsCache.update(
@@ -77,7 +80,7 @@ public final class ClientSyncWriteQueue {
             } catch (Exception e) {
                 LOGGER.error("Async region write failed for ({}, {})", chunk.regionX, chunk.regionZ, e);
             } finally {
-                pendingWrites.decrementAndGet();
+                writeCounter.decrementAndGet();
                 invokeCallback(chunk, callback, result);
             }
         };
@@ -85,7 +88,7 @@ public final class ClientSyncWriteQueue {
         try {
             getExecutor().execute(task);
         } catch (RejectedExecutionException e) {
-            pendingWrites.decrementAndGet();
+            writeCounter.decrementAndGet();
             LOGGER.error("Sync write queue rejected task for ({}, {}), executor shutdown?",
                     chunk.regionX, chunk.regionZ, e);
             invokeCallback(chunk, callback, null);
@@ -127,7 +130,7 @@ public final class ClientSyncWriteQueue {
                 executor = null;
             }
         }
-        pendingWrites.set(0);
+        pendingWrites = new AtomicInteger(0);
         LOGGER.debug("ClientSyncWriteQueue shutdown");
     }
 }

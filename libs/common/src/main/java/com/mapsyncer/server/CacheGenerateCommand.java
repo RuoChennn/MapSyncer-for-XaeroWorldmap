@@ -52,6 +52,10 @@ public class CacheGenerateCommand {
                                 .then(Commands.argument("x", IntegerArgumentType.integer())
                                         .then(Commands.argument("z", IntegerArgumentType.integer())
                                                 .executes(CacheGenerateCommand::generateSingleRegion)))))
+                .then(Commands.literal("radius")
+                        .executes(CacheGenerateCommand::showRadius)
+                        .then(Commands.argument("regions", IntegerArgumentType.integer(0))
+                                .executes(CacheGenerateCommand::setRadius)))
                 .then(Commands.literal("status")
                         .executes(CacheGenerateCommand::showStatus))
                 .then(Commands.literal("incremental")
@@ -72,6 +76,19 @@ public class CacheGenerateCommand {
                         .executes(CacheGenerateCommand::reloadConfig))
                 .then(Commands.literal("help")
                         .executes(ctx -> showHelp(ctx, prefix))));
+    }
+
+    private static int showRadius(CommandContext<CommandSourceStack> ctx) {
+        int radius = com.mapsyncer.platform.PlatformManager.getPlatform().getSyncRadiusRegions();
+        ctx.getSource().sendSuccess(() -> ChatUtils.message("mapsyncer.command.radius_status", radius), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int setRadius(CommandContext<CommandSourceStack> ctx) {
+        var platform = com.mapsyncer.platform.PlatformManager.getPlatform();
+        platform.setSyncRadiusRegions(IntegerArgumentType.getInteger(ctx, "regions"));
+        platform.saveConfig();
+        return showRadius(ctx);
     }
 
     private static int showHelp(CommandContext<CommandSourceStack> ctx, String prefix) {

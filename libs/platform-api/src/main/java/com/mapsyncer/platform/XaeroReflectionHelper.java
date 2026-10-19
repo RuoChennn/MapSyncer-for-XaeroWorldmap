@@ -582,6 +582,28 @@ public final class XaeroReflectionHelper {
         }
     }
 
+    /** 主线程捕获实际选中的地图子目录；空串表示直接使用维度目录，null 表示尚未初始化。 */
+    public static String getSelectedMultiworld(String dimensionFolder) {
+        if (!initialize()) return null;
+        Object world = getMapWorld();
+        if (world == null) return null;
+        try {
+            var dimensions = (Iterable<?>) mapWorldClass.getMethod("getDimensionsList").invoke(world);
+            Method folderMethod = mapDimensionClass.getMethod("getMainFolderPath");
+            Method multiworldMethod = mapDimensionClass.getMethod("getCurrentMultiworld");
+            for (Object dimension : dimensions) {
+                var folder = (java.nio.file.Path) folderMethod.invoke(dimension);
+                if (folder != null && folder.getFileName().toString().equals(dimensionFolder)) {
+                    String selected = (String) multiworldMethod.invoke(dimension);
+                    return selected == null ? "" : selected;
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            LOGGER.debug("Could not resolve selected Xaero multiworld for {}", dimensionFolder, e);
+        }
+        return null;
+    }
+
     /**
      * 获取 LayeredRegionManager 实例
      *

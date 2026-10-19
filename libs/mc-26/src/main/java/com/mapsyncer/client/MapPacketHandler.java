@@ -83,6 +83,15 @@ public class MapPacketHandler {
 
     /** 同步期间更新的区域坐标集合（仅存储坐标，不存储数据，节省内存） */
     private static final Set<XaeroMapDataHandler.RegionCoord> updatedRegionCoords = ConcurrentHashMap.newKeySet();
+    private static final Set<String> writtenRegionKeys = ConcurrentHashMap.newKeySet();
+    private static final AtomicInteger failedWrites = new AtomicInteger();
+    private static String lastReloadDimension = "";
+
+    private static boolean isCurrentDimension(String dimension) {
+        Minecraft mc = Minecraft.getInstance();
+        return mc.level != null && DimensionPathMapping.getInstance().toXaeroDimension(
+                com.mapsyncer.util.DimensionApiHelper.getDimId(mc.level.dimension())).equals(dimension);
+    }
 
     /** 已加载的区域集合（避免重复加载） */
     private static final Set<XaeroMapDataHandler.RegionCoord> loadedRegions = ConcurrentHashMap.newKeySet();
@@ -90,7 +99,7 @@ public class MapPacketHandler {
     /** 视距外 region 加载队列 — 限速排放，防止 Xaero MapProcessor 队列溢出 OOM */
     private static final ConcurrentLinkedQueue<PendingRegionLoad> pendingRegionLoads = new ConcurrentLinkedQueue<>();
 
-    private record PendingRegionLoad(int regionX, int regionZ, int caveLayer) {}
+    private record PendingRegionLoad(int regionX, int regionZ, int caveLayer, String dimension) {}
 
     /** 分片超时时间（毫秒），超过此时间未到齐的分片视为丢失 */
     private static final long PART_STALE_TIMEOUT_MS = 2 * 60 * 1000;
@@ -106,7 +115,7 @@ public class MapPacketHandler {
     private static volatile ClientTimestampCache syncFinishTsCache = null;
 
     /** 写盘 IO 完成但主线程 apply 回调尚未全部执行 */
-    private static final AtomicInteger pendingWriteApplyCallbacks = new AtomicInteger(0);
+    private static volatile AtomicInteger pendingWriteApplyCallbacks = new AtomicInteger(0);
 
     private static String partKey(ChunkMapData chunk) {
         return chunk.regionX + "," + chunk.regionZ + "," + chunk.dimension + "," + chunk.caveLayer;
@@ -216,7 +225,7 @@ public class MapPacketHandler {
         syncFinishGeneration = -1;
         syncFinishOutcome = SyncOutcome.NONE;
         syncFinishTsCache = null;
-        pendingWriteApplyCallbacks.set(0);
+        pendingWriteApplyCallbacks = new AtomicInteger(0);
         LOGGER.info("Cleared sync data to prevent memory leak");
     }
 
@@ -226,6 +235,8 @@ public class MapPacketHandler {
     public static void clearReceivedChunks() {
         if (updatedRegionCoords != null) {
             updatedRegionCoords.clear();
+        writtenRegionKeys.clear();
+        failedWrites.set(0);
         }
     }
 
@@ -322,16 +333,7 @@ public class MapPacketHandler {
             });
         });
 
-        // 注册同步请求处理器（清除陈旧同步数据）
-        handler.registerSyncRequestHandler((payload, ctx) -> {
-            ctx.enqueueWork(() -> {
-                if (isSyncStale()) {
-                    clearSyncData();
-                    LOGGER.warn("Cleared stale sync data before starting new sync");
-                }
-                updatedRegionCoords.clear();
-            });
-        });
+
     }
 
     /**
@@ -805,13 +807,7 @@ public class MapPacketHandler {
 
                 XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                     assembled.regionX, assembled.regionZ, assembled.caveLayer);
-                updatedRegionCoords.add(coord);
-
-                boolean syncingCaveDimension = DimensionPathMapping.getInstance().isNether(assembled.dimension);
-                boolean shouldProcess = syncingCaveDimension
-                    ? !assembled.isSurfaceLayer()
-                    : assembled.isSurfaceLayer();
-
+                boolean shouldProcess = isCurrentDimension(assembled.dimension);
                 Set<XaeroMapDataHandler.RegionCoord> viewRegionsForLayer =
                     XaeroMapIntegrator.getViewDistanceRegions(assembled.caveLayer);
                 boolean inViewDistance = viewRegionsForLayer.contains(coord);
@@ -826,8 +822,9 @@ public class MapPacketHandler {
                 RegionPipelineTracker.onWriteSubmitted(
                         assembled.regionX, assembled.regionZ, assembled.caveLayer);
 
-                pendingWriteApplyCallbacks.incrementAndGet();
-                ClientSyncWriteQueue.submit(assembled, serverDir, serverWorldId, tsCache, writeResult -> {
+                final AtomicInteger applyCounter = pendingWriteApplyCallbacks;
+                applyCounter.incrementAndGet();
+                ClientSyncWriteQueue.submit(assembled, serverDir, serverWorldId, tsCache, mc.hasSingleplayerServer(), com.mapsyncer.platform.XaeroReflectionHelper.getSelectedMultiworld(assembled.dimension), writeResult -> {
                     mc.execute(() -> {
                         try {
                             if (!session.isCurrent(gen)) {
@@ -835,6 +832,7 @@ public class MapPacketHandler {
                             }
 
                             if (writeResult == null) {
+                                failedWrites.incrementAndGet();
                                 LOGGER.error("Region ({}, {}) 写入失败，跳过加载（{} bytes）",
                                         assembled.regionX, assembled.regionZ, assembled.data.length);
                                 RegionPipelineTracker.onWriteComplete(
@@ -845,8 +843,10 @@ public class MapPacketHandler {
                                 }
                             } else {
                                 lastMwDir = writeResult.mwDir();
+                                writtenRegionKeys.add(partKey(assembled));
+                                if (isCurrentDimension(assembled.dimension)) updatedRegionCoords.add(coord);
 
-                                if (shouldProcess && !session.reflectionFailed()) {
+                                if (shouldProcess && isCurrentDimension(assembled.dimension) && !session.reflectionFailed()) {
                                     if (inViewDistance) {
                                         triggerSingleRegionLoad(coord, assembled.caveLayer, true);
                                     } else if (XaeroReflectionHelper.getLeafMapRegion(
@@ -856,7 +856,7 @@ public class MapPacketHandler {
                                         RegionPipelineTracker.onDeferredLoadQueued(
                                                 coord.x(), coord.z(), assembled.caveLayer);
                                         pendingRegionLoads.add(new PendingRegionLoad(
-                                                coord.x(), coord.z(), assembled.caveLayer));
+                                                coord.x(), coord.z(), assembled.caveLayer, assembled.dimension));
                                     }
                                     LOGGER.debug("区域 ({}, {}) layer={} inView={} 已写入并触发加载",
                                             coord.x(), coord.z(), assembled.caveLayer, inViewDistance);
@@ -878,7 +878,7 @@ public class MapPacketHandler {
                                 ClientSyncWriteQueue.saveTimestampCacheAsync(batchTsCache);
                             }
                         } finally {
-                            pendingWriteApplyCallbacks.decrementAndGet();
+                            applyCounter.decrementAndGet();
                             tryCompleteSync(gen);
                         }
                     });
@@ -915,18 +915,18 @@ public class MapPacketHandler {
         SyncOutcome serverOutcome = syncFinishOutcome;
         ClientTimestampCache tsCache = syncFinishTsCache;
 
-        int totalReceived = updatedRegionCoords.size();
+        int totalReceived = writtenRegionKeys.size();
         LOGGER.info("同步完成: 总计 {} 个区域已处理", totalReceived);
 
         lastSyncCompleteTs = System.currentTimeMillis();
 
-        SyncOutcome finalOutcome = serverOutcome == SyncOutcome.PARTIAL_SUCCESS || session.reflectionFailed()
+        SyncOutcome finalOutcome = serverOutcome == SyncOutcome.PARTIAL_SUCCESS || session.reflectionFailed() || failedWrites.get() > 0
                 ? SyncOutcome.PARTIAL_SUCCESS
                 : SyncOutcome.SUCCESS;
         session.setOutcome(finalOutcome);
         MapSyncerCommandLogic.resetSyncRetry();
 
-        if (!updatedRegionCoords.isEmpty()) {
+        if (!writtenRegionKeys.isEmpty() || failedWrites.get() > 0) {
             XaeroMapDataHandler.recordUpdatedRegionCoords(updatedRegionCoords);
             SyncProgressTracker.completeWithCount(totalReceived);
 
@@ -938,7 +938,7 @@ public class MapPacketHandler {
                 }
             }
 
-            if (tsCache != null) {
+            if (tsCache != null && failedWrites.get() == 0 && serverOutcome != SyncOutcome.PARTIAL_SUCCESS) {
                 tsCache.markSyncComplete();
             }
             notifySyncOutcome(finalOutcome);
@@ -946,7 +946,7 @@ public class MapPacketHandler {
             LOGGER.info("Sync complete with no data received");
             SyncProgressTracker.finishUptodate();
             finishJoinAutoSyncIfActive();
-            if (tsCache != null) {
+            if (tsCache != null && failedWrites.get() == 0 && serverOutcome != SyncOutcome.PARTIAL_SUCCESS) {
                 tsCache.markSyncComplete();
             }
         }
@@ -983,7 +983,7 @@ public class MapPacketHandler {
                 MapSyncerCommandLogic.retryLastSyncRequest();
                 return;
             }
-            if (status != null && status.startsWith("aborted")) {
+            if (status != null && (status.startsWith("aborted") || status.equals("request_partial_timeout"))) {
                 SyncProgressTracker.cancelTracking();
                 MapPacketHandler.clearSyncData();
                 MapSyncerCommandLogic.resetSyncRetry();
@@ -1042,6 +1042,8 @@ public class MapPacketHandler {
      */
     private static void clearSyncStateAfterComplete() {
         updatedRegionCoords.clear();
+        writtenRegionKeys.clear();
+        failedWrites.set(0);
         loadedRegions.clear();
         partBuffer.clear();
         lastMwDir = null;
@@ -1087,6 +1089,8 @@ public class MapPacketHandler {
      */
     private static void clearSyncState() {
         updatedRegionCoords.clear();
+        writtenRegionKeys.clear();
+        failedWrites.set(0);
         loadedRegions.clear();
         partBuffer.clear();
         pendingRegionLoads.clear();
@@ -1203,6 +1207,14 @@ public class MapPacketHandler {
      * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
      */
     public static void drainPendingLoadQueue() {
+        Minecraft currentClient = Minecraft.getInstance();
+        String currentDimension = currentClient.level == null ? ""
+                : com.mapsyncer.util.DimensionApiHelper.getDimId(currentClient.level.dimension());
+        if (!currentDimension.equals(lastReloadDimension)) {
+            loadedRegions.clear();
+            pendingRegionLoads.clear();
+            lastReloadDimension = currentDimension;
+        }
         SyncProgressTracker.onClientTick();
         RegionPipelineTracker.onClientTick();
         int intervalTicks;
@@ -1215,12 +1227,14 @@ public class MapPacketHandler {
             return;
         }
         if (pendingRegionLoads.isEmpty()) {
+            finishDeferredReloadCleanupIfDone();
             return;
         }
 
         if (RegionLoadThrottle.isUnlimited(intervalTicks)) {
             PendingRegionLoad pending;
             while ((pending = pendingRegionLoads.poll()) != null) {
+                if (!isCurrentDimension(pending.dimension())) continue;
                 XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                     pending.regionX(), pending.regionZ(), pending.caveLayer());
                 triggerSingleRegionLoad(coord, pending.caveLayer(), false);
@@ -1235,7 +1249,7 @@ public class MapPacketHandler {
         }
 
         PendingRegionLoad pending = pendingRegionLoads.poll();
-        if (pending != null) {
+        if (pending != null && isCurrentDimension(pending.dimension())) {
             XaeroMapDataHandler.RegionCoord coord = new XaeroMapDataHandler.RegionCoord(
                 pending.regionX(), pending.regionZ(), pending.caveLayer());
             triggerSingleRegionLoad(coord, pending.caveLayer(), false);

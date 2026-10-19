@@ -136,7 +136,9 @@ public class ClientHashManager {
     public static Map<String, ClientMeta> computeMetaForSync(Path mapDir) {
         poolUsers.incrementAndGet();
         try {
-            MetaScanResult result = computeMetaForSyncWorker(mapDir, false);
+            Path root = findServerDir(mapDir);
+            ClientTimestampCache cache = root == null ? null : ClientTimestampCache.getInstance(root);
+            MetaScanResult result = computeMetaForSyncWorker(mapDir, false, root, cache);
             if (!result.isSuccess()) {
                 throw new IllegalStateException("Hash scan failed: " + result.failureReason());
             }
@@ -153,21 +155,25 @@ public class ClientHashManager {
      * @param onComplete 完成回调（在后台线程调用，调用方应调度到主线程后再发网络包）
      */
     public static void computeMetaForSyncAsync(Path mapDir, Consumer<MetaScanResult> onComplete) {
+        final Path root = findServerDir(mapDir);
+        final ClientTimestampCache cache = root == null ? null : ClientTimestampCache.getInstance(root);
+        final int generation = ClientSyncSession.get().generation();
         poolUsers.incrementAndGet();
         getSharedPool().submit(() -> {
             try {
-                onComplete.accept(computeMetaForSyncWorker(mapDir, true));
+                onComplete.accept(computeMetaForSyncWorker(mapDir, true, root, cache));
             } catch (Exception e) {
                 LOGGER.error("Failed to compute hashes asynchronously", e);
                 onComplete.accept(MetaScanResult.failure("async_error", 0));
             } finally {
-                SyncProgressTracker.completeHashScan();
+                if (ClientSyncSession.get().isCurrent(generation)) SyncProgressTracker.completeHashScan();
                 poolUsers.decrementAndGet();
             }
         });
     }
 
-    private static MetaScanResult computeMetaForSyncWorker(Path mapDir, boolean reportProgress) {
+    private static MetaScanResult computeMetaForSyncWorker(Path mapDir, boolean reportProgress,
+            Path serverDir, ClientTimestampCache tsCache) {
         Map<String, ClientMeta> metaMap = new ConcurrentHashMap<>();
 
         if (mapDir == null || !Files.exists(mapDir)) {
@@ -175,14 +181,14 @@ public class ClientHashManager {
             return MetaScanResult.ok(metaMap);
         }
 
-        Path serverDir = findServerDir(mapDir);
+
         if (serverDir == null) {
             LOGGER.error("Could not resolve Multiplayer server directory from {}", mapDir);
             return MetaScanResult.failure("server_dir", 0);
         }
 
         // Load cached timestamps from previous sync
-        ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
+
         Map<String, TimestampHashEntry> cachedTimestamps = tsCache.getAll();
         LOGGER.info("Loaded {} cached timestamps from previous sync", cachedTimestamps.size());
 
@@ -316,6 +322,11 @@ public class ClientHashManager {
     /** 根据扫描目录推断需要补全的维度前缀（如 {@code null/}）。 */
     private static Set<String> collectDimPrefixes(Path mapDir, Path serverDir) {
         Set<String> prefixes = new java.util.HashSet<>();
+        Path root = serverDir.toAbsolutePath().normalize();
+        Path scan = mapDir.toAbsolutePath().normalize();
+        if (scan.startsWith(root) && !scan.equals(root)) {
+            prefixes.add(root.relativize(scan).getName(0).toString() + "/");
+        }
         Path current = mapDir;
         while (current != null && !current.equals(serverDir)) {
             String name = current.getFileName() != null ? current.getFileName().toString() : "";
@@ -349,6 +360,10 @@ public class ClientHashManager {
      * @return 服务器目录路径，如果未找到返回 null
      */
     private static Path findServerDir(Path mapDir) {
+        Path activeRoot = com.mapsyncer.platform.PlatformManager.getPlatform().getClientXaeroWorldMapDir();
+        if (activeRoot != null && mapDir.toAbsolutePath().normalize().startsWith(activeRoot.toAbsolutePath().normalize())) {
+            return activeRoot;
+        }
         Path current = mapDir;
 
         // Walk up the directory tree to find Multiplayer_<server>

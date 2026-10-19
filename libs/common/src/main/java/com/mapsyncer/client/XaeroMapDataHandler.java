@@ -162,11 +162,32 @@ public final class XaeroMapDataHandler {
      * @return 写入成功时返回 mw 目录与 zip 路径，失败返回 null
      */
     public static RegionWriteResult writeChunkData(ChunkMapData chunk, Path serverDir, int worldId) {
+        return writeChunkData(chunk, serverDir, worldId, false);
+    }
+
+    public static RegionWriteResult writeChunkData(ChunkMapData chunk, Path serverDir, int worldId,
+            boolean integratedHost) {
+        return writeChunkData(chunk, serverDir, worldId, integratedHost, null);
+    }
+
+    public static RegionWriteResult writeChunkData(ChunkMapData chunk, Path serverDir, int worldId,
+            boolean integratedHost, String selectedMultiworld) {
         String xaeroDim = chunk.dimension;
+        if (!com.mapsyncer.util.DimensionPathMapping.isSafeXaeroFolder(xaeroDim)) {
+            LOGGER.error("Rejected unsafe map dimension: {}", xaeroDim);
+            return null;
+        }
         Path dimDir = serverDir.resolve(xaeroDim);
 
         // 优先使用 Xaero 已有的 mw$ 目录（客户端 Xaero 生成的 worldId），避免与服务端 worldId 不匹配
-        Path mwDir = findExistingMwDir(dimDir);
+        if (selectedMultiworld != null && !selectedMultiworld.isEmpty()
+                && !isSafeMultiworld(selectedMultiworld)) {
+            LOGGER.error("Rejected unsafe Xaero multiworld: {}", selectedMultiworld);
+            return null;
+        }
+        Path mwDir = selectedMultiworld != null
+                ? (selectedMultiworld.isEmpty() ? dimDir : dimDir.resolve(selectedMultiworld))
+                : (integratedHost ? dimDir : findExistingMwDir(dimDir));
         if (mwDir == null) {
             // 没有现有目录，使用服务端 worldId 创建
             mwDir = dimDir.resolve("mw$" + worldId);
@@ -221,6 +242,13 @@ public final class XaeroMapDataHandler {
         return new RegionWriteResult(mwDir, outputFile, String.format("%08x", crc32.getValue()));
     }
 
+    /** Xaero 的用户自定义多世界名称不要求 mw$ 前缀，但必须是单个安全目录名。 */
+    public static boolean isSafeMultiworld(String name) {
+        return name != null && !name.isBlank() && !name.equals(".") && !name.equals("..")
+                && !name.endsWith(".") && !name.endsWith(" ")
+                && !name.matches(".*[\\\\/:*?\"<>|\\p{Cntrl}].*");
+    }
+
     /**
      * 替换最终 zip。Windows 上 Xaero 可能短暂持有目标文件，做有限次重试。
      */
@@ -255,11 +283,21 @@ public final class XaeroMapDataHandler {
      * @return 最后写入的 mw 目录路径
      */
     public static Path writeMapData(List<ChunkMapData> chunks, Path serverDir, int worldId) {
+        return writeMapData(chunks, serverDir, worldId, false);
+    }
+
+    public static Path writeMapData(List<ChunkMapData> chunks, Path serverDir, int worldId, boolean integratedHost) {
+        return writeMapData(chunks, serverDir, worldId, integratedHost, dimension -> null);
+    }
+
+    public static Path writeMapData(List<ChunkMapData> chunks, Path serverDir, int worldId, boolean integratedHost,
+            java.util.function.Function<String, String> multiworldResolver) {
         ClientTimestampCache tsCache = ClientTimestampCache.getInstance(serverDir);
 
         Path lastMwDir = null;
         for (ChunkMapData chunk : chunks) {
-            RegionWriteResult result = writeChunkData(chunk, serverDir, worldId);
+            RegionWriteResult result = writeChunkData(chunk, serverDir, worldId, integratedHost,
+                    multiworldResolver.apply(chunk.dimension));
             if (result == null) {
                 continue;
             }
@@ -286,6 +324,10 @@ public final class XaeroMapDataHandler {
      */
     public static String buildRelativePathForCache(ChunkMapData chunk) {
         String xaeroDim = chunk.dimension;
+        if (!com.mapsyncer.util.DimensionPathMapping.isSafeXaeroFolder(xaeroDim)) {
+            LOGGER.error("Rejected unsafe map dimension: {}", xaeroDim);
+            return null;
+        }
 
         if (chunk.caveLayer == Integer.MAX_VALUE) {
             return xaeroDim + "/" + chunk.regionX + "_" + chunk.regionZ;

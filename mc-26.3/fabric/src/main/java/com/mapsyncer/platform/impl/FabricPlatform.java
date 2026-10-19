@@ -165,6 +165,12 @@ public class FabricPlatform implements Platform {
     // ===== 配置系统 =====
 
     @Override
+    public int getSyncRadiusRegions() { return ModConfig.SERVER().getSyncRadiusRegions(); }
+
+    @Override
+    public void setSyncRadiusRegions(int radius) { ModConfig.SERVER().setSyncRadiusRegions(radius); }
+
+    @Override
     public int getSyncSpeedLimitKBps() {
         return ModConfig.SERVER().getSyncSpeedLimitKBps();
     }

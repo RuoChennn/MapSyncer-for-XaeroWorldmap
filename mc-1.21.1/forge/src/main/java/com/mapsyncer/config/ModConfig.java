@@ -240,6 +240,7 @@ public class ModConfig {
          * 同步速度限制（KB/s）
          */
         public final IntValue syncSpeedLimitKBps;
+        public final IntValue syncRadiusRegions;
 
         // ========== 增量更新设置 ==========
 
@@ -319,6 +320,10 @@ public class ModConfig {
                              "  1048576 = 1MB  (maximum, 1 packet/s at 1024KB/s)",
                              "Default: 256KB (recommended), Range: 64KB - 1MB")
                     .defineInRange("maxSyncPacketSize", 262144, 65536, 1048576);
+            syncRadiusRegions = builder
+                    .comment("以玩家所在 region 为中心向外扩展的半径（方形），0 = 不限制；开启时仅发送当前维度",
+                             "Player-centered region radius (square); 0 = unlimited. Current dimension only when enabled.")
+                    .defineInRange("syncRadiusRegions", 0, 0, Integer.MAX_VALUE);
             syncSpeedLimitKBps = builder
                     .comment("同步速度限制 KB/s（0 = 无限制）",
                              "Sync speed limit in KB/s (0 = unlimited)",

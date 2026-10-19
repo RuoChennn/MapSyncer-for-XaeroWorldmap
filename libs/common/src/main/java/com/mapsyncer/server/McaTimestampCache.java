@@ -86,10 +86,11 @@ public class McaTimestampCache {
             for (String key : props.stringPropertyNames()) {
                 try {
                     // 时间戳以秒为单位存储，读取后转换为毫秒
-                    long timestampSeconds = Long.parseLong(props.getProperty(key));
-                    long timestampMillis = timestampSeconds * 1000;
+                    String stored = props.getProperty(key);
+                    long timestampMillis = stored.startsWith("ms:")
+                            ? Long.parseLong(stored.substring(3)) : Long.parseLong(stored) * 1000;
                     // 解析键：格式为 "dimension/region_x_z"
-                    String[] parts = key.split("/");
+                    String[] parts = key.split("/(?=[^/]+$)", 2);
                     if (parts.length == 2) {
                         String dimension = parts[0];
                         String regionKey = parts[1];
@@ -126,8 +127,7 @@ public class McaTimestampCache {
                     // 格式：dimension/region_x_z = timestamp (秒)
                     String key = dimension + "/" + regionEntry.getKey();
                     // 存储时转换为秒，更易读
-                    long timestampSeconds = regionEntry.getValue() / 1000;
-                    props.setProperty(key, String.valueOf(timestampSeconds));
+                    props.setProperty(key, "ms:" + regionEntry.getValue());
                 }
             }
 
@@ -196,7 +196,7 @@ public class McaTimestampCache {
         // 比较时都转换为秒级，避免缓存存储时的精度损失
         long currentSeconds = currentTimestamp / 1000;
         long cachedSeconds = cachedTimestamp / 1000;
-        if (currentSeconds > cachedSeconds) {
+        if (currentTimestamp != cachedTimestamp) {
             LOGGER.info("Region {} in {} has been updated (cached={}s, current={}s), will regenerate",
                 regionKey, dimension, cachedSeconds, currentSeconds);
             return true;  // 文件已更新
@@ -286,6 +286,11 @@ public class McaTimestampCache {
     /**
      * 根据已扫描的 MCA 条目比对时间戳，返回需要重新生成的 region（不再遍历目录）。
      */
+    public void updateTimestampValue(String dimension, int x, int z, long timestamp) {
+        timestampCache.computeIfAbsent(dimension, key -> new ConcurrentHashMap<>())
+                .put(x + "_" + z, timestamp);
+    }
+
     public java.util.List<RegionScanner.RegionCoords> classifyUpdates(
             String dimension, java.util.List<RegionScanner.RegionFileEntry> fileEntries) {
         java.util.List<RegionScanner.RegionCoords> needsRegeneration = new java.util.ArrayList<>();
@@ -300,9 +305,9 @@ public class McaTimestampCache {
             long currentSeconds = currentTimestamp / 1000;
             long cachedSeconds = cachedTimestamp != null ? cachedTimestamp / 1000 : 0;
 
-            if (cachedTimestamp == null || currentSeconds > cachedSeconds) {
+            if (cachedTimestamp == null || currentTimestamp != cachedTimestamp) {
                 needsRegeneration.add(coords);
-                dimCache.put(regionKey, currentTimestamp);
+
                 if (cachedTimestamp != null) {
                     LOGGER.info("Detected update in {} / {}: cached={}s, current={}s",
                             dimension, regionKey, cachedSeconds, currentSeconds);

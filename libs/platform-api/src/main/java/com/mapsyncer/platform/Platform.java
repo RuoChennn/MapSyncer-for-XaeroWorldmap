@@ -117,6 +117,11 @@ public interface Platform {
      */
     int getSyncSpeedLimitKBps();
 
+    /** 玩家 region 周围的方形半径，0 表示关闭。 */
+    int getSyncRadiusRegions();
+
+    void setSyncRadiusRegions(int radius);
+
     /**
      * 获取最大数据包大小（字节）
      */

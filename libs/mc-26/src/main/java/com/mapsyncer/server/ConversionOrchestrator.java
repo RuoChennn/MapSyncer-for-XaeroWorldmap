@@ -15,7 +15,6 @@ import com.mapsyncer.server.RegionScanner.RegionCoords;
 import com.mapsyncer.util.DimensionPathMapping;
 import com.mapsyncer.util.DimensionTypeHelper;
 import com.mapsyncer.util.NamedThreadFactory;
-import com.mapsyncer.util.XaeroPathResolver;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -101,18 +100,17 @@ public class ConversionOrchestrator {
 
     public static void setCacheDir(Path dir) {
         effectiveCacheDir = dir;
+        timestampCache = null;
         LOGGER.info("Cache directory set to: {}", dir);
     }
 
     /**
      * 初始化内置服务器缓存目录。
-     * 仅当非独立服务器时生效，复用 Xaero 客户端地图目录避免二次转换。
+     * 内置服务器使用存档内独立缓存，避免转换覆盖房主的 Xaero 实时地图。
      */
     public static void tryInitIntegratedServerCache(MinecraftServer server, Path gameDir) {
-        if (!server.isDedicatedServer()) {
-            String worldName = server.getWorldPath(LevelResource.ROOT).getParent().getFileName().toString();
-            setCacheDir(XaeroPathResolver.getWorldMapDir(gameDir).resolve(worldName));
-        }
+        setCacheDir(server.isDedicatedServer() ? DEFAULT_CACHE_DIR
+                : server.getWorldPath(LevelResource.ROOT).resolve("server_map_cache").normalize());
         // 清理历史残留的 .zip.temp 文件
         XaeroWriter.cleanStaleTempFiles(getCacheDir());
     }
@@ -391,7 +389,7 @@ public class ConversionOrchestrator {
         // 提前检查 MCA 文件是否存在
         Path mcaPath = checkMcaFileExists(server, dimension, regionX, regionZ);
         if (mcaPath == null) {
-            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, dimension.identifier().getPath());
+            LOGGER.warn("MCA file not found for region ({}, {}) in dimension {}", regionX, regionZ, com.mapsyncer.util.DimensionApiHelper.getDimId(dimension));
             isRunning.set(false);
             return SingleRegionResult.REGION_NOT_FOUND;
         }
@@ -406,7 +404,7 @@ public class ConversionOrchestrator {
 
         // 使用完整维度 ID 作为缓存 key（确保新格式路径正确转换）
         String fullDimId = dimension.identifier().toString();
-        String dimPath = dimension.identifier().getPath(); // 用于配置查找
+        String dimPath = com.mapsyncer.util.DimensionApiHelper.getDimId(dimension); // 用于配置查找
 
         // 从配置获取维度扫描配置
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
@@ -484,7 +482,7 @@ public class ConversionOrchestrator {
 
         currentDimension = dimRegions.dimension();
         String fullDimId = dimRegions.dimension().identifier().toString();
-        String dimPath = dimRegions.dimension().identifier().getPath();
+        String dimPath = com.mapsyncer.util.DimensionApiHelper.getDimId(dimRegions.dimension());
 
         DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
 
@@ -586,7 +584,7 @@ public class ConversionOrchestrator {
             if (level == null) {
                 continue;
             }
-            String dimPath = dimRegions.dimension().identifier().getPath();
+            String dimPath = com.mapsyncer.util.DimensionApiHelper.getDimId(dimRegions.dimension());
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
             int passCount = RegionGenerationPlanner.countPasses(scanConfig, dimTypeInfo);
@@ -728,6 +726,13 @@ public class ConversionOrchestrator {
             ConcurrentLinkedQueue<RegionCoords> failedRegions, boolean logProgress, String logPrefix) {
 
         Path mcaPath = regionDir.resolve("r." + coords.x() + "." + coords.z() + ".mca");
+        long sourceTimestamp;
+        try {
+            sourceTimestamp = Files.getLastModifiedTime(mcaPath).toMillis();
+        } catch (IOException e) {
+            failedRegions.add(coords);
+            return;
+        }
 
         if (!com.mapsyncer.mca.McaContentProbe.hasAnyChunk(mcaPath)) {
             for (RegionScanPass pass : passes) {
@@ -790,8 +795,8 @@ public class ConversionOrchestrator {
             }
         }
 
-        if (anyWritten) {
-            mcaCache.updateTimestamp(dimPath, coords.x(), coords.z(), mcaPath);
+        if (!anyFailed) {
+            mcaCache.updateTimestampValue(dimPath, coords.x(), coords.z(), sourceTimestamp);
         }
         if (anyFailed) {
             failedRegions.add(coords);
@@ -892,7 +897,7 @@ public class ConversionOrchestrator {
             }
 
             String fullDimId = dimKey.identifier().toString();
-            String dimPath = dimKey.identifier().getPath();
+            String dimPath = com.mapsyncer.util.DimensionApiHelper.getDimId(dimKey);
 
             DimensionScanConfig scanConfig = PlatformManager.getPlatform().getConfigForDimension(dimPath);
             String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);

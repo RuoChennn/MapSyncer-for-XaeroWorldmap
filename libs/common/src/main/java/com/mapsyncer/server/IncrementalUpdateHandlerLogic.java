@@ -215,15 +215,11 @@ public class IncrementalUpdateHandlerLogic {
         LocalDateTime now = LocalDateTime.now();
         int targetHour = PlatformManager.getPlatform().getScheduledUpdateHour();
         int targetMinute = PlatformManager.getPlatform().getScheduledUpdateMinute();
-        LocalTime targetTime = LocalTime.of(targetHour, targetMinute);
-        LocalTime currentTime = now.toLocalTime();
-
-        // Check if we've reached the scheduled time (within 1 minute window)
-        // and haven't already updated today
-        if (currentTime.isAfter(targetTime) && currentTime.isBefore(targetTime.plusMinutes(1))) {
-            if (lastScheduledUpdate == null || !lastScheduledUpdate.toLocalDate().equals(now.toLocalDate())) {
+        LocalDateTime target = now.toLocalDate().atTime(targetHour, targetMinute);
+        if (!now.isBefore(target)
+                && (lastScheduledUpdate == null || !lastScheduledUpdate.toLocalDate().equals(now.toLocalDate()))) {
+            if (performScheduledUpdate("SCHEDULED mode daily update at " + targetHour + ":" + targetMinute)) {
                 lastScheduledUpdate = now;
-                performScheduledUpdate("SCHEDULED mode daily update at " + targetHour + ":" + targetMinute);
             }
         }
     }
@@ -233,14 +229,14 @@ public class IncrementalUpdateHandlerLogic {
      *
      * @param reason 更新原因描述
      */
-    private void performScheduledUpdate(String reason) {
-        if (ServerSyncHandlerLogic.isSyncActive()) {
+    private boolean performScheduledUpdate(String reason) {
+        if (ServerSyncHandlerLogic.isSyncActive() || ConversionOrchestrator.isRunning()) {
             LOGGER.debug("Map sync in progress, deferring incremental update");
-            return;
+            return false;
         }
         if (!updateInProgress.compareAndSet(false, true)) {
             LOGGER.debug("Scheduled update already in progress, skipping");
-            return;
+            return false;
         }
 
         LOGGER.info("Performing incremental update: {}", reason);
@@ -251,7 +247,7 @@ public class IncrementalUpdateHandlerLogic {
         } catch (RuntimeException e) {
             LOGGER.error("Runtime error saving chunks for incremental scan", e);
             updateInProgress.set(false);
-            return;
+            return false;
         }
 
         // Run heavy I/O (MCA scan, conversion, writing) on background thread
@@ -271,6 +267,7 @@ public class IncrementalUpdateHandlerLogic {
                 currentServer.execute(IncrementalUpdateHandlerLogic.this::stop);
             }
         });
+        return true;
     }
 
     /**

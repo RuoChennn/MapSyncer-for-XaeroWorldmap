@@ -89,7 +89,7 @@ public class MapSyncer implements ModInitializer {
      */
     private void registerServerEvents() {
         // 服务端启动时
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             LOGGER.info("Server starting, initializing MapSyncer...");
 
             // 初始化配置（使用 Fabric 标准配置目录）

@@ -17,7 +17,6 @@
   "mapsyncer.sync.server_not_installed": "服务端没有安装 MapSyncer",
   "mapsyncer.sync.server_unresponsive": "服务端多次无响应，同步已放弃，请稍后重试",
   "mapsyncer.sync.unloading_regions": "卸载 %d 个视野范围内区域准备更新",
-
   "mapsyncer.command.no_map_dir": "无法确定地图目录，您是否已连接到服务器？",
   "mapsyncer.command.sync_dimension": "开始同步维度: %s",
   "mapsyncer.command.sync_all": "开始同步所有维度...",
@@ -30,15 +29,12 @@
   "mapsyncer.command.help_sync_all": "/mapsyncer sync all - 同步所有维度",
   "mapsyncer.command.help_autosync": "/mapsyncer autosync [on|off] - 查看或切换客户端自动同步",
   "mapsyncer.command.help_dimension_note": "维度名: overworld, the_nether, the_end 或 namespace:path 格式（如 twilightforest:twilight_forest）",
-
   "mapsyncer.cache.all_cleared": "所有缓存已清除，无需重新加载",
   "mapsyncer.cache.direct_reload": "直接重新加载: %d 个区域",
   "mapsyncer.cache.reload_failed": "触发地图重新加载失败",
   "mapsyncer.cache.status": "缓存: %d 已清除, %d 需重新加载",
   "mapsyncer.cache.cleared": "缓存已清除",
-
   "mapsyncer.prefix": "[MapSyncer]",
-
   "mapsyncer.help.server.header": "服务端命令帮助:",
   "mapsyncer.help.server.generate": "/%s generate - 生成所有维度地图缓存",
   "mapsyncer.help.server.generate_dim": "/%s generate <维度> - 生成指定维度缓存（增量模式）",
@@ -52,18 +48,14 @@
   "mapsyncer.help.server.reloadconfig": "/%s reloadconfig - 从磁盘重新加载服务端配置",
   "mapsyncer.command.config_reloaded": "服务端配置已重新加载",
   "mapsyncer.command.config_reload_failed": "服务端配置重新加载失败，请查看服务端日志",
-
   "mapsyncer.chunk.paused": "区块更新已暂停...",
   "mapsyncer.chunk.resumed": "区块更新已恢复",
-
   "mapsyncer.sync.dimension_not_available": "维度 %s 的地图暂未生成或维度不存在，请联系管理员执行生成命令",
-
   "mapsyncer.command.unknown_dimension": "未知维度: %s",
   "mapsyncer.command.region_not_found": "区域 (%d, %d) 在维度 %s 中不存在，请确认坐标是否正确",
   "mapsyncer.command.generating_region": "开始生成区域 (%d, %d) 在维度 %s...",
   "mapsyncer.command.region_converted": "区域转换完成",
   "mapsyncer.command.region_conversion_failed": "区域 (%d, %d) 转换失败",
-
   "mapsyncer.command.incremental_disabled": "增量更新已禁用",
   "mapsyncer.command.incremental_tick_set": "增量更新已设置为 TICK 模式（间隔: %d ticks = %.1f 秒）",
   "mapsyncer.command.incremental_tick_interval": "增量更新已设置为 TICK 模式，间隔 %d ticks（%.1f 秒）",
@@ -72,14 +64,12 @@
   "mapsyncer.command.incremental_status_tick": "当前增量更新模式：TICK（间隔 %d ticks = %.1f 秒），下次更新约 %d 分 %d 秒后",
   "mapsyncer.command.incremental_status_scheduled": "当前增量更新模式：SCHEDULED（每日 %02d:%02d）",
   "mapsyncer.command.incremental_status_hint": "可用子命令：/%s incremental off | tick [间隔] | scheduled [时] [分]",
-
   "mapsyncer.server.no_cache": "地图缓存不可用，请先运行 /%s generate",
   "mapsyncer.server.dim_not_available": "维度 '%s' 地图数据不可用，请先运行 /%s generate %s",
   "mapsyncer.server.map_uptodate": "地图已是最新，无需下载",
   "mapsyncer.server.sync_start": "即将下载 %d 个区域",
   "mapsyncer.server.sync_complete": "地图同步完成，已发送 %d 个需更新区域",
   "mapsyncer.server.sync_partial": "地图同步部分完成：已发送 %d 个区域，%d 个读取失败（共计划 %d 个）",
-
   "mapsyncer.generate.start_full": "开始全量地图生成...",
   "mapsyncer.generate.full_complete": "地图生成完成：%d/%d 个区域，已完成 %d 个维度：%s",
   "mapsyncer.generate.start_dim": "开始生成维度地图：%s",
@@ -95,13 +85,11 @@
   "mapsyncer.status.tick_mode": "增量更新：TICK 模式，下次更新 %d 分 %d 秒后",
   "mapsyncer.status.scheduled_mode": "增量更新：定时模式，每日 %02d:%02d",
   "mapsyncer.status.cache_detail": "缓存统计：共 %s 个维度，%s 个区域，占用 %s MB\n%s",
-
   "mapsyncer.sync.resume_header": "断点续传可用",
   "mapsyncer.sync.resume_prompt": "%s。点击下方继续同步：",
   "mapsyncer.sync.state_cleared": "同步状态已清除",
   "mapsyncer.sync.reflection_failed": "Xaero 地图反射初始化失败，文件已写入但地图可能不会自动刷新，请确认已安装兼容版 Xaero's World Map",
   "mapsyncer.sync.interrupted": "同步已中断，可断点续传",
-
   "mapsyncer.autosync.start": "正在自动同步地图（已是最新时将跳过下载）...",
   "mapsyncer.autosync.complete": "自动同步完成",
   "mapsyncer.autosync.status.disabled": "自动同步：已关闭",
@@ -110,14 +98,12 @@
   "mapsyncer.autosync.status.client_disabled": "自动同步：已被客户端禁用",
   "mapsyncer.autosync.client.enabled": "客户端自动同步：已开启",
   "mapsyncer.autosync.client.disabled": "客户端自动同步：已关闭",
-
   "mapsyncer.autosync.periodic.start": "周期同步：等待服务端响应...",
   "mapsyncer.autosync.periodic.hash_computing": "周期同步：正在扫描本地地图...",
   "mapsyncer.autosync.periodic.hash_progress": "周期同步：扫描本地地图 %d/%d (%d%%)",
   "mapsyncer.autosync.periodic.progress": "周期同步：下载 %d/%d (%d%%)",
   "mapsyncer.autosync.periodic.complete": "周期同步完成，已更新 %d 个区域（%d 秒）",
   "mapsyncer.autosync.periodic.uptodate": "周期同步：地图已是最新",
-
   "title.mapsyncer.config": "MapSyncer 服务端配置",
   "title.mapsyncer.client_config": "MapSyncer 客户端配置",
   "category.mapsyncer.general": "常规",
@@ -144,5 +130,7 @@
   "option.mapsyncer.update_mode.tooltip": "服务端地图缓存的增量更新策略。\n\nDISABLED - 关闭增量更新，同时禁用客户端自动同步。\nTICK - 按 tick 周期更新；进服时带冷却自动同步，在线期间按相同周期拉取。\nSCHEDULED - 每日定时更新；进服时若客户端时间戳早于服务端缓存则自动同步。",
   "option.mapsyncer.interval_ticks.tooltip": "TICK 模式下的更新间隔。20 ticks = 1 秒（默认 6000 = 5 分钟，最小 2400 = 2 分钟）。同时决定客户端在线周期同步间隔。",
   "option.mapsyncer.scheduled_hour.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的小时（0-23）。",
-  "option.mapsyncer.scheduled_minute.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的分钟（0-59）。"
+  "option.mapsyncer.scheduled_minute.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的分钟（0-59）。",
+  "mapsyncer.help.server.radius": "/%s radius [regions] - 以玩家 region 为中心的方形半径；0 关闭限制",
+  "mapsyncer.command.radius_status": "同步半径：%s 个 region（0 = 不限制；开启时仅发送玩家当前维度）。对新请求生效。"
 }
