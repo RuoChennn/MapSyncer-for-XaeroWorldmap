@@ -582,7 +582,30 @@ public final class XaeroReflectionHelper {
         }
     }
 
-    /** 主线程捕获实际选中的地图子目录；空串表示直接使用维度目录，null 表示尚未初始化。 */
+    /** 客户端主线程捕获每个维度实际选中的地图子目录（包括 cm$converted）。 */
+    public static java.util.Map<String, String> getSelectedMultiworlds() {
+        if (!initialize()) return java.util.Map.of();
+        Object world = getMapWorld();
+        if (world == null) return java.util.Map.of();
+        java.util.Map<String, String> selections = new java.util.HashMap<>();
+        try {
+            var dimensions = (Iterable<?>) mapWorldClass.getMethod("getDimensionsList").invoke(world);
+            Method folderMethod = mapDimensionClass.getMethod("getMainFolderPath");
+            Method multiworldMethod = mapDimensionClass.getMethod("getCurrentMultiworld");
+            for (Object dimension : dimensions) {
+                var folder = (java.nio.file.Path) folderMethod.invoke(dimension);
+                if (folder == null) continue;
+                String selected = (String) multiworldMethod.invoke(dimension);
+                selections.put(folder.getFileName().toString(), selected == null ? "" : selected);
+            }
+        } catch (ReflectiveOperationException e) {
+            LOGGER.debug("Could not capture Xaero map selections", e);
+            return java.util.Map.of();
+        }
+        return java.util.Map.copyOf(selections);
+    }
+
+    /** 主线程捕获实际选中的地图子目录；空串表示原生存档视图，null 表示尚未初始化。 */
     public static String getSelectedMultiworld(String dimensionFolder) {
         if (!initialize()) return null;
         Object world = getMapWorld();

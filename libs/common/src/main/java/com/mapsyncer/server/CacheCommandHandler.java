@@ -37,12 +37,23 @@ public class CacheCommandHandler {
         return PlatformManager.getPlatform().getServerCommandPrefix();
     }
 
-    /** 本地世界优先使用 Xaero 原生转换；仅提示，不限制 MapSyncer 生成。 */
+    /** 内置服房主可生成地图及调整配置，但不能同步自己的地图。 */
     public static void showIntegratedServerHint(MinecraftServer server,
             Consumer<net.minecraft.network.chat.Component> sender) {
         if (server != null && !server.isDedicatedServer()) {
-            sender.accept(ChatUtils.message("mapsyncer.generate.integrated_hint"));
+            sender.accept(ChatUtils.prefix().append(ChatUtils.header("mapsyncer.generate.integrated_hint")
+                    .withStyle(style -> style.withBold(true))));
         }
+    }
+
+    public static boolean isIntegratedHost(MinecraftServer server,
+            net.minecraft.server.level.ServerPlayer player) {
+        return server != null && !server.isDedicatedServer() && player != null
+                && com.mapsyncer.util.PlayerLevelApiHelper.isSingleplayerOwner(server, player);
+    }
+
+    public static boolean isGenerationAllowed(MinecraftServer server) {
+        return server != null;
     }
 
     /**
@@ -79,6 +90,21 @@ public class CacheCommandHandler {
         sender.accept(incrementalStatusMessage());
         sender.accept(ChatUtils.desc(
                 "mapsyncer.command.incremental_status_hint", serverCommandPrefix()));
+    }
+
+    public static void showIncrementalMode(MinecraftServer server,
+            Consumer<net.minecraft.network.chat.Component> sender) {
+        if (!isGenerationAllowed(server)) {
+            sender.accept(incrementalStatusMessage(server));
+            showIntegratedServerHint(server, sender);
+            return;
+        }
+        showIncrementalMode(sender);
+    }
+
+    public static MutableComponent incrementalStatusMessage(MinecraftServer server) {
+        return isGenerationAllowed(server) ? incrementalStatusMessage()
+                : ChatUtils.message("mapsyncer.command.incremental_status_disabled");
     }
 
     /**
@@ -128,6 +154,7 @@ public class CacheCommandHandler {
      * @return true 任务已提交，false 已有转换任务在运行
      */
     public static boolean generateAll(MinecraftServer server, Runnable onSuccess) {
+        if (!isGenerationAllowed(server)) return false;
         if (ConversionOrchestrator.isRunning()) {
             LOGGER.warn("Conversion already in progress, rejecting generateAll command");
             return false;
@@ -148,6 +175,7 @@ public class CacheCommandHandler {
      * @return true 任务已提交，false 已有转换任务在运行
      */
     public static boolean generateDimension(MinecraftServer server, String dimensionId, Runnable onSuccess) {
+        if (!isGenerationAllowed(server)) return false;
         if (ConversionOrchestrator.isRunning()) {
             LOGGER.warn("Conversion already in progress, rejecting generateDimension command");
             return false;
@@ -167,6 +195,7 @@ public class CacheCommandHandler {
      * @return true 任务已提交，false 已有转换任务在运行
      */
     public static boolean generateDimensionForce(MinecraftServer server, String dimensionId, Runnable onSuccess) {
+        if (!isGenerationAllowed(server)) return false;
         if (ConversionOrchestrator.isRunning()) {
             LOGGER.warn("Conversion already in progress, rejecting generateDimensionForce command");
             return false;
@@ -193,6 +222,7 @@ public class CacheCommandHandler {
      */
     public static boolean generateSingleRegion(MinecraftServer server, ResourceKey<Level> dimension, int x, int z,
                                             Consumer<SingleRegionResult> resultHandler) {
+        if (!isGenerationAllowed(server)) return false;
         if (ConversionOrchestrator.isRunning()) {
             LOGGER.warn("Conversion already in progress, rejecting generateSingleRegion command");
             resultHandler.accept(SingleRegionResult.ALREADY_RUNNING);
@@ -261,6 +291,10 @@ public class CacheCommandHandler {
      * 设置TICK模式增量更新
      */
     public static void setIncrementalTick(MinecraftServer server) {
+        if (!isGenerationAllowed(server)) {
+            IncrementalUpdateHandlerLogic.getInstance().stop();
+            return;
+        }
         var platform = PlatformManager.getPlatform();
         platform.setIncrementalUpdateMode(UpdateMode.TICK);
         platform.saveConfig();
@@ -271,6 +305,10 @@ public class CacheCommandHandler {
      * 设置TICK模式增量更新并指定间隔
      */
     public static void setIncrementalTick(MinecraftServer server, int interval) {
+        if (!isGenerationAllowed(server)) {
+            IncrementalUpdateHandlerLogic.getInstance().stop();
+            return;
+        }
         var platform = PlatformManager.getPlatform();
         platform.setIncrementalUpdateIntervalTicks(interval);
         platform.setIncrementalUpdateMode(UpdateMode.TICK);
@@ -282,6 +320,10 @@ public class CacheCommandHandler {
      * 设置SCHEDULED模式增量更新
      */
     public static void setIncrementalScheduled(MinecraftServer server) {
+        if (!isGenerationAllowed(server)) {
+            IncrementalUpdateHandlerLogic.getInstance().stop();
+            return;
+        }
         var platform = PlatformManager.getPlatform();
         platform.setIncrementalUpdateMode(UpdateMode.SCHEDULED);
         platform.saveConfig();
@@ -292,6 +334,10 @@ public class CacheCommandHandler {
      * 设置SCHEDULED模式并指定小时
      */
     public static void setScheduledTime(MinecraftServer server, int hour) {
+        if (!isGenerationAllowed(server)) {
+            IncrementalUpdateHandlerLogic.getInstance().stop();
+            return;
+        }
         var platform = PlatformManager.getPlatform();
         platform.setScheduledUpdateHour(hour);
         platform.setIncrementalUpdateMode(UpdateMode.SCHEDULED);
@@ -303,6 +349,10 @@ public class CacheCommandHandler {
      * 设置SCHEDULED模式并指定完整时间
      */
     public static void setScheduledTime(MinecraftServer server, int hour, int minute) {
+        if (!isGenerationAllowed(server)) {
+            IncrementalUpdateHandlerLogic.getInstance().stop();
+            return;
+        }
         var platform = PlatformManager.getPlatform();
         platform.setScheduledUpdateHour(hour);
         platform.setScheduledUpdateMinute(minute);

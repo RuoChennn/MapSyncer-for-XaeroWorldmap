@@ -260,6 +260,12 @@ public class MapPacketHandler {
                 try {
                 serverInstalled = true;
                 serverVersion = payload.version();
+                if (XaeroMapIntegrator.isIntegratedServerHost()) {
+                    AutoSyncManager.cancel();
+                    AutoSyncManager.configureFromServer(com.mapsyncer.platform.UpdateMode.DISABLED, 0, 0);
+                    LOGGER.info("Integrated-server host can generate maps and configure MapSyncer; self-sync is disabled");
+                    return;
+                }
                 int intervalMinutes = payload.autoSyncIntervalMinutes();
                 AutoSyncManager.configureFromServer(
                         payload.updateMode(), intervalMinutes, payload.incrementalUpdateIntervalTicks());
@@ -847,6 +853,8 @@ public class MapPacketHandler {
      * 由 ClientTick 事件每 tick 调用，防止一次性涌入过多 region 导致 OOM。
      */
     public static void drainPendingLoadQueue() {
+        XaeroMapIntegrator.captureIntegratedServerCache();
+        IntegratedHostMapUpdates.onClientTick();
         Minecraft currentClient = Minecraft.getInstance();
         String currentDimension = currentClient.level == null ? ""
                 : com.mapsyncer.util.DimensionApiHelper.getDimId(currentClient.level.dimension());

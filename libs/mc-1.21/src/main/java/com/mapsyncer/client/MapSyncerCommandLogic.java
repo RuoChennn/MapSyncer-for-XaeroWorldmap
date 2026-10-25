@@ -40,6 +40,7 @@ public class MapSyncerCommandLogic {
      * @param hasServerPermission 是否有服务端权限（OP4+）
      */
     public static void showHelp(boolean hasServerPermission) {
+        XaeroMapIntegrator.rejectHostSync(false);
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
@@ -109,6 +110,7 @@ public class MapSyncerCommandLogic {
      * 同步指定维度。
      */
     public static int executeSyncDimension(String dimInput) {
+        if (XaeroMapIntegrator.rejectHostSync(false)) return 0;
         if ("all".equalsIgnoreCase(dimInput)) {
             return executeSyncAll(false);
         }
@@ -126,6 +128,7 @@ public class MapSyncerCommandLogic {
      * 同步所有维度。
      */
     public static int executeSyncAll(boolean silent) {
+        if (XaeroMapIntegrator.rejectHostSync(silent)) return 0;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
 
@@ -137,6 +140,7 @@ public class MapSyncerCommandLogic {
      * 同步当前维度。
      */
     public static int executeSyncCurrentDim() {
+        if (XaeroMapIntegrator.rejectHostSync(false)) return 0;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return 0;
 
@@ -179,6 +183,7 @@ public class MapSyncerCommandLogic {
      * 发送同步请求到服务端。
      */
     public static void sendSyncRequest(Minecraft mc, String dimensionId, boolean syncAll, boolean silent) {
+        if (XaeroMapIntegrator.rejectHostSync(silent)) return;
         if (MapPacketHandler.isSyncInProgress() || ClientHashManager.isComputingMeta()) {
             if (mc.player != null) {
                 mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.in_progress"), false);
@@ -251,6 +256,7 @@ public class MapSyncerCommandLogic {
     private static void dispatchSyncRequest(Minecraft mc, String dimensionId, boolean syncAll,
             Path serverDir, ClientTimestampCache tsCache, String xaeroDim,
             Map<String, ClientMeta> metaMap, boolean silent) {
+        if (XaeroMapIntegrator.rejectHostSync(silent)) return;
         if (MapPacketHandler.isSyncInProgress()) {
             if (mc.player != null) {
                 mc.player.displayClientMessage(ChatUtils.error("mapsyncer.sync.in_progress"), false);
@@ -308,13 +314,14 @@ public class MapSyncerCommandLogic {
                 ChatUtils.prefix().append(ChatUtils.desc(
                         enabled ? "mapsyncer.autosync.client.enabled" : "mapsyncer.autosync.client.disabled")),
                 false);
+        XaeroMapIntegrator.rejectHostSync(false);
         return 1;
     }
 
     /** 设置客户端自动同步开关并持久化 */
     public static int setClientAutoSync(boolean enabled) {
         PlatformManager.getPlatform().setClientAutoSyncEnabled(enabled);
-        if (!enabled) {
+        if (!enabled || XaeroMapIntegrator.isIntegratedServerHost()) {
             AutoSyncManager.stopPeriodicSync();
         }
         return executeAutoSyncStatus();

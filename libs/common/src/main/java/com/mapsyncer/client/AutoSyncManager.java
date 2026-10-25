@@ -46,6 +46,9 @@ public class AutoSyncManager {
      * 客户端关闭 autoSyncEnabled 时显示客户端禁用提示，否则展示服务端策略。
      */
     public static Object[] getStatusKey(int intervalMinutes) {
+        if (XaeroMapIntegrator.isIntegratedServerHost()) {
+            return new Object[]{"mapsyncer.autosync.status.integrated_host"};
+        }
         try {
             if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
                 return new Object[]{"mapsyncer.autosync.status.client_disabled"};
@@ -76,6 +79,7 @@ public class AutoSyncManager {
 
     /** 增量更新已开启且客户端允许自动同步时，加入时自动同步 */
     public static boolean isJoinAutoSyncEnabled() {
+        if (XaeroMapIntegrator.isIntegratedServerHost()) return false;
         if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
             return false;
         }
@@ -139,6 +143,7 @@ public class AutoSyncManager {
      * SCHEDULED：仅比对客户端/服务端时间戳；TICK：时间戳 + 冷却间隔。
      */
     public static boolean shouldAutoSyncOnJoin(long serverGenTime, int intervalMinutes) {
+        if (XaeroMapIntegrator.isIntegratedServerHost()) return false;
         if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
             LOGGER.debug("Join auto-sync skipped: client auto-sync disabled");
             return false;
@@ -184,6 +189,7 @@ public class AutoSyncManager {
      */
     public static void startTickPeriodicSync(Runnable syncAction) {
         cancelPeriodic();
+        if (XaeroMapIntegrator.isIntegratedServerHost()) return;
         if (!PlatformManager.getPlatform().isClientAutoSyncEnabled()) {
             return;
         }
@@ -204,6 +210,7 @@ public class AutoSyncManager {
 
     public static void schedule(Runnable task, int delaySeconds) {
         cancelPending();
+        if (XaeroMapIntegrator.isIntegratedServerHost()) return;
         pendingTask = EXECUTOR.schedule(() -> {
             try {
                 task.run();

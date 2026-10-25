@@ -65,12 +65,14 @@
   "mapsyncer.command.incremental_status_scheduled": "Current incremental mode: SCHEDULED (daily at %02d:%02d)",
   "mapsyncer.command.incremental_status_hint": "Subcommands: /%s incremental off | tick [interval] | scheduled [hour] [min]",
   "mapsyncer.server.no_cache": "No map cache available. Run /%s generate first.",
+  "mapsyncer.server.host_map_not_ready": "The host's map has no region ZIPs to sync yet. Ask the host to press M, open Xaero World Map settings, search Convert, and enable Convert All Regions. Guests can sync again once the converted files are saved. The default world-save view shares native conversion output automatically.",
   "mapsyncer.server.dim_not_available": "Dimension '%s' map data not available. Run /%s generate %s first.",
   "mapsyncer.server.map_uptodate": "Map is up-to-date, nothing to download",
   "mapsyncer.server.sync_start": "Downloading %d regions",
   "mapsyncer.server.sync_complete": "Map sync complete: sent %d updated regions",
   "mapsyncer.server.sync_partial": "Map sync partially complete: sent %d regions, %d read failures (of %d planned)",
-  "mapsyncer.generate.integrated_hint": "This is a singleplayer world or a LAN integrated server. The host is advised to use Xaero World Map's Convert All Regions to generate native map data. MapSyncer generation commands remain available.",
+  "mapsyncer.autosync.status.integrated_host": "Host auto-sync is disabled; map generation and configuration commands are available.",
+  "mapsyncer.generate.integrated_hint": "Integrated-server hosts can use MapSyncer map generation and configuration commands, but cannot sync their own maps. You can also press M for Xaero World Map > Settings > search Convert > enable Convert All Regions. Guests can sync the host's current map.",
   "mapsyncer.generate.start_full": "Starting full map generation...",
   "mapsyncer.generate.full_complete": "Map generation completed: %d/%d regions, %d dimensions completed: %s",
   "mapsyncer.generate.start_dim": "Starting map generation for dimension: %s",
@@ -133,5 +135,7 @@
   "option.mapsyncer.scheduled_hour.tooltip": "Hour of day (0-23) for incremental updates and auto-sync in SCHEDULED mode.",
   "option.mapsyncer.scheduled_minute.tooltip": "Minute of hour (0-59) for incremental updates and auto-sync in SCHEDULED mode.",
   "mapsyncer.help.server.radius": "/%s radius [regions] - Player-centered square radius; 0 disables the limit",
-  "mapsyncer.command.radius_status": "Sync radius: %s region(s) (0 = unlimited; otherwise current dimension only). Applies to new requests."
+  "mapsyncer.command.radius_status": "Sync radius: %s region(s) (0 = unlimited; otherwise current dimension only). Applies to new requests.",
+  "option.mapsyncer.host_silent_updates": "Host silent map updates",
+  "option.mapsyncer.host_silent_updates.tooltip": "Singleplayer and LAN hosts only. Detect saved regions and silently refresh maps outside Xaero's writing range. The default view reads MCA files; other maps read their selected ZIPs. Disabling stops the watcher and clears its queue. Guest periodic sync is unaffected."
 }

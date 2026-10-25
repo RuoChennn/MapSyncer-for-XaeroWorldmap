@@ -25,6 +25,7 @@ public final class ClientLifecycleBridge {
      * </ol>
      */
     public static void onClientDisconnect() {
+        IntegratedHostMapUpdates.reset();
         AutoSyncManager.cancel();
         MapPacketHandler.resetServerStatus();
         MapPacketHandler.clearSyncData();

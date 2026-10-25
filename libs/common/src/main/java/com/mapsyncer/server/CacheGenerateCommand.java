@@ -98,7 +98,7 @@ public class CacheGenerateCommand {
     }
 
     private static int showIncrementalMode(CommandContext<CommandSourceStack> ctx) {
-        CacheCommandHandler.showIncrementalMode(
+        CacheCommandHandler.showIncrementalMode(ctx.getSource().getServer(),
                 component -> ctx.getSource().sendSuccess(() -> component, false));
         return Command.SINGLE_SUCCESS;
     }
@@ -115,7 +115,6 @@ public class CacheGenerateCommand {
     }
 
     private static int generateAll(CommandContext<CommandSourceStack> ctx) {
-        showIntegratedServerHint(ctx);
         MinecraftServer server = ctx.getSource().getServer();
         if (!CacheCommandHandler.generateAll(server, () -> {
             String dimList = String.join(", ", CacheCommandHandler.getCompletedDimensions());
@@ -133,7 +132,6 @@ public class CacheGenerateCommand {
     }
 
     private static int generateDimension(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        showIntegratedServerHint(ctx);
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
@@ -153,7 +151,6 @@ public class CacheGenerateCommand {
     }
 
     private static int generateDimensionForce(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        showIntegratedServerHint(ctx);
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         ResourceKey<Level> dimension = level.dimension();
         String dimensionId = CacheCommandHandler.getDimensionId(dimension);
@@ -173,7 +170,6 @@ public class CacheGenerateCommand {
     }
 
     private static int generateSingleRegion(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        showIntegratedServerHint(ctx);
         ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
         int x = IntegerArgumentType.getInteger(ctx, "x");
         int z = IntegerArgumentType.getInteger(ctx, "z");
@@ -203,14 +199,10 @@ public class CacheGenerateCommand {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static void showIntegratedServerHint(CommandContext<CommandSourceStack> ctx) {
-        CacheCommandHandler.showIntegratedServerHint(ctx.getSource().getServer(),
-                component -> ctx.getSource().sendSuccess(() -> component, false));
-    }
-
     private static int showStatus(CommandContext<CommandSourceStack> ctx) {
         ctx.getSource().sendSuccess(CacheCommandHandler::generationStatusMessage, false);
-        ctx.getSource().sendSuccess(CacheCommandHandler::incrementalStatusMessage, false);
+        ctx.getSource().sendSuccess(() -> CacheCommandHandler.incrementalStatusMessage(ctx.getSource().getServer()), false);
+        showRadius(ctx);
 
         List<DimensionCacheStats> cacheStats = CacheCommandHandler.getCacheStats();
         if (!cacheStats.isEmpty()) {

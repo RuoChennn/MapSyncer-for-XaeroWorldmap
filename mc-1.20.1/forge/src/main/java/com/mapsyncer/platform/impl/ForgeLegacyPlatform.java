@@ -195,6 +195,11 @@ public class ForgeLegacyPlatform implements Platform {
     }
 
     @Override
+    public boolean isIntegratedHostSilentUpdateEnabled() {
+        return ModConfig.CLIENT.isIntegratedHostSilentUpdateEnabled();
+    }
+
+    @Override
     public boolean isClientAutoSyncEnabled() {
         return ModConfig.CLIENT.isAutoSyncEnabled();
     }

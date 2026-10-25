@@ -37,6 +37,13 @@ public final class ServerSyncSession {
         playerSyncVersions.clear();
     }
 
+    /** Worker 结束时主线程可能仍有终态包排队；只能移除线程引用，不能作废会话。 */
+    public static void removeCompletedThreads(Map<UUID, Thread> syncThreads) {
+        syncThreads.forEach((id, thread) -> {
+            if (!thread.isAlive()) syncThreads.remove(id, thread);
+        });
+    }
+
     /**
      * 新 sync 开始前中断旧线程（不触碰 version — 调用方随后 assignVersion）。
      */

@@ -92,31 +92,33 @@ public class ConversionOrchestrator {
 
     /** 缓存输出目录 */
     private static final Path DEFAULT_CACHE_DIR = Path.of("server_map_cache");
-    private static volatile Path effectiveCacheDir = null;
-
     public static Path getCacheDir() {
-        return effectiveCacheDir != null ? effectiveCacheDir : DEFAULT_CACHE_DIR;
+        return ServerMapCache.snapshot().root();
     }
 
     public static void setCacheDir(Path dir) {
-        effectiveCacheDir = dir;
-        timestampCache = null;
+        ServerMapCache.configure(dir, null);
         LOGGER.info("Cache directory set to: {}", dir);
+    }
+
+    public static Path getDimensionCacheDir(String xaeroDimension) {
+        return ServerMapCache.snapshot().dimensionDirectory(xaeroDimension);
     }
 
     /**
      * 初始化内置服务器缓存目录。
-     * 内置服务器使用存档内独立缓存，避免转换覆盖房主的 Xaero 实时地图。
+     * 内置服务器直接使用房主 Xaero 地图目录，不创建第二份地图缓存。
      */
     public static void tryInitIntegratedServerCache(MinecraftServer server, Path gameDir) {
-        setCacheDir(server.isDedicatedServer() ? DEFAULT_CACHE_DIR
-                : server.getWorldPath(LevelResource.ROOT).resolve("server_map_cache").normalize());
-        // 清理历史残留的 .zip.temp 文件
-        XaeroWriter.cleanStaleTempFiles(getCacheDir());
+        if (server.isDedicatedServer()) {
+            setCacheDir(DEFAULT_CACHE_DIR);
+            XaeroWriter.cleanStaleTempFiles(getCacheDir());
+        } else {
+            Path save = server.getWorldPath(LevelResource.ROOT);
+            ServerMapCache.configure(com.mapsyncer.util.XaeroPathResolver.getIntegratedWorldMapDir(gameDir, save), save);
+            LOGGER.info("Reusing host Xaero map directory: {}", getCacheDir());
+        }
     }
-
-    /** 时间戳缓存实例 */
-    private static McaTimestampCache timestampCache;
 
     /**
      * 单区域生成结果状态
@@ -220,10 +222,7 @@ public class ConversionOrchestrator {
      * @return MCA时间戳缓存实例
      */
     private static McaTimestampCache getTimestampCache() {
-        if (timestampCache == null) {
-            timestampCache = McaTimestampCache.getInstance(getCacheDir());
-        }
-        return timestampCache;
+        return McaTimestampCache.getInstance(getCacheDir());
     }
 
     /**
@@ -330,8 +329,18 @@ public class ConversionOrchestrator {
         // 强制生成前先清除该维度的缓存目录和 generation_cache 记录
         String fullDimId = dimKey.location().toString(); // 完整维度 ID（包含 namespace）
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
-        Path dimCacheDir = getCacheDir().resolve(xaeroDimName);
-        clearDimensionCache(dimCacheDir);
+        Path dimCacheDir = getDimensionCacheDir(xaeroDimName);
+        if (ServerMapCache.snapshot().sharedXaero()) {
+            try {
+                ServerMapCache.snapshot().clearDimensionRegions(xaeroDimName);
+            } catch (IOException e) {
+                LOGGER.error("Failed to clear selected Xaero regions: {}", dimCacheDir, e);
+                isRunning.set(false);
+                return false;
+            }
+        } else {
+            clearDimensionCache(dimCacheDir);
+        }
         clearGenerationCacheEntries(xaeroDimName);
 
         // Note: caller handles saveEverything on server thread before invoking this method.
@@ -421,7 +430,7 @@ public class ConversionOrchestrator {
 
         DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
         List<RegionScanPass> passes = RegionGenerationPlanner.plan(scanConfig, dimTypeInfo);
-        Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
+        Path baseOutputDir = getDimensionCacheDir(xaeroDimName);
 
         LOGGER.info("Dimension {}: hasSkylight={}, hasCeiling={}, minY={}, logicalTop={}, passes={}",
             dimPath, dimTypeInfo.hasSkylight(), dimTypeInfo.hasCeiling(),
@@ -488,7 +497,7 @@ public class ConversionOrchestrator {
 
         String xaeroDimName = DimensionPathMapping.getInstance().toXaeroDimension(fullDimId);
         Path regionDir = RegionScanner.getRegionDir(level);
-        Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
+        Path baseOutputDir = getDimensionCacheDir(xaeroDimName);
 
         if (regionDir == null) {
             LOGGER.error("Region directory not found for dimension: {}", xaeroDimName);
@@ -907,7 +916,7 @@ public class ConversionOrchestrator {
                 continue;
             }
 
-            Path baseOutputDir = getCacheDir().resolve(xaeroDimName);
+            Path baseOutputDir = getDimensionCacheDir(xaeroDimName);
             DimensionTypeInfo dimTypeInfo = DimensionTypeHelper.fromDimensionType(level.dimensionType());
             List<RegionScanPass> passes = RegionGenerationPlanner.plan(scanConfig, dimTypeInfo);
 
@@ -1112,7 +1121,7 @@ public class ConversionOrchestrator {
                 // 遍历维度目录下的所有 zip 文件（包括 caves 子目录）
                 try (Stream<Path> files = Files.walk(dimDir)) {
                     List<Path> zipFiles = files
-                            .filter(p -> p.toString().endsWith(".zip"))
+                            .filter(p -> ServerMapCache.snapshot().regionKey(p) != null)
                             .toList();
 
                     regionCount = zipFiles.size();

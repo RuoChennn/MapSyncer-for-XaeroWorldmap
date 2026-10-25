@@ -82,21 +82,29 @@ public class XaeroWriter {
         Files.createDirectories(outputDir);
 
         String fileName = region.regionX() + "_" + region.regionZ();
-        Path tempFile = outputDir.resolve(fileName + ".zip.temp");
+        Path tempFile = Files.createTempFile(outputDir, fileName + ".zip.", ".mapsyncer.tmp");
         Path finalFile = outputDir.resolve(fileName + ".zip");
 
         CRC32 crc32 = new CRC32();
-        try (OutputStream fileOut = Files.newOutputStream(tempFile);
-             CheckedOutputStream checkedOut = new CheckedOutputStream(fileOut, crc32);
-             ZipOutputStream zos = new ZipOutputStream(checkedOut)) {
-            ZipEntry entry = new ZipEntry("region.xaero");
-            zos.putNextEntry(entry);
-            zos.write(region.xaeroData());
-            zos.closeEntry();
-        }
+        try {
+            try (OutputStream fileOut = Files.newOutputStream(tempFile);
+                 CheckedOutputStream checkedOut = new CheckedOutputStream(fileOut, crc32);
+                 ZipOutputStream zos = new ZipOutputStream(checkedOut)) {
+                ZipEntry entry = new ZipEntry("region.xaero");
+                zos.putNextEntry(entry);
+                zos.write(region.xaeroData());
+                zos.closeEntry();
+            }
 
-        Files.move(tempFile, finalFile, StandardCopyOption.REPLACE_EXISTING);
-        return new RegionWriteResult(finalFile, String.format("%08x", crc32.getValue()));
+            try {
+                Files.move(tempFile, finalFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(tempFile, finalFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return new RegionWriteResult(finalFile, String.format("%08x", crc32.getValue()));
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
     }
 
     /**

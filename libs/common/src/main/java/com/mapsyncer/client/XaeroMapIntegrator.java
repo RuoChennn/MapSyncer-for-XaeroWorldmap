@@ -45,6 +45,23 @@ public class XaeroMapIntegrator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(XaeroMapIntegrator.class);
 
+    public static boolean isIntegratedServerHost() {
+        return Minecraft.getInstance().hasSingleplayerServer();
+    }
+
+    /** 在哈希扫描、时间戳修改和请求发送之前拒绝房主自同步。 */
+    public static boolean rejectHostSync(boolean silent) {
+        if (!isIntegratedServerHost()) return false;
+        AutoSyncManager.cancel();
+        if (!silent) {
+            com.mapsyncer.util.ClientMessageHelper.sendChatMessage(
+                    com.mapsyncer.util.ChatUtils.prefix().append(
+                            com.mapsyncer.util.ChatUtils.header("mapsyncer.generate.integrated_hint")
+                                    .withStyle(style -> style.withBold(true))));
+        }
+        return true;
+    }
+
     /**
      * 自动检测 Xaero's World Map 数据目录。
      * 委托给 {@link XaeroPathResolver}，兼容 1.20.x 和 1.21.x+ 路径。
@@ -424,6 +441,24 @@ public class XaeroMapIntegrator {
             return worldMapDir.resolve(save.getFileName().toString());
         }
         return worldMapDir.resolve("Multiplayer_" + serverIP);
+    }
+
+    /** 从客户端主线程发布内置服地图目录，不扫描或复制地图文件。 */
+    public static void captureIntegratedServerCache() {
+        Minecraft mc = Minecraft.getInstance();
+        var server = mc.getSingleplayerServer();
+        if (server == null || mc.getConnection() == null
+                || com.mapsyncer.server.ConversionOrchestrator.isRunning()
+                || com.mapsyncer.server.ServerSyncHandlerLogic.isSyncActive()) return;
+        if (!XaeroReflectionHelper.initialize() || XaeroReflectionHelper.getMapWorld() == null) return;
+        Path save = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+        Path root = getCurrentServerDirectory();
+        var selections = XaeroReflectionHelper.getSelectedMultiworlds();
+        Path expected = com.mapsyncer.util.XaeroPathResolver.getIntegratedWorldMapDir(mc.gameDirectory.toPath(), save);
+        // 切存档时 Xaero 可能仍暂留上一会话，不能把旧世界目录绑定到新存档。
+        if (root != null && root.toAbsolutePath().normalize().equals(expected) && !selections.isEmpty()) {
+            com.mapsyncer.server.ServerMapCache.capture(save, root, selections);
+        }
     }
 
     public static Path getCurrentServerDirectory() {

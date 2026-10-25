@@ -10,7 +10,27 @@ Chinese README: [`README.md`](README.md) · Full module list: [`docs/features.md
 
 ## Dev Log
 
-### v1.0.3 -> v1.0.4 (untested)
+### v1.0.4 (2026-10-19–20) — Sync radius, LAN and custom dimensions
+
+These updates remain part of **v1.0.4**, with no version bump:
+
+1. **Sync radius** — Added `syncRadiusRegions` and the admin `radius [regions]` command: `/mapsyncerserver radius` on Fabric, `/mapsyncer radius` on Forge / NeoForge. The default `0` is unrestricted. Positive values allow a square around the player's region at request time, within the current dimension, for both surface and cave layers. A value of `1` covers 3×3 region positions; each region is 512×512 blocks. Changes persist immediately and support config reload. This limits downloads without removing existing client maps or limiting server generation.
+2. **Custom dimensions** — Use actual world dimension IDs for data-pack and mod dimensions, including custom `minecraft:` IDs, nested paths and matching paths in different namespaces. Fixed discovery, deduplication, path encoding, command completion and cross-dimension downloads. With a positive radius, `sync all` also stays within the player's current dimension and allowed range.
+3. **LAN host and directory reuse** — Fixed client registration replacing integrated-server request handlers in the same JVM. Integrated servers directly reuse the host's actual Xaero map root and selected multiworld directory, including native `cm$converted` maps, without a second map copy under `saves/<world>/server_map_cache`. Surface and cave sync use actual file hashes and modification times. This avoids accidental `Multiplayer_Singleplayer` folders, cross-save reuse and duplicate storage; hosts use native Xaero conversion, and guests receive data only from the selected map.
+4. **Integrated hosts can generate and configure, with self-sync disabled** — Singleplayer/LAN hosts can generate all dimensions, one dimension or one region, force regeneration, configure incremental updates and sync radius, and reload configuration with the existing admin permissions. Manual and automatic host self-sync remain blocked; `autosync on/off` saves the preference. The default world-save view shares `cm$converted` output automatically. Xaero native Convert All Regions remains available, and LAN guests can sync the host's current map.
+5. **Sync and generation convergence** — Sync waits for active conversion with progress heartbeats, while new incremental scans defer during sync. Clients report only successfully synced metadata, so newer Xaero file timestamps are not mistaken for completed downloads.
+6. **Request and session isolation** — Metadata fragments now have request IDs, count and field checks, cumulative character budgets, idle timeouts and total-duration limits. Old server workers, client connection callbacks and write counters are isolated from new sessions during disconnects, retries and server changes.
+7. **Writes and recovery** — Timestamp and generation caches use serialized saves, temporary files and atomic replacement. Map ZIP writes use unique temporary files and replacement retries to avoid Xaero `.zip.temp` collisions. Failed writes retain partial / resume state and do not count as successes. MCA source timestamps commit only after all planned layers succeed, with millisecond persistence and legacy cache compatibility.
+8. **Xaero reloads and automatic tasks** — Cross-dimension downloads refresh only the displayed dimension; state clears after the reload queue drains. Disabling autosync cancels pending join tasks. Scheduled updates support 23:59 and retry when busy, recording the date only after a generation task is accepted. Fixed lost 26.x dimension paths and unusable Forge config saves after reload.
+9. **Platform loading fixes** — Added MC 26.3 Fabric / NeoForge support for protocol 777 and tightened 26.2 version ranges. NeoForge 26.3 uses `26.3.0.90` and `SYNCED` config registration; test environments use matching Fabric Loader / C2ME versions. Fixed Forge 1.21.1 / 1.21.11 entry-point constructors and dependency metadata, Forge 1.20.1 shadow-JAR reobfuscation and the `Commands.literal` runtime error, and missing resource-pack metadata.
+10. **Build and delivery tools** — Standardized Windows fastbuild on cmd `.bat` scripts and maintained bash entry points. Improved JDK / settings switching, non-ASCII paths, offline builds, temporary directories and artifact collection; added dependency setup, NeoForm cache cleanup and Xaero inspection tools. Releases remain single-file JARs containing core, platform and relocated LZ4, excluding slim / dev artifacts.
+11. **Regression workflows and evidence** — Added fixed-instance server command matrices, real-chat client procedures, RCON / C2ME tooling and pure-Java policy, protocol and filesystem regressions. The October 18 server matrix covered 14 combinations, with some busy-response checks skipped. October 19 verification passed 14 target builds and 15,187 regression assertions; Fabric 1.21.1 runtime checks covered radius limits, reconnect autosync, the LAN host, custom dimensions and write-failure recovery.
+
+**Validation limits:** Runtime results used different JAR stages and do not establish full coverage of the final build. LAN guest login was blocked by an invalid session; the other 13 client combinations, slow-network behavior and some disconnect races remain untested. The October 20 Xaero directory-reuse implementation passed all 14 target builds, single-file JAR checks, the existing 15,187 assertions and 28 new directory / filesystem assertions. In-game notice display, directory reuse and LAN guest behavior have not been retested. Legacy standalone caches are not deleted automatically.
+
+> See [regression results](docs/regression-results-2026-10-19.md), [server matrix results](docs/server-command-matrix-results.md) and the [client regression workflow](docs/client-regression-flow.md) for scope and remaining checks. Historical changelog: [`CHANGELOG.md`](CHANGELOG.md).
+
+### v1.0.3 -> v1.0.4 (2026-06-13 – 2026-07-01)
 
 This release centers on **multi-layer cave rendering + auto-sync system + multi-version build architecture**:
 
@@ -39,7 +59,9 @@ This release centers on **multi-layer cave rendering + auto-sync system + multi-
 
 ### Client Dependencies
 
-Supports dedicated and integrated servers (LAN). On integrated servers, the host's Xaero save directory is reused as the map cache (no second conversion).
+Integrated servers reuse the host's Xaero map without a duplicate cache. Hosts can use MapSyncer generation and configuration commands or Xaero Convert All Regions. Manual and automatic host self-sync remain blocked. LAN guests can sync the host's current map.
+
+Hosts also have independent local silent map updates, enabled by default. Saved-file events are coalesced, regions within Xaero's writing range are left alone, and distant regions are discovered or reloaded through Xaero's native queue. The default view reads MCA files; converted and custom maps read their selected ZIPs. Set the client option `integratedHostSilentUpdates=false` to stop the watcher and clear its pending queue, or use the Fabric client settings toggle. Guest periodic sync is unaffected. This feature does not force world saves or generate extra ZIPs; unsaved chunks wait for Minecraft's normal save cycle.
 
 | Dependency | Requirement |
 |------------|-------------|
@@ -66,7 +88,7 @@ Supports dedicated and integrated servers (LAN). On integrated servers, the host
 | **Auto sync** | Join / online pull by server mode (toggleable); manual sync always works |
 | **Concurrent conversion** | `maxConcurrentRegions`: **0 = auto** (`logical CPUs − 2`, capped at 16) |
 | **Config reload** | `/mapsyncer reloadconfig` (Fabric: `/mapsyncerserver`) |
-| **Integrated server** | Reuse host Xaero saves on LAN |
+| **Integrated server** | Hosts can generate maps, configure settings and enable incremental updates. Manual and automatic host self-sync are blocked. Guests sync the host's current map. |
 | **MapPackager** | Offline zip from `server_map_cache` |
 | **Handshake guard** | No custom packets to clients without this mod |
 

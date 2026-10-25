@@ -65,12 +65,14 @@
   "mapsyncer.command.incremental_status_scheduled": "当前增量更新模式：SCHEDULED（每日 %02d:%02d）",
   "mapsyncer.command.incremental_status_hint": "可用子命令：/%s incremental off | tick [间隔] | scheduled [时] [分]",
   "mapsyncer.server.no_cache": "地图缓存不可用，请先运行 /%s generate",
+  "mapsyncer.server.host_map_not_ready": "房主当前地图尚无可同步的区域 ZIP。请让房主按 M 打开 Xaero 世界地图 → 设置 → 搜索 Convert → 开启“Convert All Regions（转换所有区域）”，等待转换文件写入后由访客重新同步。房主使用默认存档视图时，会自动分享原生转换结果。",
   "mapsyncer.server.dim_not_available": "维度 '%s' 地图数据不可用，请先运行 /%s generate %s",
   "mapsyncer.server.map_uptodate": "地图已是最新，无需下载",
   "mapsyncer.server.sync_start": "即将下载 %d 个区域",
   "mapsyncer.server.sync_complete": "地图同步完成，已发送 %d 个需更新区域",
   "mapsyncer.server.sync_partial": "地图同步部分完成：已发送 %d 个区域，%d 个读取失败（共计划 %d 个）",
-  "mapsyncer.generate.integrated_hint": "当前为单人世界或局域网内置服务器。建议房主优先通过 Xaero 世界地图的“转换所有区块”生成原生地图数据；MapSyncer 生成命令仍可正常使用。",
+  "mapsyncer.autosync.status.integrated_host": "内置服务器房主自动同步已停用，可使用地图生成和配置调整命令。",
+  "mapsyncer.generate.integrated_hint": "内置服务器房主可以使用 MapSyncer 地图生成和配置调整命令，但不能同步自己的地图。也可按 M 打开 Xaero 世界地图 → 设置 → 搜索 Convert → 开启“Convert All Regions（转换所有区域）”；访客可同步房主当前地图。",
   "mapsyncer.generate.start_full": "开始全量地图生成...",
   "mapsyncer.generate.full_complete": "地图生成完成：%d/%d 个区域，已完成 %d 个维度：%s",
   "mapsyncer.generate.start_dim": "开始生成维度地图：%s",
@@ -133,5 +135,7 @@
   "option.mapsyncer.scheduled_hour.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的小时（0-23）。",
   "option.mapsyncer.scheduled_minute.tooltip": "SCHEDULED 模式下每日执行增量更新和自动同步的分钟（0-59）。",
   "mapsyncer.help.server.radius": "/%s radius [regions] - 以玩家 region 为中心的方形半径；0 关闭限制",
-  "mapsyncer.command.radius_status": "同步半径：%s 个 region（0 = 不限制；开启时仅发送玩家当前维度）。对新请求生效。"
+  "mapsyncer.command.radius_status": "同步半径：%s 个 region（0 = 不限制；开启时仅发送玩家当前维度）。对新请求生效。",
+  "option.mapsyncer.host_silent_updates": "房主地图静默更新",
+  "option.mapsyncer.host_silent_updates.tooltip": "仅单人游戏及局域网房主生效。自动发现已保存的新区域，静默刷新 Xaero 绘制范围以外的地图。默认存档视图读取 MCA，其他地图读取当前所选 ZIP。关闭后停止监听并清空刷新队列；不影响访客定期同步。"
 }

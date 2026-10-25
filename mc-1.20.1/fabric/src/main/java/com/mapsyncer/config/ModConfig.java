@@ -151,6 +151,9 @@ public class ModConfig {
         /** 客户端自动同步（进服：TICK/SCHEDULED；在线周期：仅 TICK） */
         private volatile boolean autoSyncEnabled = true;
 
+        /** 仅内置服房主：静默更新视距外地图，关闭后不监听或刷新。 */
+        private volatile boolean integratedHostSilentUpdates = true;
+
         /** 配置文件路径 */
         private final Path configFile;
 
@@ -198,6 +201,8 @@ public class ModConfig {
 
                 autoSyncEnabled = Boolean.parseBoolean(
                         props.getProperty("autoSyncEnabled", "true"));
+                integratedHostSilentUpdates = Boolean.parseBoolean(
+                        props.getProperty("integratedHostSilentUpdates", "true"));
 
                 LOGGER.info("Loaded client config from: {} (hashThreads={}, mapRegionLoadIntervalTicks={}, autoSyncEnabled={})", configFile, hashThreads, mapRegionLoadIntervalTicks, autoSyncEnabled);
             } catch (Exception e) {
@@ -260,6 +265,9 @@ public class ModConfig {
                 sb.append("# 手动 /mapsyncer sync 始终可用\n");
                 sb.append("# Manual /mapsyncer sync is always available\n");
                 sb.append("autoSyncEnabled=" + autoSyncEnabled + "\n");
+                sb.append("# 仅房主静默更新视距外地图；false 完全停用本地监听和刷新\n");
+                sb.append("# Host-only silent out-of-view map updates; false disables the local watcher and refresh queue\n");
+                sb.append("integratedHostSilentUpdates=" + integratedHostSilentUpdates + "\n");
 
                 Files.writeString(configFile, sb.toString());
 
@@ -291,6 +299,10 @@ public class ModConfig {
             int maxThreads = Runtime.getRuntime().availableProcessors();
             hashThreads = Math.max(1, Math.min(maxThreads, value));
         }
+
+        public boolean isIntegratedHostSilentUpdateEnabled() { return integratedHostSilentUpdates; }
+
+        public void setIntegratedHostSilentUpdates(boolean enabled) { integratedHostSilentUpdates = enabled; }
 
         public boolean isAutoSyncEnabled() {
             return autoSyncEnabled;

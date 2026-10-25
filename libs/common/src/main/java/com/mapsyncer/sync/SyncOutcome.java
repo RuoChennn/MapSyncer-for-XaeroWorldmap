@@ -17,7 +17,7 @@ public enum SyncOutcome {
 
     public static SyncOutcome fromServerStatus(String status) {
         return switch (status) {
-            case "no_cache", "dim_not_available" -> HARD_FAIL;
+            case "no_cache", "dim_not_available", "integrated_host" -> HARD_FAIL;
             case "uptodate" -> SILENT_SKIP;
             case "partial" -> PARTIAL_SUCCESS;
             case "ok" -> SUCCESS;

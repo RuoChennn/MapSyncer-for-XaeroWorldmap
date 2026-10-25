@@ -20,6 +20,21 @@ public final class XaeroPathResolver {
 
     private XaeroPathResolver() {}
 
+    /** 与 Xaero 的单人存档根 ID 编码和自定义地图保存位置保持一致。 */
+    public static Path getIntegratedWorldMapDir(Path gameDir, Path saveDir) {
+        String folder = saveDir.toAbsolutePath().normalize().getFileName().toString();
+        try {
+            String id = (String) Class.forName("xaero.map.world.MapWorld")
+                    .getMethod("convertWorldFolderToRootId", int.class, String.class).invoke(null, 5, folder);
+            Path root = (Path) Class.forName("xaero.map.file.MapSaveLoad")
+                    .getMethod("getRootFolder", String.class).invoke(null, id);
+            if (root != null) return root.toAbsolutePath().normalize();
+        } catch (ReflectiveOperationException | LinkageError e) {
+            LOGGER.debug("Xaero root API not ready, using world-map directory", e);
+        }
+        return getWorldMapDir(gameDir).resolve(folder).toAbsolutePath().normalize();
+    }
+
     /**
      * 自动检测 Xaero's World Map 数据目录。
      *

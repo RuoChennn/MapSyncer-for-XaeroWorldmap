@@ -11,4 +11,9 @@ public final class PlayerLevelApiHelper {
     public static MinecraftServer getServer(ServerPlayer player) {
         return player.serverLevel().getServer();
     }
+
+    public static boolean isSingleplayerOwner(MinecraftServer server, ServerPlayer player) {
+        var owner = server.getSingleplayerProfile();
+        return owner != null && player.getUUID().equals(owner.getId());
+    }
 }

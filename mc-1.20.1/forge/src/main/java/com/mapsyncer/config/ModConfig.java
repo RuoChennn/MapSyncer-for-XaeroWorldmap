@@ -137,6 +137,8 @@ public class ModConfig {
 
         public final BooleanValue autoSyncEnabled;
 
+        public final BooleanValue integratedHostSilentUpdates;
+
         /**
          * 构造客户端配置
          *
@@ -193,6 +195,11 @@ public class ModConfig {
                              "Manual /mapsyncer sync is always available")
                     .define("autoSyncEnabled", true);
 
+            integratedHostSilentUpdates = builder
+                    .comment("仅内置服房主：静默更新视距外地图，关闭后不监听或刷新",
+                             "Host only: silently refresh distant map data; false disables the watcher and refresh queue")
+                    .define("integratedHostSilentUpdates", true);
+
             builder.pop();
         }
 
@@ -203,6 +210,10 @@ public class ModConfig {
         public int getMapRegionLoadIntervalTicks() {
             return mapRegionLoadIntervalTicks.get();
         }
+
+        public boolean isIntegratedHostSilentUpdateEnabled() { return integratedHostSilentUpdates.get(); }
+
+        public void setIntegratedHostSilentUpdates(boolean enabled) { integratedHostSilentUpdates.set(enabled); }
 
         public boolean isAutoSyncEnabled() {
             return autoSyncEnabled.get();

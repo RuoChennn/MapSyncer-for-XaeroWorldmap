@@ -29,10 +29,23 @@ classpath = os.pathsep.join(map(str, [classes, artifact, logging_copy]))
 sources = [
     'libs/common/src/main/java/com/mapsyncer/server/SyncRadiusPolicy.java',
     'libs/common/src/main/java/com/mapsyncer/server/McaTimestampCache.java',
+    'libs/common/src/main/java/com/mapsyncer/server/ServerMapCache.java',
+    'libs/common/src/main/java/com/mapsyncer/server/ServerSyncSession.java',
+    'libs/common/src/main/java/com/mapsyncer/server/RegionSyncPolicy.java',
+    'libs/common/src/main/java/com/mapsyncer/server/XaeroWriter.java',
     'libs/common/src/main/java/com/mapsyncer/util/DimensionPathMapping.java',
     'libs/common/src/main/java/com/mapsyncer/client/XaeroMapDataHandler.java',
+    'libs/common/src/main/java/com/mapsyncer/client/ClientHashManager.java',
+    'libs/common/src/main/java/com/mapsyncer/client/ClientTimestampCache.java',
     'libs/platform-api/src/main/java/com/mapsyncer/network/payload/SyncRequestPayload.java',
     'tests/regression/SyncFeatureRegression.java',
+    'tests/regression/SharedXaeroCacheRegression.java',
+    'tests/regression/LanSyncRegression.java',
+    'libs/common/src/main/java/com/mapsyncer/client/HostMapFileWatcher.java',
+    'libs/common/src/main/java/com/mapsyncer/client/HostMapUpdatePolicy.java',
+    'libs/platform-api/src/main/java/com/mapsyncer/platform/XaeroHostMapRefresh.java',
+    'tests/regression/xaero/map/file/RegionDetection.java',
+    'tests/regression/HostSilentMapRegression.java',
 ]
 subprocess.run([JAVAC, '--release', '17', '-encoding', 'UTF-8', '-cp', classpath,
                 '-d', str(classes), *[str(ROOT / source) for source in sources]], check=True, cwd=ROOT)
@@ -42,3 +55,9 @@ if fixtures.exists():
     shutil.rmtree(fixtures)
 subprocess.run([JAVA, '-Djava.io.tmpdir=' + str(WORK), '-cp', classpath,
                 'SyncFeatureRegression', str(fixtures)], check=True, cwd=ROOT)
+subprocess.run([JAVA, '-Djava.io.tmpdir=' + str(WORK), '-cp', classpath,
+                'SharedXaeroCacheRegression', str(fixtures / 'shared-xaero')], check=True, cwd=ROOT)
+subprocess.run([JAVA, '-Djava.io.tmpdir=' + str(WORK), '-cp', classpath,
+                'LanSyncRegression', str(fixtures / 'lan-host')], check=True, cwd=ROOT)
+subprocess.run([JAVA, '-Djava.io.tmpdir=' + str(WORK), '-cp', classpath,
+                'HostSilentMapRegression', str(fixtures / 'host-silent')], check=True, cwd=ROOT)

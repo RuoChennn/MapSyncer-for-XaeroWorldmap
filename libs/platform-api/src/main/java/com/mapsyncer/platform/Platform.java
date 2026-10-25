@@ -163,6 +163,9 @@ public interface Platform {
      */
     boolean isClientAutoSyncEnabled();
 
+    /** 仅内置服房主的本地地图静默更新开关；与客机自动同步独立。 */
+    boolean isIntegratedHostSilentUpdateEnabled();
+
     /**
      * 设置客户端自动同步开关并持久化到配置文件。
      */

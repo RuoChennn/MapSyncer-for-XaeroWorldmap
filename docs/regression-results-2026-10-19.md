@@ -12,6 +12,16 @@
 
 提示改动另经 Fabric 1.20.1、1.21.1、1.21.11、26.1 的 fastbuild 离线构建通过；四个 output JAR 已核对中英文提示、common／core／platform 类及重定位后的 LZ4。未重新执行游戏内提示验证，也未重建本次改动的 Forge／NeoForge 产物。
 
+## 后续目录复用验证（2026-10-20，仍为 v1.0.4）
+
+内置服已改为直接复用房主 Xaero 地图目录和每个维度所选的多世界目录，不再新增 `saves/<存档>/server_map_cache` 地图副本。原生 `cm$converted`、`mw$...`、地表和洞穴按同一选中地图读取；同步按实际文件重新计算哈希和修改时间。MapSyncer 生成命令仍可使用，输出到同一目录；`--force` 不再递归删除整个 Xaero 维度目录，而是仅清理所选地图的区域 ZIP。旧独立缓存不自动删除。
+
+- **PASS**：14 个 Fabric／Forge／NeoForge 目标全部通过 fastbuild 离线构建，产物仍为 1.0.4。14 个 output JAR 均包含新的 `ServerMapCache`、core、platform、重定位 LZ4、语言与 loader 元数据；Forge 1.20.1 注册仍使用 `Commands.m_82127_`。
+- **PASS**：原有 15,187 项回归断言；新增 28 项真实 ZIP／目录断言覆盖原地读取、不创建副本、选中地图与洞穴键、原生文件更新、临时文件隔离、强制清理范围、路径拒绝、旧存档快照拒绝及专用服路径恢复。
+- **未执行**：此后续实现的游戏内提示、Xaero 原生转换后实际分发、房主生成后的地图显示和 LAN 访客回归。下文 10 月 19 日的运行证据验证的是旧独立缓存流程，不能用于宣称本次目录复用已完成真机验证。
+
+本次证据在 `cache/tmp/integrated-cache-reuse/`：`build-<loader>-<mc>.log`、`regression-final.log`、`release-jars.json`；Xaero 1.40.16 的 `javap` 核查确认单人根目录通过 `MapWorld.convertWorldFolderToRootId` 与 `MapSaveLoad.getRootFolder` 定位。目录和文件回归使用受控夹具，不等于 Minecraft 运行测试。
+
 ## 构建与静态审查
 
 - **PASS**：14 个 Fabric／Forge／NeoForge 目标经 fastbuild 分别构建成功。覆盖 1.20.1、1.21.1、1.21.11、26.1、26.2、26.3 的现有交付组合。

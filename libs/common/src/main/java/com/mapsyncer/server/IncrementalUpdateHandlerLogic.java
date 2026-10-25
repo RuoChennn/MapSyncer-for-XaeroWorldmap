@@ -79,6 +79,11 @@ public class IncrementalUpdateHandlerLogic {
      * @param server Minecraft服务器实例
      */
     public void start(MinecraftServer server) {
+        if (!CacheCommandHandler.isGenerationAllowed(server)) {
+            stop();
+            LOGGER.debug("Cannot start incremental updates without a server");
+            return;
+        }
         if (running) {
             LOGGER.warn("Incremental update handler already running");
             return;
@@ -176,6 +181,10 @@ public class IncrementalUpdateHandlerLogic {
      */
     public void onServerTick() {
         if (!running || server == null) return;
+        if (!CacheCommandHandler.isGenerationAllowed(server)) {
+            stop();
+            return;
+        }
 
         UpdateMode mode = PlatformManager.getPlatform().getIncrementalUpdateMode();
         if (mode == UpdateMode.DISABLED) return;
@@ -230,6 +239,7 @@ public class IncrementalUpdateHandlerLogic {
      * @param reason 更新原因描述
      */
     private boolean performScheduledUpdate(String reason) {
+        if (!CacheCommandHandler.isGenerationAllowed(server)) return false;
         if (ServerSyncHandlerLogic.isSyncActive() || ConversionOrchestrator.isRunning()) {
             LOGGER.debug("Map sync in progress, deferring incremental update");
             return false;
@@ -255,6 +265,9 @@ public class IncrementalUpdateHandlerLogic {
         final MinecraftServer currentServer = this.server;
         getUpdateExecutor().submit(() -> {
             try {
+                if (!running || currentServer != this.server
+                        || !CacheCommandHandler.isGenerationAllowed(currentServer)
+                        || Thread.currentThread().isInterrupted()) return;
                 ConversionOrchestrator.performIncrementalScan(currentServer);
             } catch (RuntimeException e) {
                 LOGGER.error("Error during scheduled incremental update", e);

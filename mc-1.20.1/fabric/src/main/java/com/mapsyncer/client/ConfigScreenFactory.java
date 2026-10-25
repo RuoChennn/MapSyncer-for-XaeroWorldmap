@@ -52,6 +52,13 @@ public class ConfigScreenFactory {
             .setSaveConsumer(config::setAutoSyncEnabled)
             .build());
 
+        client.addEntry(entryBuilder.startBooleanToggle(
+                Component.translatable("option.mapsyncer.host_silent_updates"), config.isIntegratedHostSilentUpdateEnabled())
+            .setDefaultValue(true)
+            .setTooltip(Component.translatable("option.mapsyncer.host_silent_updates.tooltip"))
+            .setSaveConsumer(config::setIntegratedHostSilentUpdates)
+            .build());
+
         builder.setSavingRunnable(config::save);
         return builder.build();
     }

@@ -663,6 +663,14 @@ public class ServerSyncHandlerLogic {
         Player player = (Player) NetworkManager.getHandler().getPlayerFromContext(context);
         if (!(player instanceof ServerPlayer serverPlayer)) return;
 
+        MinecraftServer requestServer = PlayerLevelApiHelper.getServer(serverPlayer);
+        if (CacheCommandHandler.isIntegratedHost(requestServer, serverPlayer)) {
+            CacheCommandHandler.showIntegratedServerHint(requestServer, serverPlayer::sendSystemMessage);
+            NetworkManager.sendToPlayer(serverPlayer,
+                    new SyncResponsePayload(List.of(), true, 0, "integrated_host"));
+            return;
+        }
+
         UUID playerId = serverPlayer.getUUID();
         if (!payload.hasValidPartBounds()) return;
         if (!payload.syncAll() && !payload.targetDimension().isEmpty()
@@ -931,15 +939,30 @@ public class ServerSyncHandlerLogic {
 
         LOGGER.debug("Server worldId from xaeromap.txt: {}", worldId);
 
-        Path cacheDir = ConversionOrchestrator.getCacheDir();
-        GenerationCache genCache = GenerationCache.getInstance(cacheDir);
-        genCache.pruneInvalidEntries(cacheDir);
-        Map<String, TimestampHashEntry> serverCache = genCache.getAll();
+        ServerMapCache.Snapshot cacheLayout = ServerMapCache.snapshot();
+        Path cacheDir = cacheLayout.root();
+        GenerationCache genCache = cacheLayout.sharedXaero() ? null : GenerationCache.getInstance(cacheDir);
+        if (genCache != null) genCache.pruneInvalidEntries(cacheDir);
+        // Xaero 自身写入不会更新 MapSyncer 元数据，直接按实际文件计算，避免旧哈希屏蔽新地图。
+        Map<String, TimestampHashEntry> serverCache = genCache == null ? Map.of() : genCache.getAll();
+        List<Path> sharedFiles = List.of();
+        Set<String> sharedDimensions = new HashSet<>();
+        if (cacheLayout.sharedXaero()) {
+            try {
+                sharedFiles = cacheLayout.regionFiles();
+                for (Path file : sharedFiles) {
+                    sharedDimensions.add(cacheLayout.regionKey(file).split("/", 2)[0]);
+                }
+            } catch (IOException e) {
+                LOGGER.warn("Unable to scan host Xaero map directory", e);
+            }
+        }
 
         if (!Files.exists(cacheDir)) {
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
-                player.sendSystemMessage(ChatUtils.message(
-                        "mapsyncer.server.no_cache", CacheCommandHandler.serverCommandPrefix()));
+                player.sendSystemMessage(cacheLayout.sharedXaero()
+                        ? ChatUtils.message("mapsyncer.server.host_map_not_ready")
+                        : ChatUtils.message("mapsyncer.server.no_cache", CacheCommandHandler.serverCommandPrefix()));
                 NetworkManager.sendToPlayer(player,
                         new SyncResponsePayload(List.of(), true, worldId, "no_cache"));
                 finalizePlayerSync(server, playerId, syncVersion);
@@ -952,7 +975,7 @@ public class ServerSyncHandlerLogic {
 
         Set<String> requestedDimensions = new java.util.HashSet<>();
         if (syncAll) {
-            requestedDimensions.addAll(discoverDimensionsFromCache(cacheDir));
+            requestedDimensions.addAll(cacheLayout.sharedXaero() ? sharedDimensions : discoverDimensionsFromCache(cacheDir));
             LOGGER.info("Sync-all: discovered {} dimensions from cache", requestedDimensions.size());
         } else if (targetDimension != null && !targetDimension.isEmpty()) {
             requestedDimensions.add(targetDimension);
@@ -979,7 +1002,9 @@ public class ServerSyncHandlerLogic {
 
         for (String xaeroDim : requestedDimensions) {
             Path dimCacheDir = cacheDir.resolve(xaeroDim);
-            if (Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
+            if (cacheLayout.sharedXaero() && sharedDimensions.contains(xaeroDim)) {
+                hasValidDimension = true;
+            } else if (!cacheLayout.sharedXaero() && Files.exists(dimCacheDir) && dimCacheDir.toFile().isDirectory()) {
                 try (Stream<Path> stream = Files.walk(dimCacheDir)) {
                     boolean hasZipFiles = stream.anyMatch(p -> p.toString().endsWith(".zip"));
                     if (hasZipFiles) {
@@ -988,7 +1013,7 @@ public class ServerSyncHandlerLogic {
                 } catch (IOException e) {
                     LOGGER.warn("Failed to check dimension {} cache directory", xaeroDim, e);
                 }
-            } else if (!syncAll) {
+            } else if (!syncAll && !cacheLayout.sharedXaero()) {
                 String friendlyDim = dimMapping.toServerDimension(xaeroDim);
                 enqueueIfCurrent(server, playerId, syncVersion, player ->
                         player.sendSystemMessage(ChatUtils.error(
@@ -1005,11 +1030,17 @@ public class ServerSyncHandlerLogic {
 
         if (!hasValidDimension) {
             LOGGER.debug("No valid dimension cache found for requested dimensions: {}", requestedDimensions);
+            if (cacheLayout.sharedXaero()) {
+                LOGGER.warn("Host Xaero map has no requested region ZIPs: root={}, selections={}, requested={}",
+                        cacheDir, cacheLayout.selections(), requestedDimensions);
+            }
             String prefix = CacheCommandHandler.serverCommandPrefix();
             boolean skipChat = alreadyNotifiedMissingDim;
             enqueueIfCurrent(server, playerId, syncVersion, player -> {
                 if (!skipChat) {
-                    if (targetDimension != null && !targetDimension.isEmpty()) {
+                    if (cacheLayout.sharedXaero()) {
+                        player.sendSystemMessage(ChatUtils.message("mapsyncer.server.host_map_not_ready"));
+                    } else if (targetDimension != null && !targetDimension.isEmpty()) {
                         String friendlyDim = dimMapping.toServerDimension(targetDimension);
                         player.sendSystemMessage(ChatUtils.error(
                                 "mapsyncer.server.dim_not_available",
@@ -1030,18 +1061,23 @@ public class ServerSyncHandlerLogic {
 
         Path absCacheDir = cacheDir.toAbsolutePath().normalize();
         List<Path> allZipPaths;
-        try (Stream<Path> stream = Files.walk(absCacheDir)) {
-            allZipPaths = stream.filter(p -> p.toString().endsWith(".zip")).toList();
-        } catch (IOException e) {
-            LOGGER.error("Failed to walk cache directory", e);
-            allZipPaths = List.of();
+        if (cacheLayout.sharedXaero()) {
+            allZipPaths = sharedFiles;
+        } else {
+            try (Stream<Path> stream = Files.walk(absCacheDir)) {
+                allZipPaths = stream.filter(p -> p.toString().endsWith(".zip")).toList();
+            } catch (IOException e) {
+                LOGGER.error("Failed to walk cache directory", e);
+                allZipPaths = List.of();
+            }
         }
 
         Set<String> eligibleRegionPaths = new HashSet<>();
         allZipPaths.forEach(zipPath -> {
                         String relativePath = absCacheDir.relativize(zipPath).toString();
                         String normalizedPath = relativePath.replace(".zip", "").replace("\\", "/");
-                        normalizedPath = stripMwWorldId(normalizedPath);
+                        normalizedPath = cacheLayout.sharedXaero() ? cacheLayout.regionKey(zipPath)
+                                : stripMwWorldId(normalizedPath);
 
                         String[] parts = normalizedPath.split("[/\\\\]");
                         String xaeroDimName = parts.length > 1 ? parts[0] : "unknown";
@@ -1068,7 +1104,7 @@ public class ServerSyncHandlerLogic {
                         ClientMeta clientMetaEntry = clientMeta.get(normalizedPath);
 
                         if (!HashUtils.isValidRegionZip(zipPath)) {
-                            if (serverMeta != null) {
+                            if (serverMeta != null && genCache != null) {
                                 genCache.remove(normalizedPath);
                             }
                             return;
@@ -1078,8 +1114,19 @@ public class ServerSyncHandlerLogic {
                         String serverHash;
                         long timestamp;
                         if (serverMeta == null) {
-                            serverHash = HashUtils.computeFileHash(zipPath);
-                            timestamp = System.currentTimeMillis() / 1000;
+                            try {
+                                if (cacheLayout.sharedXaero()) {
+                                    TimestampHashEntry actual = cacheLayout.metadata(zipPath);
+                                    serverHash = actual.hash();
+                                    timestamp = actual.timestampSeconds();
+                                } else {
+                                    serverHash = HashUtils.computeFileHash(zipPath);
+                                    timestamp = System.currentTimeMillis() / 1000;
+                                }
+                            } catch (IOException e) {
+                                LOGGER.debug("Map changed during sync scan: {}", zipPath, e);
+                                return;
+                            }
                         } else {
                             serverHash = serverMeta.hash();
                             timestamp = serverMeta.timestampSeconds();
@@ -1093,7 +1140,7 @@ public class ServerSyncHandlerLogic {
                         }
                     });
 
-        genCache.save();
+        if (genCache != null) genCache.save();
 
         for (Map.Entry<String, TimestampHashEntry> entry : serverCache.entrySet()) {
             if (!eligibleRegionPaths.contains(entry.getKey())) continue;
@@ -1392,9 +1439,7 @@ public class ServerSyncHandlerLogic {
     private static void cleanupCompletedThreads() {
         // A terminated worker may still have final packets queued on the server thread.
         // Only the terminal callback (or disconnect) may invalidate its version.
-        syncThreads.forEach((id, thread) -> {
-            if (!thread.isAlive()) syncThreads.remove(id, thread);
-        });
+        ServerSyncSession.removeCompletedThreads(syncThreads);
     }
 
     /**

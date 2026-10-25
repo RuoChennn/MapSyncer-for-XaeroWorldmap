@@ -32,7 +32,12 @@ public class PlayerJoinHandlerLogic {
     public static void onPlayerJoin(ServerPlayer player, MinecraftServer server) {
         if (server == null) return;
 
-        CacheCommandHandler.showIntegratedServerHint(server, player::sendSystemMessage);
+        if (CacheCommandHandler.isIntegratedHost(server, player)) {
+            CacheCommandHandler.showIntegratedServerHint(server, player::sendSystemMessage);
+            NetworkManager.sendToPlayer(player, new ServerInstalledPayload(
+                    getModVersion(), 0, 0, UpdateMode.DISABLED, 0, PlatformManager.getServerName()));
+            return;
+        }
 
         // 发送 ServerInstalled 通知（跨加载器兼容：无论客户端使用什么加载器都能接收）
         long lastGenTime = GenerationCache.getInstance(ConversionOrchestrator.getCacheDir()).getLastGenerationTime();
@@ -40,8 +45,21 @@ public class PlayerJoinHandlerLogic {
         int intervalTicks = PlatformManager.getPlatform().getIncrementalUpdateIntervalTicks();
         int autoInterval = AutoSyncConfig.computeInterval(mode, intervalTicks);
         String serverName = PlatformManager.getServerName();
-        NetworkManager.sendToPlayer(player,
-            new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval, mode, intervalTicks, serverName));
+        ServerMapCache.Snapshot mapCache = ServerMapCache.snapshot();
+        if (mapCache.sharedXaero()) {
+            // Xaero 原生转换不维护 generation_cache；在后台读取真实文件时间，不阻塞 Server 线程。
+            java.util.concurrent.CompletableFuture.supplyAsync(mapCache::lastModifiedSeconds)
+                    .thenAccept(timestamp -> server.execute(() -> {
+                        if (server.getPlayerList().getPlayer(player.getUUID()) == player
+                                && ServerMapCache.snapshot().root().equals(mapCache.root())) {
+                            NetworkManager.sendToPlayer(player, new ServerInstalledPayload(
+                                    getModVersion(), timestamp, autoInterval, mode, intervalTicks, serverName));
+                        }
+                    }));
+        } else {
+            NetworkManager.sendToPlayer(player,
+                new ServerInstalledPayload(getModVersion(), lastGenTime, autoInterval, mode, intervalTicks, serverName));
+        }
 
         if (!ConversionOrchestrator.isRunning() && mode != UpdateMode.DISABLED) {
             IncrementalUpdateHandlerLogic.getInstance().start(server);

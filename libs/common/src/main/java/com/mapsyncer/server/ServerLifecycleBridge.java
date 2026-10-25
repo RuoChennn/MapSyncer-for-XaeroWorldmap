@@ -37,6 +37,7 @@ public final class ServerLifecycleBridge {
         ClientHashManager.shutdown();
 
         ServerSyncHandlerLogic.cleanup();
+        ServerMapCache.configure(java.nio.file.Path.of("server_map_cache"), null);
         DimensionRegistry.resetRegistration();
 
         LOGGER.info("Singleton cache cleanup completed");

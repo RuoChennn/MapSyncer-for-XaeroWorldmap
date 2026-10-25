@@ -143,7 +143,7 @@ def start_server(manifest, work):
     save(work / 'session.json', manifest)
     print(f'server_pid={pid}')
 
-def start_client(manifest, work, singleplayer, username='CodexTester', role='client', address='localhost:25565'):
+def start_client(manifest, work, singleplayer, username='CodexTester', role='client', address='localhost:25565', inspect_port=None):
     directory = Path(manifest['client'])
     version = directory.name
     config = json.loads((directory / (version + '.json')).read_text(encoding='utf-8'))
@@ -197,7 +197,13 @@ def start_client(manifest, work, singleplayer, username='CodexTester', role='cli
                 values = arg['value'] if isinstance(arg['value'], list) else [arg['value']]
                 result.extend(expand(value) for value in values)
         return result
-    command = [str(java(config.get('javaVersion', {}).get('majorVersion', 21))), '-Xmx4G',
+    debug = []
+    if inspect_port is not None:
+        if not 1024 <= inspect_port <= 65535:
+            raise ValueError('Inspection port must be between 1024 and 65535')
+        debug = ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + str(inspect_port)]
+    command = [str(java(config.get('javaVersion', {}).get('majorVersion', 21))), '-Xmx4G', *debug,
+               '-Dfile.encoding=UTF-8', '-Dsun.stdout.encoding=UTF-8', '-Dsun.stderr.encoding=UTF-8',
                '-Djava.io.tmpdir=' + str(work), '-XX:ErrorFile=' + str(work / (role + '-hs_err_pid%p.log')),
                *arguments('jvm'), config['mainClass'], *arguments('game')]
     command += ['--quickPlaySingleplayer', singleplayer] if singleplayer else ['--quickPlayMultiplayer', address]
@@ -205,6 +211,29 @@ def start_client(manifest, work, singleplayer, username='CodexTester', role='cli
     manifest['processes'][role] = pid
     save(work / 'session.json', manifest)
     print(f'client_pid={pid}')
+
+
+def inspect_screen(port):
+    """Read screen/widget fields through JDI; never invoke game methods or commands."""
+    if port is None or not 1024 <= port <= 65535:
+        raise ValueError('--inspect-port must be between 1024 and 65535')
+    work = ROOT / 'cache/tmp/client-screen-probe'
+    work.mkdir(parents=True, exist_ok=True)
+    source = ROOT / 'scripts/testing/ClientScreenProbe.java'
+    compiled = work / 'ClientScreenProbe.class'
+    jdk = java(21)
+    env = dict(os.environ, TEMP=str(work), TMP=str(work), TMPDIR=str(work))
+    if not compiled.exists() or compiled.stat().st_mtime < source.stat().st_mtime:
+        subprocess.run([str(jdk.with_name('javac.exe')), '-J-Djava.io.tmpdir=' + str(work),
+                        '--add-modules', 'jdk.jdi', '-d', str(work), str(source)],
+                       env=env, check=True, timeout=30)
+    result = subprocess.run([str(jdk), '-Djava.io.tmpdir=' + str(work), '-Dfile.encoding=UTF-8',
+                             '-Dsun.stdout.encoding=UTF-8', '--add-modules', 'jdk.jdi',
+                             '-cp', str(work), 'ClientScreenProbe', str(port)],
+                            env=env, capture_output=True, text=True, encoding='utf-8',
+                            check=True, timeout=15)
+    state = json.loads(result.stdout)
+    print(json.dumps(state, ensure_ascii=False))
 
 def rcon(manifest, command):
     props = properties(Path(manifest['server']) / 'server.properties')
@@ -281,7 +310,7 @@ def restore(manifest, work):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['begin', 'server', 'client', 'rcon', 'step', 'collect', 'restore'])
+    parser.add_argument('action', choices=['begin', 'server', 'client', 'screen', 'rcon', 'step', 'collect', 'restore'])
     parser.add_argument('--client')
     parser.add_argument('--server')
     parser.add_argument('--jar')
@@ -292,7 +321,11 @@ def main():
     parser.add_argument('--username', default='CodexTester')
     parser.add_argument('--role', default='client')
     parser.add_argument('--address', default='localhost:25565')
+    parser.add_argument('--inspect-port', type=int)
     args = parser.parse_args()
+    if args.action == 'screen':
+        inspect_screen(args.inspect_port)
+        return
     if args.action == 'begin':
         begin(args)
         return
@@ -302,7 +335,7 @@ def main():
     work = session.parent
     manifest['_session_dir'] = str(work)
     if args.action == 'server': start_server(manifest, work)
-    elif args.action == 'client': start_client(manifest, work, args.singleplayer, args.username, args.role, args.address)
+    elif args.action == 'client': start_client(manifest, work, args.singleplayer, args.username, args.role, args.address, args.inspect_port)
     elif args.action == 'rcon': rcon(manifest, args.command)
     elif args.action == 'step': snapshot(manifest, work, args.name)
     elif args.action == 'collect': collect(manifest, work, args.name)

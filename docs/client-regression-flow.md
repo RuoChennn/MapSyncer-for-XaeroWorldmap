@@ -27,7 +27,15 @@ python scripts/testing/client-regression.py client --session <session.json>
 
 工具先保存恢复清单，再替换两端 JAR 并校验 SHA256；备份配置、为 CodexTester 配置创造模式和 OP、启用本地 RCON。启动输出与 TEMP 均在仓库 cache。该工具不下载模组，不变更 online-mode，不自动点击 UI。
 
-内置服可用 `client --session ... --singleplayer <已有存档> --role host`。第二个已安装客户端进程使用 `--username CodexGuest --role guest --address localhost:<公开端口>`；工具启动的是离线测试身份。原版 LAN 要求有效会话时，访客会在登录阶段失败，此时记 `BLOCKED`，需通过正常启动器使用有效账号才能继续；不要把认证失败当成 MapSyncer 握手失败，也不要关闭认证来伪造通过。
+### 不依赖截图的命令输入与检查
+
+客户端启动可加 `--inspect-port 5501`（第二进程用 5502）。该选项只在本机 `127.0.0.1` 开启测试用 JDWP；正常启动不启用。运行 `python scripts/testing/client-regression.py screen --inspect-port 5501` 输出当前界面类型、聊天框实际文本和焦点控件的 JSON，兼容命名类与 Fabric intermediary 类。编译后的观察器和临时文件位于 `cache/tmp/client-screen-probe/`。
+
+观察器只读取字段，不调用游戏方法、不写字段，也不执行命令。使用窗口工具读取窗口信息，结合本次进服日志，确认 `playerPresent=true`、`levelPresent=true`、`screen=null` 后按 `/`；读回 `ChatScreen`（Fabric 为 `class_408`）及输入框 `/`，再用真实键盘输入；确认框内完整命令后按回车。每次输入后重新观察，遇到用户接管立即停止。菜单可用 Tab 移动焦点，再读取控件标签确认；不需要截图猜坐标。
+
+结果必须以步骤日志偏移后的双端新增日志、终态和 ZIP/时间戳/哈希判断；界面返回游戏、命令已输入或文件仅由玩家探索产生均不能视为通过。启动输出统一为 UTF-8，避免中文回显乱码。若本轮允许离线 LAN，先确认测试存档的房主命令权限，使用 `/publish` 时在开放后执行 `/onlinemode false` 并核对回显；访客连续三次不能加入则中断。优先使用 LAN 模组的正常开放入口，不能把认证失败误记为 MapSyncer 失败。
+
+内置服可用 `client --session ... --singleplayer <已有存档> --role host`。第二个已安装客户端进程使用 `--username CodexGuest --role guest --address 127.0.0.1:<公开端口>`；工具启动的是离线测试身份。原版 LAN 要求有效会话时，访客会在登录阶段失败。未获授权变更认证策略时记 `BLOCKED`，需正常启动器的有效账号；用户明确授权安装离线 LAN 模组时，按上一节验证开放和离线配置后继续。认证失败不能当成 MapSyncer 握手失败，成功加入也不能替代同步证据。
 
 服务器必须出现 `Done`、MapSyncer 版本与对应 C2ME（无适配版记 `N/A`）；客户端必须出现同版本握手。先检查语言文本正常，不能出现原始翻译键。
 
@@ -54,12 +62,15 @@ python scripts/testing/client-regression.py client --session <session.json>
 
 专用服阶段结束后先正常停止服务端，确认 25565/RCON 释放。保留客户端，进入固定实例中的测试存档 A，通过“对局域网开放”公开端口。
 
-进入 A 时应显示建议房主通过 Xaero“转换所有区块”生成原生地图数据的提示。未开放 LAN 的单人世界同样提示。执行全量、单维度、强制单维度和单区域生成命令时均应先显示该提示，再按原流程执行；不能因提示直接返回、禁用生成或改变自动增量配置。专用服务器不显示此提示。此策略是建议，后续 MapSyncer 生成／同步结果不能记为 Xaero 原生转换结果。
+进入 A 时应醒目提示房主可生成地图和调整配置，但不能自同步；也可按 M → Xaero 设置 → 搜索 Convert → 开启“Convert All Regions（转换所有区域）”。未公开的单人世界和公开后的 LAN 房主均执行同一策略，生成与配置命令保留管理员权限要求。
 
-1. 房主与访客均有本轮 MapSyncer，访客连接实际公开端口。核对两端握手，分别执行首次同步、立即重复同步、指定维度、sync all、自定义维度和 radius 1→0。
-2. 房主地图写入 Xaero `MapWorld.getMainId()` / `MapSaveLoad.getRootFolder()` 返回的目录；访客写入它自己的 Xaero 多人目录。不得生成或复用 `Multiplayer_Singleplayer`。房主转换缓存必须位于 `saves/<A>/server_map_cache`，不能覆盖 Xaero 实时地图。
-3. 房主离开 A，再进入 B，并生成地图；核对 B 的 MCA 时间戳、维度配置和生成目录不复用 A 的实例。返回 A 再同步验证可用。
-4. 自定义 `syncRadiusRegions` 在内置服同样生效；房主无 ServerData 也应能完成地图写入和第二轮哈希扫描。
+1. 在执行 Chunky 前清空并备份测试存档；每个存档只执行一次 `chunky start minecraft:overworld circle 0 0 750`，以 (0,0) 为中心生成直径 1500 的圆。确认 100% 和保存完成。Xaero 若开启 debug，关闭后重新检查。
+2. 房主分别执行全量、单维度、强制及单区域生成，须提交任务并写入当前地图目录；默认存档视图及未访问维度写入 `cm$converted`。`--force` 只清理所选地图区域 ZIP，保留其他地图和 Xaero 配置。验证 `incremental off/tick/scheduled`、`radius`、`reloadconfig` 能调整并保存配置，帮助及状态查询正常。
+3. 房主执行 `sync`、指定维度、`sync all`，必须提示拒绝；无哈希扫描、时间戳状态变化、请求包或地图文件写入。`autosync on/off` 及状态查询必须可正常修改、保存和显示客户端偏好；即使开关为 on，房主进服、重连和在线周期也不得自动同步。预置 TICK/SCHEDULED 后启动内置服或重载配置，须按配置启动增量任务；访客收到实际更新策略，房主自同步仍被禁用。
+4. 通过 Xaero 原生 Convert All Regions 生成地图，先保持默认存档视图、不手动切换地图，确认访客可直接同步 `cm$converted` 中的转换结果，且无需 `generation_cache.properties`。再显式选择 `cm$converted`、`mw$...`，验证只同步所选地图；显式地图为空时不得混入其他地图。内置服直接读取实际根目录；不得创建 `Multiplayer_Singleplayer` 或 `saves/<A>/server_map_cache` 副本。生成后按 M 检查原生地图是否显示。
+5. 第二个固定实例进程以离线访客身份尝试加入实际 LAN 端口；若登录被无效会话拒绝，记录认证 BLOCKED。成功登录后由访客执行首次/重复同步、指定维度、sync all、自定义维度及 radius 1→0；房主无需自同步。确认访客实际写入、哈希收敛和所选地图的地表/洞穴隔离。主世界同步后等待完整 30 秒，按 M，缩放到完整圆形边界可见并保存截图；主动重载关闭时单独标记例外。
+6. 房主离开 A 后进入 B，B 同样只进行一次 Chunky 圆形预生成并分别验证 MapSyncer 生成及 Xaero 原生转换。确认 B 的原生根目录、所选地图和访客数据不复用 A；返回 A 后访客仍能同步。房主 MapSyncer 生成与配置调整仍可用，自同步仍须拒绝。
+7. 开启客户端 `integratedHostSilentUpdates`，让访客探索房主绘制范围外的新区域并等待游戏正常保存：默认存档视图应自动发现新 MCA 区域；转换地图视图应在所选 ZIP 完整写入后更新。确认无房主同步请求、无额外世界保存或 ZIP 生成，近处及与绘制范围相交的 region 不重载。验证洞穴层、地图/维度切换、缩小地图后的父级缓存，以及关闭开关后监听和队列释放；访客定期同步仍按原有策略运行。仅房主实测不能代替真实访客探索场景。
 
 只有一个可用实例时 LAN 访客一项必须记 BLOCKED；单人内置服不能冒充远程访客验证。
 
